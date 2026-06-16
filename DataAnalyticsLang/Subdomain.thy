@@ -108,6 +108,42 @@ proof (rule monofunI)
     by (rule lub_subset_mono)
 qed
 
+corollary below_proj_of: "a \<in> S \<Longrightarrow> a \<sqsubseteq> x \<Longrightarrow> a \<sqsubseteq> proj x"
+  using proj_is_lub[THEN is_lubD1, THEN is_ubD] by blast
+
+lemma proj_monoD: "x \<sqsubseteq> y \<Longrightarrow> proj x \<sqsubseteq> proj y"
+  by (rule monofunE[OF proj_mono])
+
+text \<open>Jung, Lemma 4.1.6(i): the projection of \<open>x\<close> below some \<open>y \<in> S\<close> is the meet \<open>x \<sqinter> y\<close>.\<close>
+lemma proj_meet:
+  assumes y: "y \<in> S" and le: "proj x \<sqsubseteq> y"
+  shows "proj x = x \<sqinter> y"
+proof (rule below_antisym)
+  show "proj x \<sqsubseteq> x \<sqinter> y" using proj_below le by (rule meet_greatest)
+  have "x \<sqinter> y \<in> S" using downward[OF y meet_below2] .
+  moreover have "x \<sqinter> y \<sqsubseteq> x" by (rule meet_below1)
+  ultimately show "x \<sqinter> y \<sqsubseteq> proj x" by (rule below_proj_of)
+qed
+
+text \<open>Jung, Lemma 4.1.6(ii) (binary form): the projection preserves existing joins.
+  This is where distributivity of the domain is used.\<close>
+lemma proj_join:
+  assumes j: "x \<Up> y"
+  shows "proj (x \<squnion> y) = proj x \<squnion> proj y"
+proof -
+  have px: "proj x = x \<sqinter> proj (x \<squnion> y)"
+    by (rule proj_meet[OF proj_in_S proj_monoD[OF joinableD(1)[OF j]]])
+  have py: "proj y = y \<sqinter> proj (x \<squnion> y)"
+    by (rule proj_meet[OF proj_in_S proj_monoD[OF joinableD(2)[OF j]]])
+  have "proj x \<squnion> proj y = (x \<sqinter> proj (x \<squnion> y)) \<squnion> (y \<sqinter> proj (x \<squnion> y))"
+    using px py by simp
+  also have "\<dots> = (x \<squnion> y) \<sqinter> proj (x \<squnion> y)"
+    by (rule meet_join_distrib2[OF j, symmetric])
+  also have "\<dots> = proj (x \<squnion> y)"
+    by (metis meet_sym meet_absorbI proj_below)
+  finally show ?thesis by (rule sym)
+qed
+
 lemma proj_cont: "cont proj"
 proof (rule contI2)
   show "monofun proj" by (fact proj_mono)
@@ -124,7 +160,7 @@ proof (rule contI2)
     by (rule compact_basis.belowI)
 qed
 
-definition "p \<equiv> \<Lambda> a. proj a"
+definition p where "p \<equiv> \<Lambda> a. proj a"
 
 lemma p_beta[simp]: "p\<cdot>x = proj x"
   unfolding p_def
@@ -146,6 +182,8 @@ lemma p_range: "range (\<lambda>x. p\<cdot>x) = S"
   by (simp only: p_fixes range_eq_fixes)
 
 end
+
+notation stable_subdomain.p (\<open>\<p>\<index>\<close>)
 
 locale strong_subdomain = stable_subdomain +
   assumes slide_rule: "y \<in> S \<Longrightarrow> p\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
@@ -531,17 +569,8 @@ proof -
   define J where "J = {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
   have memJ: "c \<in> J \<longleftrightarrow> (\<exists>a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b \<and> c = a \<squnion> b)" for c
     unfolding J_def by blast
-  have A_join: "a1 \<squnion> a2 \<in> A" if "a1 \<in> A" "a2 \<in> A" "a1 \<Up> a2" for a1 a2
-    using A.strong_closed[OF _ join_is_lub[OF joinableD(1)[OF that(3)] joinableD(2)[OF that(3)]]] that
-    by blast
-  have B_join: "b1 \<squnion> b2 \<in> B" if "b1 \<in> B" "b2 \<in> B" "b1 \<Up> b2" for b1 b2
-    using B.strong_closed[OF _ join_is_lub[OF joinableD(1)[OF that(3)] joinableD(2)[OF that(3)]]] that
-    by blast
   have "stable_subdomain J"
-  proof (rule stable_subdomainI)
-    have "(\<bottom>::'a) = \<bottom> \<squnion> \<bottom>" by (simp add: join_absorbI[OF below_refl])
-    then show "\<bottom> \<in> J" using A.bot_in_S B.bot_in_S joinable_refl memJ by blast
-  next
+  proof
     fix x y assume yJ: "y \<in> J" and xy: "x \<sqsubseteq> y"
     from yJ obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and yeq: "y = a \<squnion> b"
       using memJ by blast
@@ -553,70 +582,151 @@ proof -
     finally have "x = (x \<sqinter> a) \<squnion> (x \<sqinter> b)" .
     with a' b' jn show "x \<in> J" using memJ by blast
   next
-    fix c1 c2 assume c1J: "c1 \<in> J" and c2J: "c2 \<in> J" and j12: "c1 \<Up> c2"
-    from c1J obtain a1 b1 where d1: "a1 \<in> A" "b1 \<in> B" "a1 \<Up> b1" and e1: "c1 = a1 \<squnion> b1"
-      using memJ by blast
-    from c2J obtain a2 b2 where d2: "a2 \<in> A" "b2 \<in> B" "a2 \<Up> b2" and e2: "c2 = a2 \<squnion> b2"
-      using memJ by blast
-    have c1w: "c1 \<sqsubseteq> c1 \<squnion> c2" by (rule joinableD(1)[OF j12])
-    have c2w: "c2 \<sqsubseteq> c1 \<squnion> c2" by (rule joinableD(2)[OF j12])
-    have a1w: "a1 \<sqsubseteq> c1 \<squnion> c2" using joinableD(1)[OF d1(3)] c1w e1 below_trans by metis
-    have b1w: "b1 \<sqsubseteq> c1 \<squnion> c2" using joinableD(2)[OF d1(3)] c1w e1 below_trans by metis
-    have a2w: "a2 \<sqsubseteq> c1 \<squnion> c2" using joinableD(1)[OF d2(3)] c2w e2 below_trans by metis
-    have b2w: "b2 \<sqsubseteq> c1 \<squnion> c2" using joinableD(2)[OF d2(3)] c2w e2 below_trans by metis
-    have aa: "a1 \<squnion> a2 \<in> A" by (rule A_join[OF d1(1) d2(1) joinableI[OF a1w a2w]])
-    have bb: "b1 \<squnion> b2 \<in> B" by (rule B_join[OF d1(2) d2(2) joinableI[OF b1w b2w]])
-    have aw: "a1 \<squnion> a2 \<sqsubseteq> c1 \<squnion> c2" by (rule join_belowI[OF a1w a2w])
-    have bw: "b1 \<squnion> b2 \<sqsubseteq> c1 \<squnion> c2" by (rule join_belowI[OF b1w b2w])
-    have jnab: "a1 \<squnion> a2 \<Up> b1 \<squnion> b2" by (rule joinableI[OF aw bw])
-    have aaR: "a1 \<squnion> a2 \<sqsubseteq> (a1 \<squnion> a2) \<squnion> (b1 \<squnion> b2)" by (rule joinableD(1)[OF jnab])
-    have bbR: "b1 \<squnion> b2 \<sqsubseteq> (a1 \<squnion> a2) \<squnion> (b1 \<squnion> b2)" by (rule joinableD(2)[OF jnab])
-    have a1aa: "a1 \<sqsubseteq> a1 \<squnion> a2" by (rule joinableD(1)[OF joinableI[OF a1w a2w]])
-    have a2aa: "a2 \<sqsubseteq> a1 \<squnion> a2" by (rule joinableD(2)[OF joinableI[OF a1w a2w]])
-    have b1bb: "b1 \<sqsubseteq> b1 \<squnion> b2" by (rule joinableD(1)[OF joinableI[OF b1w b2w]])
-    have b2bb: "b2 \<sqsubseteq> b1 \<squnion> b2" by (rule joinableD(2)[OF joinableI[OF b1w b2w]])
-    have c1R: "c1 \<sqsubseteq> (a1 \<squnion> a2) \<squnion> (b1 \<squnion> b2)" unfolding e1
-      by (rule join_belowI[OF below_trans[OF a1aa aaR] below_trans[OF b1bb bbR]])
-    have c2R: "c2 \<sqsubseteq> (a1 \<squnion> a2) \<squnion> (b1 \<squnion> b2)" unfolding e2
-      by (rule join_belowI[OF below_trans[OF a2aa aaR] below_trans[OF b2bb bbR]])
-    have "c1 \<squnion> c2 = (a1 \<squnion> a2) \<squnion> (b1 \<squnion> b2)"
-      by (rule below_antisym[OF join_belowI[OF c1R c2R] join_belowI[OF aw bw]])
-    with aa bb jnab show "c1 \<squnion> c2 \<in> J" using memJ by blast
-  next
-    fix C :: "nat \<Rightarrow> 'a" assume chC: "chain C" and CJ: "\<And>i. C i \<in> J"
-    define L where "L = (\<Squnion>i. C i)"
-    have aL: "A.p\<cdot>L \<in> A" by (simp add: A.proj_in_S)
-    have bL: "B.p\<cdot>L \<in> B" by (simp add: B.proj_in_S)
-    have aLb: "A.p\<cdot>L \<sqsubseteq> L" by (rule A.below)
-    have bLb: "B.p\<cdot>L \<sqsubseteq> L" by (rule B.below)
-    have jn: "A.p\<cdot>L \<Up> B.p\<cdot>L" by (rule joinableI[OF aLb bLb])
-    have CiBound: "C i \<sqsubseteq> A.p\<cdot>L \<squnion> B.p\<cdot>L" for i
+    fix T t assume TJ: "T \<subseteq> J" and lub: "T <<| t"
+    \<comment> \<open>Every existing lub of \<open>J\<close>-elements is recovered by projecting onto each side:
+        \<open>t = p\<^sub>A t \<squnion> p\<^sub>B t\<close>.  No pairwise/chain case-split is needed.\<close>
+    have aT: "A.p\<cdot>t \<in> A" by (simp add: A.proj_in_S)
+    have bT: "B.p\<cdot>t \<in> B" by (simp add: B.proj_in_S)
+    have aTb: "A.p\<cdot>t \<sqsubseteq> t" by (rule A.below)
+    have bTb: "B.p\<cdot>t \<sqsubseteq> t" by (rule B.below)
+    have jn: "A.p\<cdot>t \<Up> B.p\<cdot>t" by (rule joinableI[OF aTb bTb])
+    have ub: "x \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" if xT: "x \<in> T" for x
     proof -
-      from CJ[of i] obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and ci: "C i = a \<squnion> b"
+      from xT TJ have "x \<in> J" by blast
+      then obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and xeq: "x = a \<squnion> b"
         using memJ by blast
-      have aL': "a \<sqsubseteq> A.p\<cdot>L"
+      have xt: "x \<sqsubseteq> t" by (rule is_ubD[OF is_lubD1[OF lub] xT])
+      have aPt: "a \<sqsubseteq> A.p\<cdot>t"
       proof -
-        have "a \<sqsubseteq> L" unfolding L_def
-          using joinableD(1)[OF ab(3)] ci is_ub_thelub[OF chC, of i] below_trans by metis
-        then have "A.p\<cdot>a \<sqsubseteq> A.p\<cdot>L" by (rule monofun_cfun_arg)
+        have "a \<sqsubseteq> t" using joinableD(1)[OF ab(3)] xeq xt below_trans by metis
+        then have "A.p\<cdot>a \<sqsubseteq> A.p\<cdot>t" by (rule monofun_cfun_arg)
         with A.proj_fixed[OF ab(1)] show ?thesis by simp
       qed
-      have bL': "b \<sqsubseteq> B.p\<cdot>L"
+      have bPt: "b \<sqsubseteq> B.p\<cdot>t"
       proof -
-        have "b \<sqsubseteq> L" unfolding L_def
-          using joinableD(2)[OF ab(3)] ci is_ub_thelub[OF chC, of i] below_trans by metis
-        then have "B.p\<cdot>b \<sqsubseteq> B.p\<cdot>L" by (rule monofun_cfun_arg)
+        have "b \<sqsubseteq> t" using joinableD(2)[OF ab(3)] xeq xt below_trans by metis
+        then have "B.p\<cdot>b \<sqsubseteq> B.p\<cdot>t" by (rule monofun_cfun_arg)
         with B.proj_fixed[OF ab(2)] show ?thesis by simp
       qed
-      from aL' joinableD(1)[OF jn] have "a \<sqsubseteq> A.p\<cdot>L \<squnion> B.p\<cdot>L" by (rule below_trans)
-      moreover from bL' joinableD(2)[OF jn] have "b \<sqsubseteq> A.p\<cdot>L \<squnion> B.p\<cdot>L" by (rule below_trans)
-      ultimately show "C i \<sqsubseteq> A.p\<cdot>L \<squnion> B.p\<cdot>L" unfolding ci by (rule join_belowI)
+      from aPt joinableD(1)[OF jn] have "a \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_trans)
+      moreover from bPt joinableD(2)[OF jn] have "b \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_trans)
+      ultimately show "x \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" unfolding xeq by (rule join_belowI)
     qed
-    have "L \<sqsubseteq> A.p\<cdot>L \<squnion> B.p\<cdot>L" using lub_below[OF chC CiBound, folded L_def] .
-    moreover have "A.p\<cdot>L \<squnion> B.p\<cdot>L \<sqsubseteq> L" using aLb bLb by (rule join_belowI)
-    ultimately have "L = A.p\<cdot>L \<squnion> B.p\<cdot>L" by (rule below_antisym)
-    with aL bL jn have "L \<in> J" using memJ by blast
-    then show "(\<Squnion>i. C i) \<in> J" unfolding L_def .
+    have "t \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule is_lubD2[OF lub is_ubI[OF ub]])
+    moreover have "A.p\<cdot>t \<squnion> B.p\<cdot>t \<sqsubseteq> t" using aTb bTb by (rule join_belowI)
+    ultimately have "t = A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_antisym)
+    with aT bT jn show "t \<in> J" using memJ by blast
+  qed
+  then show ?thesis unfolding J_def .
+qed
+
+text \<open>Jung, Lemma 4.1.5(ii) (one direction): a finer strong ideal has a smaller projection.\<close>
+lemma proj_mono_subdomain:
+  assumes A: "stable_subdomain A" and S: "stable_subdomain S" and sub: "A \<subseteq> S"
+  shows "stable_subdomain.proj A x \<sqsubseteq> stable_subdomain.proj S x"
+proof -
+  interpret A: stable_subdomain A by (rule A)
+  interpret S: stable_subdomain S by (rule S)
+  have "{a \<in> A. a \<sqsubseteq> x} \<subseteq> {s \<in> S. s \<sqsubseteq> x}" using sub by blast
+  with A.proj_is_lub S.proj_is_lub show "A.proj x \<sqsubseteq> S.proj x"
+    by (rule lub_subset_mono)
+qed
+
+text \<open>Intro rule for the slide condition, phrased through the projection.\<close>
+lemma strong_subdomainI:
+  assumes S: "stable_subdomain S"
+    and slide: "\<And>x y. y \<in> S \<Longrightarrow> stable_subdomain.p S\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
+  shows "strong_subdomain S"
+proof (intro strong_subdomain.intro[OF S] strong_subdomain_axioms.intro)
+  fix x y assume "y \<in> S" and "stable_subdomain.p S\<cdot>x \<sqsubseteq> y"
+  then show "x \<Up> y" by (rule slide)
+qed
+
+text \<open>Jung, Lemma 4.1.9(i): the pointwise join of two strong subdomains again satisfies the
+  slide condition.  The projection of the join decomposes as \<open>p\<^bsub>A\<^esub> y \<squnion> p\<^bsub>B\<^esub> y\<close>, and the
+  argument slides first through @{term A} and then through @{term B}.\<close>
+lemma strong_subdomain_join:
+  assumes A: "strong_subdomain A" and B: "strong_subdomain B"
+  shows "strong_subdomain {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
+proof -
+  interpret A: strong_subdomain A by (rule A)
+  interpret B: strong_subdomain B by (rule B)
+  have Asd: "stable_subdomain A" using A unfolding strong_subdomain_def by simp
+  have Bsd: "stable_subdomain B" using B unfolding strong_subdomain_def by simp
+  define J where "J = {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
+  have memJ: "c \<in> J \<longleftrightarrow> (\<exists>a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b \<and> c = a \<squnion> b)" for c
+    unfolding J_def by blast
+  have Jstable: "stable_subdomain J" unfolding J_def by (rule stable_subdomain_join[OF Asd Bsd])
+  interpret J: stable_subdomain J by (rule Jstable)
+  have AJ: "A \<subseteq> J"
+  proof (rule subsetI)
+    fix a assume aA: "a \<in> A"
+    have eq: "a = a \<squnion> \<bottom>" by (metis join_sym join_absorbI minimal)
+    have "a \<Up> \<bottom>" by (rule joinable_if_below2[OF minimal])
+    with aA B.bot_in_S eq show "a \<in> J" using memJ by blast
+  qed
+  have BJ: "B \<subseteq> J"
+  proof (rule subsetI)
+    fix b assume bB: "b \<in> B"
+    have eq: "b = \<bottom> \<squnion> b" by (simp add: join_absorbI[OF minimal])
+    have "\<bottom> \<Up> b" by (rule joinable_if_below1[OF minimal])
+    with bB A.bot_in_S eq show "b \<in> J" using memJ by blast
+  qed
+  \<comment> \<open>The projection of a join element decomposes: \<open>y = p\<^bsub>A\<^esub> y \<squnion> p\<^bsub>B\<^esub> y\<close>.\<close>
+  have decomp: "A.proj y \<squnion> B.proj y = y" if yJ: "y \<in> J" for y
+  proof -
+    from yJ obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and yeq: "y = a \<squnion> b"
+      using memJ by blast
+    have ay: "a \<sqsubseteq> y" using joinableD(1)[OF ab(3)] yeq by simp
+    have by': "b \<sqsubseteq> y" using joinableD(2)[OF ab(3)] yeq by simp
+    have aPy: "a \<sqsubseteq> A.proj y" by (rule A.below_proj_of[OF ab(1) ay])
+    have bPy: "b \<sqsubseteq> B.proj y" by (rule B.below_proj_of[OF ab(2) by'])
+    have PyA: "A.proj y \<sqsubseteq> y" by (rule A.proj_below)
+    have PyB: "B.proj y \<sqsubseteq> y" by (rule B.proj_below)
+    have jPy: "A.proj y \<Up> B.proj y" by (rule joinableI[OF PyA PyB])
+    show "A.proj y \<squnion> B.proj y = y"
+    proof (rule below_antisym)
+      show "A.proj y \<squnion> B.proj y \<sqsubseteq> y" using PyA PyB by (rule join_belowI)
+      have "a \<sqsubseteq> A.proj y \<squnion> B.proj y" using aPy joinableD(1)[OF jPy] by (rule below_trans)
+      moreover have "b \<sqsubseteq> A.proj y \<squnion> B.proj y" using bPy joinableD(2)[OF jPy] by (rule below_trans)
+      ultimately show "y \<sqsubseteq> A.proj y \<squnion> B.proj y" unfolding yeq by (rule join_belowI)
+    qed
+  qed
+  have "strong_subdomain J"
+  proof (rule strong_subdomainI[OF Jstable])
+    fix x y assume yJ: "y \<in> J" and slide_hyp: "stable_subdomain.p J\<cdot>x \<sqsubseteq> y"
+    have pJx_y: "J.proj x \<sqsubseteq> y" using slide_hyp by simp
+    define pa where "pa = A.proj y"
+    define pb where "pb = B.proj y"
+    have paA: "pa \<in> A" unfolding pa_def by (rule A.proj_in_S)
+    have pbB: "pb \<in> B" unfolding pb_def by (rule B.proj_in_S)
+    have pay: "pa \<sqsubseteq> y" unfolding pa_def by (rule A.proj_below)
+    have yab: "y = pa \<squnion> pb" unfolding pa_def pb_def using decomp[OF yJ] by (rule sym)
+    \<comment> \<open>\<open>p\<^bsub>A\<^esub> x \<sqsubseteq> pa\<close>, hence by @{term A}'s slide condition \<open>x \<Up> pa\<close>.\<close>
+    have pAxJ: "A.proj x \<sqsubseteq> J.proj x" by (rule proj_mono_subdomain[OF Asd Jstable AJ])
+    have pAx_y: "A.proj x \<sqsubseteq> y" using pAxJ pJx_y by (rule below_trans)
+    have pAx_pa: "A.proj x \<sqsubseteq> pa" unfolding pa_def by (rule A.below_proj_of[OF A.proj_in_S pAx_y])
+    have "A.p\<cdot>x \<sqsubseteq> pa" using pAx_pa by simp
+    from A.slide_rule[OF paA this] have x_pa: "x \<Up> pa" .
+    have pa_x: "pa \<Up> x" using x_pa by (simp add: joinable_sym)
+    \<comment> \<open>\<open>p\<^bsub>B\<^esub> (pa \<squnion> x) \<sqsubseteq> pb\<close>, hence by @{term B}'s slide condition \<open>pa \<squnion> x \<Up> pb\<close>.\<close>
+    have pBpa_pb: "B.proj pa \<sqsubseteq> pb" unfolding pb_def by (rule B.proj_monoD[OF pay])
+    have pBxJ: "B.proj x \<sqsubseteq> J.proj x" by (rule proj_mono_subdomain[OF Bsd Jstable BJ])
+    have pBx_y: "B.proj x \<sqsubseteq> y" using pBxJ pJx_y by (rule below_trans)
+    have pBx_pb: "B.proj x \<sqsubseteq> pb" unfolding pb_def by (rule B.below_proj_of[OF B.proj_in_S pBx_y])
+    have "B.proj (pa \<squnion> x) = B.proj pa \<squnion> B.proj x" by (rule B.proj_join[OF pa_x])
+    moreover have "B.proj pa \<squnion> B.proj x \<sqsubseteq> pb" using pBpa_pb pBx_pb by (rule join_belowI)
+    ultimately have "B.proj (pa \<squnion> x) \<sqsubseteq> pb" by simp
+    then have "B.p\<cdot>(pa \<squnion> x) \<sqsubseteq> pb" by simp
+    from B.slide_rule[OF pbB this] have pax_pb: "pa \<squnion> x \<Up> pb" .
+    \<comment> \<open>Both \<open>x\<close> and \<open>y\<close> lie below \<open>(pa \<squnion> x) \<squnion> pb\<close>, so \<open>x \<Up> y\<close>.\<close>
+    have xw: "x \<sqsubseteq> (pa \<squnion> x) \<squnion> pb"
+      using joinableD(2)[OF pa_x] joinableD(1)[OF pax_pb] by (rule below_trans)
+    have paw: "pa \<sqsubseteq> (pa \<squnion> x) \<squnion> pb"
+      using joinableD(1)[OF pa_x] joinableD(1)[OF pax_pb] by (rule below_trans)
+    have pbw: "pb \<sqsubseteq> (pa \<squnion> x) \<squnion> pb" by (rule joinableD(2)[OF pax_pb])
+    have yw: "y \<sqsubseteq> (pa \<squnion> x) \<squnion> pb" unfolding yab using paw pbw by (rule join_belowI)
+    show "x \<Up> y" using xw yw by (rule joinableI)
   qed
   then show ?thesis unfolding J_def .
 qed

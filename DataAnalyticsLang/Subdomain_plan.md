@@ -74,25 +74,64 @@ The sup of a family `(Aᵢ)` of subdomains is the **pointwise join**
   induction + `chain_complete_iff_dcomplete`). No distributivity needed. This is the engine
   for both the explicit stable join and the strong-subdomain construction.
 - **Explicit pointwise join** `stable_subdomain_join` (Jung 4.1.9(i) for two sets): for
-  `A,B` stable, `{a⊔b | a∈A, b∈B, a⇑b}` is stable. Via `stable_subdomainI`: ⊥ trivial;
-  downward by `meet_join_distrib` (`x = (x⊓a)⊔(x⊓b)`); pairwise-join by a common-bound
-  `w=c1⊔c2` argument (`A`/`B` closed under joinable joins via `strong_closed`+`join_is_lub`);
-  chain-closure by the projection decomposition `L = p_A⋅L ⊔ p_B⋅L` (`≤` since both
-  deflations `⊑ id`; `≥` since each `C i = a⊔b` has `a ⊑ p_A⋅L`, `b ⊑ p_B⋅L`, then
-  `lub_below`). DISTRIBUTIVITY is used exactly once (the downward case).
+  `A,B` stable, `{a⊔b | a∈A, b∈B, a⇑b}` is stable. Proved DIRECTLY in the locale (not via
+  `stable_subdomainI`): `downward` by `meet_join_distrib` (`x=(x⊓a)⊔(x⊓b)`); `strong_closed`
+  (all existing lubs at once — subsumes pairwise + chain) by the projection decomposition
+  `t = p_A⋅t ⊔ p_B⋅t` for any `T <<| t`, `T⊆J` (`≤` both deflations `⊑id`; `≥` each
+  `x∈T` is `a⊔b` with `a⊑p_A⋅t`, `b⊑p_B⋅t`, via `is_lubD2`). Much shorter than the
+  four-obligation route. DISTRIBUTIVITY used once (downward).
+- **In-locale projection lemmas** (`stable_subdomain`): `below_proj_of` (`a∈S, a⊑x ⟹ a⊑proj x`),
+  `proj_monoD`, `proj_meet` (4.1.6(i): `proj x ⊑ y∈S ⟹ proj x = x⊓y`), `proj_join`
+  (4.1.6(ii) binary: `x⇑y ⟹ proj(x⊔y)=proj x⊔proj y`, uses distributivity).
+- **Cross-subdomain:** `proj_mono_subdomain` (4.1.5(ii): `A⊆S ⟹ proj_A x ⊑ proj_S x`);
+  `strong_subdomainI` (intro for the slide condition, via `stable_subdomain.p S⋅x ⊑ y`).
+- **STRONG join** `strong_subdomain_join` (Jung 4.1.9(i), slide condition) ✅: `A,B` strong
+  ⟹ `{a⊔b|a∈A,b∈B,a⇑b}` strong. Proj of a join elt decomposes `y = p_A y ⊔ p_B y`; given
+  `p_J x ⊑ y` set `pa=p_A y, pb=p_B y`: get `p_A x ⊑ pa` (mono + `p_A⊑p_J`), slide A ⟹
+  `x⇑pa`; then `p_B(pa⊔x) = p_B pa ⊔ p_B x ⊑ pb` (`proj_join`!), slide B ⟹ `pa⊔x ⇑ pb`;
+  finally `x,y ⊑ (pa⊔x)⊔pb` so `x⇑y`.
+- Notation: `𝗉⇘A⇙` = `stable_subdomain.p A` (the projection cfun), user-added.
+- Tip: `by order` discharges `⊑`-transitivity/antisymmetry chains (avoids `below_trans`
+  fact-ordering pitfalls); `also`/`finally` also available.
 
 ## TODO (ordered)
 
 1. [DONE] `stable_subdomain_join` — 4.1.9(i) for stable, via `stable_subdomainI`.
-2. Connect to the lattice `sup`/`Sup`: show `sup A B` (currently `⋂{S stable. A⊆S ∧ B⊆S}`)
-   equals the explicit join `{a⊔b | a∈A, b∈B, a⇑b}`. Needs: `J` contains `A` (`a=a⊔⊥`,
-   `⊥∈B`) and `B`; `J` stable (done); `J` least (any stable `S⊇A∪B` is closed under the
-   joinable joins, so `J⊆S`). Then arbitrary `Sup` via `directed_join_of_finite_subsets`.
-3. [DONE] Reusable intro rule `stable_subdomainI` (pairwise + chain ⟹ arbitrary joins).
-4. Strong subdomains: slide condition preserved under the join (4.1.9(i),(iii)) ⟹
-   `typedef 'a strong_subdom` + `complete_lattice` via directed- + pairwise-completeness
-   (`bounded_complete_finite_joinI`).
+2. [DONE] `strong_subdomain_join` — slide condition preserved under pairwise join (4.1.9(i)).
+3. [DONE] Reusable intro rule `stable_subdomainI`; `strong_subdomainI`.
+
+### Revised strategy for the STRONG-subdomain lattice (per user, supersedes the
+### "explicit arbitrary-join + directed_join_of_finite_subsets" route)
+Only the PAIRWISE join needs an explicit expression (done, used for the slide-iff).
+- **Finite joins:** slide preservation on finite sets by induction from `strong_subdomain_join`.
+- **Directed joins via DEFLATIONS (not sets):** a directed (by ⊆) family of strong
+  subdomains ⟹ their projections form a po-directed set of deflations ⟹ has a lub in the
+  dcpo of deflations/cfuns; that lub is a deflation (deflation-ness is admissible,
+  cf. `adm_dc_defl`) whose fixed set is downward-closed (sketch below) ⟹ it is the projection
+  of the sup subdomain. Then proceed as Jung 4.1.9(iii). This sidesteps the HOL-vs-HOLCF
+  `directed_join_of_finite_subsets` mismatch and reuses the `dc_defl`/`stable_dom` machinery.
+  - TOOL (DONE, in `HOLCF-extra.Directed`): `cont_directed_lub` — for `'a::bifinite`,
+    `cont f ⟹ directed S ⟹ S ≠ {} ⟹ lub (f ` S) = f (lub S)` (cont preserves DIRECTED lubs,
+    via `obtain_directed_chain`); also `cont_directed_is_lub` (the `<<|` form).
+  - DOWNWARD-CLOSENESS sketch: `dd = ⨆ {𝗉⇘A⇙ | A∈𝒜}` (bounded by `ID`, so lub exists by
+    cfun bounded_complete; directed since `A⊆B ⟹ 𝗉⇘A⇙⊑𝗉⇘B⇙`). `dd⋅x = ⨆ {𝗉⇘A⇙⋅x}`. If
+    `dd⋅x = x` and `y ⊑ x`: `𝗉⇘A⇙⋅y ⊑ 𝗉⇘A⇙⋅x`, so by `proj_meet` `𝗉⇘A⇙⋅y = y ⊓ 𝗉⇘A⇙⋅x`;
+    `{𝗉⇘A⇙⋅x}` directed + meet continuous (`cont_meet_arg` + `cont_directed_lub`) ⟹
+    `dd⋅y = ⨆{y ⊓ 𝗉⇘A⇙⋅x} = y ⊓ ⨆{𝗉⇘A⇙⋅x} = y ⊓ x = y`. So fixed set is downward-closed.
+- Converse of the slide-iff (`A⊔B` strong ⟹ `A,B` strong) — optional.
+4. Assemble the strong-subdomain complete lattice (finite + directed joins + ⊥).
 5. Distributivity of the subdomain lattices (4.1.10); revisit `complete_distrib_lattice`.
+   (Connecting the explicit stable join to the lattice `sup` is now optional/secondary.)
+
+### Preservation result to prove later (projection of sup = lub of projections)
+For the distributive lattice of stable subdomains (and strong subdomains later), the
+projection of an ARBITRARY-set sup is the lub of the projections:
+`𝗉⇘⨆ᵢ Aᵢ⇙ = ⨆ᵢ 𝗉⇘Aᵢ⇙` (equivalently pointwise `𝗉⇘⨆Aᵢ⇙⋅x = ⨆ᵢ 𝗉⇘Aᵢ⇙⋅x`). Assembles from:
+finite case via `stable_subdomain_join` + induction (binary `𝗉⇘A⊔B⇙ = 𝗉⇘A⇙ ⊔ 𝗉⇘B⇙` — the
+`decomp` lemma inside `strong_subdomain_join` already proves this shape), and the directed
+case via the directed-lub construction (`cont_directed_lub`); arbitrary = directed of finite.
+This is the projection-level companion to `proj_join` (4.1.6 ii) and underpins the strong
+lattice's `sup`.
 
 ## Notes
 

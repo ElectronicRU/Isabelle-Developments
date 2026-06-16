@@ -258,6 +258,54 @@ proof -
   from chainC Cmem this show thesis using that by presburger
 qed
 
+text \<open>In a bifinite (hence directed-complete) domain a continuous function preserves
+  \emph{directed} lubs, not just lubs of chains: the image of a nonempty directed set has
+  the image of the lub as its least upper bound.  The directed set is replaced by a cofinal
+  chain via @{thm obtain_directed_chain}, on which ordinary continuity applies.
+
+  Combined with distributivity this shows that binary meet preserves \emph{all} existing
+  lubs — finite ones by the distributive law \<open>meet_join_distrib\<close>, directed ones by this lemma.\<close>
+lemma cont_directed_is_lub:
+  fixes S :: "'a::bifinite set"
+  assumes cont: "cont f" and dir: "directed S" and ne: "S \<noteq> {}"
+  shows "f ` S <<| f (lub S)"
+proof -
+  have mono: "monofun f" using cont by (rule cont2mono)
+  from dir ne obtain C where chainC: "chain C" and Cmem: "\<forall>i. C i \<in> S"
+    and Club: "(\<Squnion>i. C i) = lub S"
+    by (rule obtain_directed_chain)
+  have fC: "f (lub S) = (\<Squnion>i. f (C i))"
+    using Club cont2contlubE[OF cont chainC] by simp
+  show "f ` S <<| f (lub S)"
+  proof (rule is_lubI)
+    show "f ` S <| f (lub S)"
+    proof (rule is_ubI)
+      fix z assume "z \<in> f ` S"
+      then obtain s where s: "s \<in> S" and z: "z = f s" by blast
+      from dir have "S <<| lub S" by (rule directed_lub)
+      with s have "s \<sqsubseteq> lub S" by (auto dest: is_lubD1 is_ubD)
+      then have "f s \<sqsubseteq> f (lub S)" by (rule monofunE[OF mono])
+      with z show "z \<sqsubseteq> f (lub S)" by simp
+    qed
+  next
+    fix u assume ub: "f ` S <| u"
+    have chfC: "chain (\<lambda>i. f (C i))" using mono chainC by (rule ch2ch_monofun)
+    have "(\<Squnion>i. f (C i)) \<sqsubseteq> u"
+    proof (rule lub_below[OF chfC])
+      fix i
+      from Cmem have "f (C i) \<in> f ` S" by blast
+      with ub show "f (C i) \<sqsubseteq> u" by (rule is_ubD)
+    qed
+    with fC show "f (lub S) \<sqsubseteq> u" by simp
+  qed
+qed
+
+corollary cont_directed_lub:
+  fixes S :: "'a::bifinite set"
+  assumes "cont f" and "directed S" and "S \<noteq> {}"
+  shows "lub (f ` S) = f (lub S)"
+  using cont_directed_is_lub[OF assms] by (rule lub_eqI)
+
 definition "Chain C \<equiv> \<forall>a \<in> C. \<forall>b \<in> C. a \<sqsubseteq> b \<or> b \<sqsubseteq> a"
 
 lemma ChainE: assumes "Chain C" "a \<in> C" "b \<in> C"
