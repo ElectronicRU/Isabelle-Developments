@@ -1,0 +1,9 @@
+session DataAnalyticsLang = "HOLCF" +
+  options [document = pdf, document_output = "output"]
+  sessions "HOLCF-extra"
+  theories
+    Typing
+    Domain
+    Interp
+  document_files
+    "root.tex"

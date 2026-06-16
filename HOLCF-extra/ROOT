@@ -1,0 +1,12 @@
+session "HOLCF-extra" = HOLCF +
+  options [document = pdf, document_output = "output"]
+(*theories [document = false]
+    A
+    B *)
+  theories
+    Top
+    FiniteCF
+    Bounded_Complete
+    Directed
+  document_files
+    "root.tex"

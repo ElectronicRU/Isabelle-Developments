@@ -1,0 +1,7 @@
+# Editor autosaves and backups
+*~
+\#*\#
+.\#*
+
+# Isabelle build output
+output/

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "Isabelle_Q": {
+      "type": "stdio",
+      "command": "/home/alex/Isabelle/toolbox/bin/python",
+      "args": [
+        "/home/alex/Isabelle/AutoCorrode/iq/iq_bridge.py"
+      ],
+      "env": {}
+    }
+  }
+}
