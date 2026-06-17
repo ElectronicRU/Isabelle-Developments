@@ -80,11 +80,13 @@ proof -
 qed
 
 lemma directed_mono_image:
+  fixes f :: "'a \<Rightarrow> 'b::po"
   assumes "\<And>x y. x \<sqsubseteq> y \<Longrightarrow> f x \<sqsubseteq> f y"
   "directed S"
 shows "directed (f ` S)" 
-  using assms(2) by
-    (simp add: directed_def) (blast intro: assms(1))
+  using assms(2) 
+  unfolding directed_def po_class.directed_def
+  by (blast intro: assms(1))
 
 lemma chain_directed: "directed (range C)" if "chain C"
 proof (rule, clarsimp)
@@ -306,6 +308,19 @@ corollary cont_directed_lub:
   shows "lub (f ` S) = f (lub S)"
   using cont_directed_is_lub[OF assms] by (rule lub_eqI)
 
+lemma directed_admD:
+  fixes D :: "'a::bifinite set"
+  assumes "adm P" and D: "directed D" "D \<noteq> {}"
+    and forall: "\<forall>x \<in> D. P x"
+  shows "P (lub D)"
+proof -
+  from obtain_directed_chain[OF D]
+  obtain C where "chain C" and mem: "\<forall>i. C i \<in> D" and lub: "(\<Squnion>i. C i) = lub D" .
+  from forall mem have "\<forall>i. P (C i)" by fast
+  with admD[OF \<open>adm P\<close> \<open>chain C\<close>] lub
+  show "P (lub D)" by simp
+qed
+
 definition "Chain C \<equiv> \<forall>a \<in> C. \<forall>b \<in> C. a \<sqsubseteq> b \<or> b \<sqsubseteq> a"
 
 lemma ChainE: assumes "Chain C" "a \<in> C" "b \<in> C"
@@ -393,32 +408,31 @@ qed
 
 lemma directed_join_of_finite_subsets:
   fixes A :: "'a::dcpo set"
-  defines "PA \<equiv> {B. B \<subseteq> A \<and> finite B}"
-  assumes lubs: "\<And>B. B \<in> PA \<Longrightarrow> B <<| lub B"
-  shows directed_lubs: "directed (lub ` PA)"
-    and lub_lub: "A <<| lub (lub ` PA)"
+  assumes lubs: "\<And>B. B \<in> Fpow(A) \<Longrightarrow> B <<| lub B"
+  shows directed_lubs: "directed (lub ` Fpow(A))"
+    and lub_lub: "A <<| lub (lub ` Fpow(A))"
 proof -
-  show "directed (lub ` PA)"
+  show "directed (lub ` Fpow(A))"
   proof (intro directedI, safe)
-    fix x y assume xy: "x \<in> PA" "y \<in> PA"
-    then have un: "x \<union> y \<in> PA" by (auto simp add: PA_def)
+    fix x y assume xy: "x \<in> Fpow(A)" "y \<in> Fpow(A)"
+    then have un: "x \<union> y \<in> Fpow(A)" by (auto simp add: Fpow_def)
     with xy lubs have "lub x \<sqsubseteq> lub (x \<union> y) \<and> lub y \<sqsubseteq> lub (x \<union> y)"
       using lub_subset_mono by fast
-    with un show "\<exists>z \<in> lub ` PA. lub x \<sqsubseteq> z \<and> lub y \<sqsubseteq> z" by fast
+    with un show "\<exists>z \<in> lub ` Fpow(A). lub x \<sqsubseteq> z \<and> lub y \<sqsubseteq> z" by fast
   qed
-  then have pa_lub: "lub ` PA <<| lub (lub ` PA)" by (rule directed_lub)
-  show "A <<| lub (lub ` PA)"
+  then have pa_lub: "lub ` Fpow(A) <<| lub (lub ` Fpow(A))" by (rule directed_lub)
+  show "A <<| lub (lub ` Fpow(A))"
   proof (intro is_lubI is_ubI)
     fix x assume "x \<in> A"
-    then have "{x} \<in> PA" by (simp add: PA_def)
-    then have "x \<in> lub ` PA" by force
-    with pa_lub[THEN is_lubD1, THEN is_ubD] show "x \<sqsubseteq> lub (lub ` PA)" .
+    then have "{x} \<in> Fpow(A)" by (simp add: Fpow_def)
+    then have "x \<in> lub ` Fpow(A)" by force
+    with pa_lub[THEN is_lubD1, THEN is_ubD] show "x \<sqsubseteq> lub (lub ` Fpow(A))" .
   next
     fix u assume "A <| u"
-    then have "B \<in> PA \<Longrightarrow> B <| u" for B by (auto simp add: PA_def is_ub_def)
-    with lubs[THEN is_lubD2] have "B \<in> PA \<Longrightarrow> lub B \<sqsubseteq> u" for B by simp
-    then have "lub ` PA <| u" by (rule ub_imageI)
-    with pa_lub[THEN is_lubD2] show "lub (lub ` PA) \<sqsubseteq> u" .
+    then have "B \<in> Fpow(A) \<Longrightarrow> B <| u" for B by (auto simp add: Fpow_def is_ub_def)
+    with lubs[THEN is_lubD2] have "B \<in> Fpow(A) \<Longrightarrow> lub B \<sqsubseteq> u" for B by simp
+    then have "lub ` Fpow(A) <| u" by (rule ub_imageI)
+    with pa_lub[THEN is_lubD2] show "lub (lub ` Fpow(A)) \<sqsubseteq> u" .
   qed
 qed
 

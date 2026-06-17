@@ -162,28 +162,43 @@ qed
 
 definition p where "p \<equiv> \<Lambda> a. proj a"
 
-lemma p_beta[simp]: "p\<cdot>x = proj x"
+lemma p_beta: "p\<cdot>x = proj x"
   unfolding p_def
   by (simp add: proj_cont)
 
-sublocale deflation p
+lemma deflation_p: "deflation p"
 proof
   show "p\<cdot>(p\<cdot>x) = p\<cdot>x" for x
     using proj_in_S proj_fixed
-    by simp
+    by (simp add: p_beta)
   show "p\<cdot>x \<sqsubseteq> x" for x
-    using proj_below by simp
+    using proj_below by (simp add: p_beta)
 qed
 
+sublocale deflation p by (rule deflation_p)
+
+text \<open>\<open>p\<close>-form duplicates of the projection lemmas.  Since \<open>p_beta\<close> (\<open>p\<cdot>x = proj x\<close>) is
+  deliberately not a simp rule — it rewrites \<open>p\<cdot>x\<close> against \<open>deflation.below\<close> etc. — we
+  restate the projection facts directly for \<open>p\<cdot>x\<close> via \<open>proj = Rep_cfun p\<close> and use those.\<close>
+lemma proj_Rep_p: "proj = Rep_cfun p"
+  by (rule ext) (simp add: p_beta)
+
+lemmas p_in_S[simp] = proj_in_S[unfolded proj_Rep_p]
+lemmas p_below = proj_below[unfolded proj_Rep_p]
+lemmas p_fixed = proj_fixed[unfolded proj_Rep_p]
+lemmas p_fixed_iff = proj_fixed_iff[unfolded proj_Rep_p]
+lemmas below_p_of = below_proj_of[unfolded proj_Rep_p]
+lemmas p_meet = proj_meet[unfolded proj_Rep_p]
+lemmas p_join = proj_join[unfolded proj_Rep_p]
+
 lemma p_fixes: "{x. p\<cdot>x = x} = S"
-  by (simp add: proj_fixed_iff)
+  by (simp add: proj_fixed_iff p_beta)
 
 lemma p_range: "range (\<lambda>x. p\<cdot>x) = S"
   by (simp only: p_fixes range_eq_fixes)
 
 end
 
-notation stable_subdomain.p (\<open>\<p>\<index>\<close>)
 
 locale strong_subdomain = stable_subdomain +
   assumes slide_rule: "y \<in> S \<Longrightarrow> p\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
@@ -452,6 +467,9 @@ text \<open>Stable subdomains form a closure system: they contain @{term UNIV} a
 lemma stable_subdomain_UNIV: "stable_subdomain UNIV"
   by unfold_locales auto
 
+lemma p_UNIV: "stable_subdomain.p UNIV\<cdot>x = x"
+  by (simp add: stable_subdomain.p_fixed[OF stable_subdomain_UNIV])
+
 lemma stable_subdomain_bot: "stable_subdomain {\<bottom>::'a}"
 proof
   fix t :: 'a and T :: "'a set" assume "T \<subseteq> {\<bottom>}"
@@ -461,6 +479,9 @@ proof
   ultimately have "t = \<bottom>" by (rule is_lub_unique[symmetric])
   then show "t \<in> {\<bottom>}" ..
 qed auto
+
+lemma p_bot: "stable_subdomain.p {\<bottom>}\<cdot>x = \<bottom>"
+  using stable_subdomain.p_in_S[OF stable_subdomain_bot] by fast
 
 lemma stable_subdomain_Inter:
   assumes "\<And>S. S \<in> \<S> \<Longrightarrow> stable_subdomain S"
@@ -480,147 +501,8 @@ next
   qed
 qed
 
-text \<open>A downward-closed set containing @{term \<bottom>} that is closed under pairwise joins
-  and under lubs of chains is a stable subdomain. Closure under lubs of arbitrary
-  bounded subsets follows because such a lub is the directed lub of the lubs of the
-  finite subsets (Jung, via @{thm directed_join_of_finite_subsets}). This intro rule
-  needs neither distributivity nor the full strong-closure assumption.\<close>
-
-lemma stable_subdomainI:
-  fixes S :: "'a set"
-  assumes bot: "\<bottom> \<in> S"
-    and down: "\<And>x y. y \<in> S \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> x \<in> S"
-    and join: "\<And>a b. a \<in> S \<Longrightarrow> b \<in> S \<Longrightarrow> a \<Up> b \<Longrightarrow> a \<squnion> b \<in> S"
-    and chain: "\<And>C. chain C \<Longrightarrow> (\<And>i. C i \<in> S) \<Longrightarrow> (\<Squnion>i. C i) \<in> S"
-  shows "stable_subdomain S"
-proof
-  fix y x assume "y \<in> S" "x \<sqsubseteq> y" then show "x \<in> S" by (rule down)
-next
-  fix T t assume TS: "T \<subseteq> S" and lub: "T <<| t"
-  have fin_in: "lub B \<in> S" if "finite B" "B \<subseteq> S" "B <| u" for B u
-    using that
-  proof (induction B arbitrary: u rule: finite_induct)
-    case empty
-    then show ?case using bot by (simp add: lub_eqI[OF lub_empty])
-  next
-    case (insert x F)
-    from insert.prems have xS: "x \<in> S" and FS: "F \<subseteq> S" and ub: "insert x F <| u" by auto
-    from ub have Fu: "F <| u" and xu: "x \<sqsubseteq> u" by (simp_all add: is_ub_insert)
-    from insert.IH[OF FS Fu] have lubF_S: "lub F \<in> S" .
-    from Fu have F_lub: "F <<| lub F" by (rule ex_bound_lub)
-    from F_lub Fu have "lub F \<sqsubseteq> u" by (rule is_lubD2)
-    with xu have jn: "x \<Up> lub F" by (rule joinableI)
-    have "insert x F <<| x \<squnion> lub F"
-    proof (rule is_lubI)
-      show "insert x F <| x \<squnion> lub F"
-      proof (subst is_ub_insert, intro conjI)
-        show "x \<sqsubseteq> x \<squnion> lub F" using jn by (rule joinableD(1))
-        show "F <| x \<squnion> lub F"
-          using is_lubD1[OF F_lub] joinableD(2)[OF jn] by (rule is_ub_upward)
-      qed
-    next
-      fix w assume "insert x F <| w"
-      then have xw: "x \<sqsubseteq> w" and Fw: "F <| w" by (simp_all add: is_ub_insert)
-      from F_lub Fw have "lub F \<sqsubseteq> w" by (rule is_lubD2)
-      with xw show "x \<squnion> lub F \<sqsubseteq> w" by (rule join_belowI)
-    qed
-    then have "lub (insert x F) = x \<squnion> lub F" by (rule lub_eqI)
-    with join[OF xS lubF_S jn] show ?case by simp
-  qed
-  define PT where "PT = {B. B \<subseteq> T \<and> finite B}"
-  have flubs: "B <<| lub B" if "B \<in> PT" for B
-  proof -
-    from that have "B \<subseteq> T" by (simp add: PT_def)
-    with is_lubD1[OF lub] have "B <| t" by (auto simp: is_ub_def)
-    then show "B <<| lub B" by (rule ex_bound_lub)
-  qed
-  have dir: "directed (lub ` PT)"
-    using flubs unfolding PT_def by (rule directed_join_of_finite_subsets(1))
-  have Tlub: "T <<| lub (lub ` PT)"
-    using flubs unfolding PT_def by (rule directed_join_of_finite_subsets(2))
-  have subS: "lub ` PT \<subseteq> S"
-  proof (rule subsetI)
-    fix z assume "z \<in> lub ` PT"
-    then obtain B where B: "B \<in> PT" and z: "z = lub B" by auto
-    from B have fB: "finite B" and BT: "B \<subseteq> T" by (auto simp: PT_def)
-    from BT TS have BS: "B \<subseteq> S" by auto
-    from BT is_lubD1[OF lub] have "B <| t" by (auto simp: is_ub_def)
-    with fB BS have "lub B \<in> S" by (rule fin_in)
-    with z show "z \<in> S" by simp
-  qed
-  have ne: "lub ` PT \<noteq> {}" by (auto simp: PT_def)
-  have "chain_complete S"
-    unfolding chain_complete_def using chain by (auto simp: image_subset_iff)
-  then have "dcomplete S" by (simp add: chain_complete_iff_dcomplete)
-  with dir subS ne have "lub (lub ` PT) \<in> S" unfolding dcomplete_def by blast
-  with Tlub lub show "t \<in> S" by (metis is_lub_unique)
-qed
-
-text \<open>The join of two stable subdomains is the \emph{pointwise join} (Jung, Lemma 4.1.9):
-  the set of joins of pairs drawn from each, where those joins exist.  Distributivity of the
-  underlying domain is what makes this set downward-closed.\<close>
-
-lemma stable_subdomain_join:
-  assumes A: "stable_subdomain A" and B: "stable_subdomain B"
-  shows "stable_subdomain {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
-proof -
-  interpret A: stable_subdomain A by (rule A)
-  interpret B: stable_subdomain B by (rule B)
-  define J where "J = {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
-  have memJ: "c \<in> J \<longleftrightarrow> (\<exists>a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b \<and> c = a \<squnion> b)" for c
-    unfolding J_def by blast
-  have "stable_subdomain J"
-  proof
-    fix x y assume yJ: "y \<in> J" and xy: "x \<sqsubseteq> y"
-    from yJ obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and yeq: "y = a \<squnion> b"
-      using memJ by blast
-    have a': "x \<sqinter> a \<in> A" by (rule A.downward[OF ab(1) meet_below2])
-    have b': "x \<sqinter> b \<in> B" by (rule B.downward[OF ab(2) meet_below2])
-    have jn: "x \<sqinter> a \<Up> x \<sqinter> b" by (rule joinableI[OF meet_below1 meet_below1])
-    have "x = x \<sqinter> y" using xy by (simp add: meet_absorbI)
-    also have "\<dots> = (x \<sqinter> a) \<squnion> (x \<sqinter> b)" unfolding yeq by (rule meet_join_distrib[OF ab(3)])
-    finally have "x = (x \<sqinter> a) \<squnion> (x \<sqinter> b)" .
-    with a' b' jn show "x \<in> J" using memJ by blast
-  next
-    fix T t assume TJ: "T \<subseteq> J" and lub: "T <<| t"
-    \<comment> \<open>Every existing lub of \<open>J\<close>-elements is recovered by projecting onto each side:
-        \<open>t = p\<^sub>A t \<squnion> p\<^sub>B t\<close>.  No pairwise/chain case-split is needed.\<close>
-    have aT: "A.p\<cdot>t \<in> A" by (simp add: A.proj_in_S)
-    have bT: "B.p\<cdot>t \<in> B" by (simp add: B.proj_in_S)
-    have aTb: "A.p\<cdot>t \<sqsubseteq> t" by (rule A.below)
-    have bTb: "B.p\<cdot>t \<sqsubseteq> t" by (rule B.below)
-    have jn: "A.p\<cdot>t \<Up> B.p\<cdot>t" by (rule joinableI[OF aTb bTb])
-    have ub: "x \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" if xT: "x \<in> T" for x
-    proof -
-      from xT TJ have "x \<in> J" by blast
-      then obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and xeq: "x = a \<squnion> b"
-        using memJ by blast
-      have xt: "x \<sqsubseteq> t" by (rule is_ubD[OF is_lubD1[OF lub] xT])
-      have aPt: "a \<sqsubseteq> A.p\<cdot>t"
-      proof -
-        have "a \<sqsubseteq> t" using joinableD(1)[OF ab(3)] xeq xt below_trans by metis
-        then have "A.p\<cdot>a \<sqsubseteq> A.p\<cdot>t" by (rule monofun_cfun_arg)
-        with A.proj_fixed[OF ab(1)] show ?thesis by simp
-      qed
-      have bPt: "b \<sqsubseteq> B.p\<cdot>t"
-      proof -
-        have "b \<sqsubseteq> t" using joinableD(2)[OF ab(3)] xeq xt below_trans by metis
-        then have "B.p\<cdot>b \<sqsubseteq> B.p\<cdot>t" by (rule monofun_cfun_arg)
-        with B.proj_fixed[OF ab(2)] show ?thesis by simp
-      qed
-      from aPt joinableD(1)[OF jn] have "a \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_trans)
-      moreover from bPt joinableD(2)[OF jn] have "b \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_trans)
-      ultimately show "x \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" unfolding xeq by (rule join_belowI)
-    qed
-    have "t \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule is_lubD2[OF lub is_ubI[OF ub]])
-    moreover have "A.p\<cdot>t \<squnion> B.p\<cdot>t \<sqsubseteq> t" using aTb bTb by (rule join_belowI)
-    ultimately have "t = A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_antisym)
-    with aT bT jn show "t \<in> J" using memJ by blast
-  qed
-  then show ?thesis unfolding J_def .
-qed
-
 text \<open>Jung, Lemma 4.1.5(ii) (one direction): a finer strong ideal has a smaller projection.\<close>
+(* NOTE: this can be shown without going to definitions by lemma deflation.belowI *)
 lemma proj_mono_subdomain:
   assumes A: "stable_subdomain A" and S: "stable_subdomain S" and sub: "A \<subseteq> S"
   shows "stable_subdomain.proj A x \<sqsubseteq> stable_subdomain.proj S x"
@@ -632,104 +514,402 @@ proof -
     by (rule lub_subset_mono)
 qed
 
-text \<open>Intro rule for the slide condition, phrased through the projection.\<close>
-lemma strong_subdomainI:
-  assumes S: "stable_subdomain S"
-    and slide: "\<And>x y. y \<in> S \<Longrightarrow> stable_subdomain.p S\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
-  shows "strong_subdomain S"
-proof (intro strong_subdomain.intro[OF S] strong_subdomain_axioms.intro)
-  fix x y assume "y \<in> S" and "stable_subdomain.p S\<cdot>x \<sqsubseteq> y"
-  then show "x \<Up> y" by (rule slide)
+text \<open>The projection-cfun version of @{thm proj_mono_subdomain}.\<close>
+lemma p_mono_subdomain:
+  assumes A: "stable_subdomain A" and S: "stable_subdomain S" and sub: "A \<subseteq> S"
+  shows "stable_subdomain.p A \<sqsubseteq> stable_subdomain.p S"
+proof (rule cfun_belowI)
+  fix x
+  interpret A: stable_subdomain A by (rule A)
+  interpret S: stable_subdomain S by (rule S)
+  show "stable_subdomain.p A\<cdot>x \<sqsubseteq> stable_subdomain.p S\<cdot>x"
+    using proj_mono_subdomain[OF A S sub] by (simp add: A.p_beta S.p_beta)
+qed
+
+text \<open>The join of two stable subdomains is the \emph{pointwise join} (Jung, Lemma 4.1.9):
+  the set of joins of pairs drawn from each, where those joins exist.  Distributivity of the
+  underlying domain is what makes this set downward-closed.\<close>
+
+context
+  fixes A B J
+  assumes A: "stable_subdomain A" and B: "stable_subdomain B"
+  defines "J \<equiv> {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
+begin
+interpretation A: stable_subdomain A by (rule A)
+interpretation B: stable_subdomain B by (rule B)
+
+private lemma memJ: "c \<in> J \<longleftrightarrow> (\<exists>a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b \<and> c = a \<squnion> b)" for c
+  unfolding J_def by blast
+
+lemma A_sub_join: "A \<subseteq> J"
+  using B.bot_in_S
+  apply (intro subsetI)
+  unfolding memJ
+  by fastforce
+
+lemma B_sub_join: "B \<subseteq> J"
+  using A.bot_in_S
+  apply (intro subsetI)
+  unfolding memJ
+  by fastforce
+
+lemma J_join: fixes x assumes "x \<in> J"
+  shows "A.p\<cdot>x \<squnion> B.p\<cdot>x = x"
+proof (rule below_antisym)
+  from assms memJ obtain a b where a: "a \<in> A" and b: "b \<in> B"
+    and ab: "a \<Up> b" and x: "x = a \<squnion> b"
+    by blast
+  from ab x have "a \<sqsubseteq> x" using joinableD by simp
+  with a have 1: "a \<sqsubseteq> A.p\<cdot>x" by (rule A.below_p_of)
+  from ab x have "b \<sqsubseteq> x" using joinableD by simp
+  with b have 2: "b \<sqsubseteq> B.p\<cdot>x" by (rule B.below_p_of)
+  have jn: "A.p\<cdot>x \<Up> B.p\<cdot>x" by (rule joinableI[OF A.below B.below])
+  from 1 2 joinableD[OF this]
+  show "x \<sqsubseteq> A.p\<cdot>x \<squnion> B.p\<cdot>x" unfolding x
+    using join_belowI[where x=a and y=b] below_trans
+    by blast
+next
+  from A.below B.below
+  show "A.p\<cdot>x \<squnion> B.p\<cdot>x \<sqsubseteq> x"
+    by (rule join_belowI)
+qed
+
+lemma stable_subdomain_join:
+  "stable_subdomain J"
+proof    
+  fix x y assume yJ: "y \<in> J" and xy: "x \<sqsubseteq> y"
+  from yJ obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and yeq: "y = a \<squnion> b"
+    using memJ by blast
+  have a': "x \<sqinter> a \<in> A" by (rule A.downward[OF ab(1) meet_below2])
+  have b': "x \<sqinter> b \<in> B" by (rule B.downward[OF ab(2) meet_below2])
+  have jn: "x \<sqinter> a \<Up> x \<sqinter> b" by (rule joinableI[OF meet_below1 meet_below1])
+  have "x = x \<sqinter> y" using xy by (simp add: meet_absorbI)
+  also have "\<dots> = (x \<sqinter> a) \<squnion> (x \<sqinter> b)" unfolding yeq by (rule meet_join_distrib[OF ab(3)])
+  finally have "x = (x \<sqinter> a) \<squnion> (x \<sqinter> b)" .
+  with a' b' jn show "x \<in> J" using memJ by blast
+next
+  fix T t assume TJ: "T \<subseteq> J" and lub: "T <<| t"
+  \<comment> \<open>Every existing lub of \<open>J\<close>-elements is recovered by projecting onto each side:
+      \<open>t = p\<^sub>A t \<squnion> p\<^sub>B t\<close>.  No pairwise/chain case-split is needed.\<close>
+  have aT: "A.p\<cdot>t \<in> A" by (simp add: A.proj_in_S A.p_beta)
+  have bT: "B.p\<cdot>t \<in> B" by (simp add: B.proj_in_S B.p_beta)
+  have aTb: "A.p\<cdot>t \<sqsubseteq> t" by (rule A.below)
+  have bTb: "B.p\<cdot>t \<sqsubseteq> t" by (rule B.below)
+  have jn: "A.p\<cdot>t \<Up> B.p\<cdot>t" by (rule joinableI[OF aTb bTb])
+  have ub: "x \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" if xT: "x \<in> T" for x
+  proof -
+    from xT TJ have "x \<in> J" by blast
+    then obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and xeq: "x = a \<squnion> b"
+      using memJ by blast
+    have xt: "x \<sqsubseteq> t" by (rule is_ubD[OF is_lubD1[OF lub] xT])
+    have "a \<sqsubseteq> t" using joinableD(1)[OF ab(3)] xeq xt below_trans by metis
+    with ab(1) have aPt: "a \<sqsubseteq> A.p\<cdot>t" by (rule A.below_p_of)
+    have "b \<sqsubseteq> t" using joinableD(2)[OF ab(3)] xeq xt below_trans by metis
+    with ab(2) have bPt: "b \<sqsubseteq> B.p\<cdot>t" by (rule B.below_p_of)
+    from aPt joinableD(1)[OF jn] have "a \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_trans)
+    moreover from bPt joinableD(2)[OF jn] have "b \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_trans)
+    ultimately show "x \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" unfolding xeq by (rule join_belowI)
+  qed
+  have "t \<sqsubseteq> A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule is_lubD2[OF lub is_ubI[OF ub]])
+  moreover have "A.p\<cdot>t \<squnion> B.p\<cdot>t \<sqsubseteq> t" using aTb bTb by (rule join_belowI)
+  ultimately have "t = A.p\<cdot>t \<squnion> B.p\<cdot>t" by (rule below_antisym)
+  with aT bT jn show "t \<in> J" using memJ by blast
+qed
+
+interpretation J: stable_subdomain J by (rule stable_subdomain_join)
+
+
+lemma pA_below_pJ: "A.p \<sqsubseteq> J.p"
+  using A stable_subdomain_join A_sub_join
+  by (rule p_mono_subdomain)
+
+lemma pB_below_pJ: "B.p \<sqsubseteq> J.p"
+  using B stable_subdomain_join B_sub_join
+  by (rule p_mono_subdomain)
+
+lemma proj_joinable[simp]: "A.p\<cdot>x \<Up> B.p\<cdot>x"
+  using A.below B.below by (rule joinableI)
+
+lemma stable_subdomain_join_proj:
+  "A.p\<cdot>y \<squnion> B.p\<cdot>y = J.p\<cdot>y"
+proof -
+  have "A.p\<cdot>(J.p\<cdot>y) \<squnion> B.p\<cdot>(J.p\<cdot>y) = J.p\<cdot>y"
+    by (rule J_join) simp
+  also have "A.p\<cdot>(J.p\<cdot>y) = A.p\<cdot>y"
+    using deflation_below_comp1[OF A.deflation_p J.deflation_p]
+      pA_below_pJ
+    .
+  also have "B.p\<cdot>(J.p\<cdot>y) = B.p\<cdot>y"
+    using deflation_below_comp1[OF B.deflation_p J.deflation_p]
+      pB_below_pJ
+    .
+  finally show "A.p\<cdot>y \<squnion> B.p\<cdot>y = J.p\<cdot>y" .
 qed
 
 text \<open>Jung, Lemma 4.1.9(i): the pointwise join of two strong subdomains again satisfies the
   slide condition.  The projection of the join decomposes as \<open>p\<^bsub>A\<^esub> y \<squnion> p\<^bsub>B\<^esub> y\<close>, and the
   argument slides first through @{term A} and then through @{term B}.\<close>
-lemma strong_subdomain_join:
-  assumes A: "strong_subdomain A" and B: "strong_subdomain B"
-  shows "strong_subdomain {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
+
+lemma strong_subdomain_join':
+  assumes As: "strong_subdomain A" and Bs: "strong_subdomain B"
+  shows "strong_subdomain J"
+proof
+  interpret As: strong_subdomain A by (rule As)
+  interpret Bs: strong_subdomain B by (rule Bs)
+  fix x y assume yJ: "y \<in> J" and pJx_y: "J.p\<cdot>x \<sqsubseteq> y"
+  define pa where "pa = A.p\<cdot>y"
+  define pb where "pb = B.p\<cdot>y"
+  have paA: "pa \<in> A" unfolding pa_def by simp
+  have pbB: "pb \<in> B" unfolding pb_def by simp
+  have pay: "pa \<sqsubseteq> y" unfolding pa_def by (rule A.p_below)
+  have yab: "y = pa \<squnion> pb" unfolding pa_def pb_def using J_join[OF yJ] ..
+  \<comment> \<open>\<open>p\<^bsub>A\<^esub> x \<sqsubseteq> pa\<close>, hence by @{term A}'s slide condition \<open>x \<Up> pa\<close>.\<close>
+  from pA_below_pJ have pAxJ: "A.p\<cdot>x \<sqsubseteq> J.p\<cdot>x"
+    by (rule monofun_cfun_fun)
+  then have "A.p\<cdot>x \<sqsubseteq> y" using pJx_y by (rule below_trans)
+  then have pAx_pa: "A.p\<cdot>x \<sqsubseteq> pa" unfolding pa_def
+    by (auto intro: A.below_p_of)
+  from As.slide_rule[OF paA this] have x_pa: "x \<Up> pa" .
+  have pa_x: "pa \<Up> x" using x_pa by (simp add: joinable_sym)
+  \<comment> \<open>\<open>p\<^bsub>B\<^esub> (pa \<squnion> x) \<sqsubseteq> pb\<close>, hence by @{term B}'s slide condition \<open>pa \<squnion> x \<Up> pb\<close>.\<close>
+  from pay have pBpa_pb: "B.p\<cdot>pa \<sqsubseteq> pb" unfolding pb_def by (rule monofun_cfun_arg)
+  from pB_below_pJ have "B.p\<cdot>x \<sqsubseteq> J.p\<cdot>x" by (rule monofun_cfun_fun)
+  then have "B.p\<cdot>x \<sqsubseteq> y" using pJx_y by (rule below_trans)
+  then have pBx_pb: "B.p\<cdot>x \<sqsubseteq> pb" unfolding pb_def
+    by (auto intro: B.below_p_of)
+  have "B.p\<cdot>(pa \<squnion> x) = B.p\<cdot>pa \<squnion> B.p\<cdot>x" by (rule B.p_join[OF pa_x])
+  also have "B.p\<cdot>pa \<squnion> B.p\<cdot>x \<sqsubseteq> pb" using pBpa_pb pBx_pb by (rule join_belowI)
+  finally have "B.p\<cdot>(pa \<squnion> x) \<sqsubseteq> pb" .
+  from Bs.slide_rule[OF pbB this] have pax_pb: "pa \<squnion> x \<Up> pb" .
+  \<comment> \<open>Both \<open>x\<close> and \<open>y\<close> lie below \<open>(pa \<squnion> x) \<squnion> pb\<close>, so \<open>x \<Up> y\<close>.\<close>
+  from joinableD[OF pa_x] joinableD[OF pax_pb]
+  have "x \<sqsubseteq> (pa \<squnion> x) \<squnion> pb" "y \<sqsubseteq> (pa \<squnion> x) \<squnion> pb"
+    unfolding yab by (auto intro: join_belowI below_trans)
+  then show "x \<Up> y" by (rule joinableI)
+qed
+
+text \<open>@{term J} is the \emph{least} stable subdomain containing both @{term A} and
+  @{term B}: any stable @{term K} above both is closed under the joinable joins that
+  generate @{term J}.\<close>
+lemma J_below:
+  assumes AK: "A \<subseteq> K" and BK: "B \<subseteq> K" and K: "stable_subdomain K"
+  shows "J \<subseteq> K"
+proof (rule subsetI)
+  fix x assume "x \<in> J"
+  then obtain a b where a: "a \<in> A" and b: "b \<in> B" and ab: "a \<Up> b" and x: "x = a \<squnion> b"
+    using memJ by blast
+  interpret K: stable_subdomain K by (rule K)
+  have "{a, b} \<subseteq> K" using a b AK BK by blast
+  moreover have "{a, b} <<| a \<squnion> b"
+    by (rule join_is_lub[OF joinableD(1)[OF ab] joinableD(2)[OF ab]])
+  ultimately have "a \<squnion> b \<in> K" by (rule K.strong_closed)
+  with x show "x \<in> K" by simp
+qed
+
+text \<open>Hence @{term J} is the carrier of the lattice join of @{term A} and @{term B}.\<close>
+lemma J_eq_Inter: "J = \<Inter>{S. stable_subdomain S \<and> A \<subseteq> S \<and> B \<subseteq> S}" (is "J = \<Inter>?\<S>")
+proof
+  show "J \<subseteq> \<Inter>?\<S>"
+  proof (rule Inter_greatest)
+    fix X assume "X \<in> ?\<S>"
+    then have "A \<subseteq> X" "B \<subseteq> X" "stable_subdomain X" by auto
+    then show "J \<subseteq> X" by (rule J_below)
+  qed
+  have "J \<in> ?\<S>" using stable_subdomain_join A_sub_join B_sub_join by blast
+  then show "\<Inter>?\<S> \<subseteq> J" by (rule Inter_lower)
+qed
+
+end
+
+lemma strong_subdomain_join: "strong_subdomain A \<Longrightarrow> strong_subdomain B \<Longrightarrow>
+  strong_subdomain {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
+  using strong_subdomain_join'[OF strong_subdomain.axioms(1) strong_subdomain.axioms(1)]
+  by fast
+
+lemma lub_join:
+  assumes "insert x X <<| l" and "X <<| m"
+  shows "l = x \<squnion> m"
+  unfolding join_def
+proof (intro lub_eqI[symmetric] is_lubI, simp_all, safe)
+  from lub_subset_mono[OF assms(2) assms(1)]
+  show "m \<sqsubseteq> l" by auto
+  from lub_subset_mono[OF is_lub_singleton assms(1)]
+  show "x \<sqsubseteq> l" by auto
+  fix u assume "m \<sqsubseteq> u"
+  then have "X <| u"
+    using assms(2) is_lubD1 is_ub_upward by blast
+  moreover assume "x \<sqsubseteq> u"
+  ultimately have "insert x X <| u" by simp
+  with assms(1) show "l \<sqsubseteq> u" by (rule is_lubD2)
+qed
+
+text \<open>A nonempty family of stable subdomains that is up-directed by inclusion.  Its
+  projections form an up-directed set of deflations bounded by @{term ID}, so their lub
+  @{term dd} exists.  We show that @{term dd} is below the identity and — the key new
+  content, following the user's sketch — that its set of fixed points is downward-closed.
+  The latter is exactly where @{thm cont_directed_lub} (meet preserves directed lubs) enters.\<close>
+locale directed_stable_family =
+  fixes \<A> :: "'a set set"
+  assumes stable: "A \<in> \<A> \<Longrightarrow> stable_subdomain A"
+    and updir: "\<lbrakk>A \<in> \<A>; B \<in> \<A>\<rbrakk> \<Longrightarrow> \<exists>C\<in>\<A>. A \<subseteq> C \<and> B \<subseteq> C"
+    and nonempty: "\<A> \<noteq> {}"
+begin
+
+definition "P = stable_subdomain.p ` \<A>"
+definition "dd = lub P"
+
+lemma P_ne: "P \<noteq> {}" using nonempty unfolding P_def by blast
+lemma P_directed: "directed P"
+  unfolding P_def
+  by (intro directedI, simp, safe)
+    (metis updir p_mono_subdomain[OF stable stable])
+
+lemma P_dd: "P <<| dd" unfolding dd_def using P_directed by (rule directed_lub)
+
+lemma deflation_dd: "deflation dd"
+  unfolding dd_def
+  using directed_admD[OF adm_deflation P_directed P_ne]
+    stable[THEN stable_subdomain.deflation_p]
+  by (simp add: P_def)
+
+lemma dd_app_is_lub: "(\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A> <<| dd\<cdot>x"
+  using cont_directed_is_lub[OF cont_Rep_cfun1 P_directed P_ne]
+  unfolding dd_def P_def
+  by (simp add: image_image)
+
+corollary dd_app: "dd\<cdot>x = lub ((\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>)"
+  using dd_app_is_lub by (rule lub_eqI[symmetric])
+
+lemma dd_below: "dd\<cdot>x \<sqsubseteq> x" using deflation_dd by (rule deflation.below)
+
+text \<open>Jung, Lemma 4.1.9(iii) ingredient: the fixed-point set of @{term dd} is downward
+  closed.  If @{term \<open>dd\<cdot>x = x\<close>} and @{term \<open>y \<sqsubseteq> x\<close>} then, projecting through each member,
+  @{term \<open>stable_subdomain.p A\<cdot>y = y \<sqinter> stable_subdomain.p A\<cdot>x\<close>} (Lemma 4.1.6(i)); since the
+  pointwise projections form a directed set and meet is continuous, the lub commutes with
+  the meet, giving @{term \<open>dd\<cdot>y = y \<sqinter> x\<close>}, which is @{term y}.\<close>
+lemma dd_fixed_downward:
+  assumes fx: "dd\<cdot>x = x" and yx: "y \<sqsubseteq> x"
+  shows "dd\<cdot>y = y"
 proof -
-  interpret A: strong_subdomain A by (rule A)
-  interpret B: strong_subdomain B by (rule B)
-  have Asd: "stable_subdomain A" using A unfolding strong_subdomain_def by simp
-  have Bsd: "stable_subdomain B" using B unfolding strong_subdomain_def by simp
-  define J where "J = {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
-  have memJ: "c \<in> J \<longleftrightarrow> (\<exists>a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b \<and> c = a \<squnion> b)" for c
-    unfolding J_def by blast
-  have Jstable: "stable_subdomain J" unfolding J_def by (rule stable_subdomain_join[OF Asd Bsd])
-  interpret J: stable_subdomain J by (rule Jstable)
-  have AJ: "A \<subseteq> J"
-  proof (rule subsetI)
-    fix a assume aA: "a \<in> A"
-    have eq: "a = a \<squnion> \<bottom>" by (metis join_sym join_absorbI minimal)
-    have "a \<Up> \<bottom>" by (rule joinable_if_below2[OF minimal])
-    with aA B.bot_in_S eq show "a \<in> J" using memJ by blast
-  qed
-  have BJ: "B \<subseteq> J"
-  proof (rule subsetI)
-    fix b assume bB: "b \<in> B"
-    have eq: "b = \<bottom> \<squnion> b" by (simp add: join_absorbI[OF minimal])
-    have "\<bottom> \<Up> b" by (rule joinable_if_below1[OF minimal])
-    with bB A.bot_in_S eq show "b \<in> J" using memJ by blast
-  qed
-  \<comment> \<open>The projection of a join element decomposes: \<open>y = p\<^bsub>A\<^esub> y \<squnion> p\<^bsub>B\<^esub> y\<close>.\<close>
-  have decomp: "A.proj y \<squnion> B.proj y = y" if yJ: "y \<in> J" for y
+  define Px where "Px = (\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>"
+  have ddx: "dd\<cdot>x = lub Px" unfolding Px_def by (rule dd_app)
+  have Pxeq: "(\<lambda>p. p\<cdot>x) ` P = Px" unfolding P_def Px_def by (simp add: image_image)
+  have dirPx: "directed Px"
+    unfolding Pxeq[symmetric]
+    by (fast intro: directed_mono_image[OF _ P_directed] monofun_cfun_fun)
+  have nePx: "Px \<noteq> {}" unfolding Px_def using nonempty by blast
+  have key: "stable_subdomain.p A\<cdot>y = y \<sqinter> stable_subdomain.p A\<cdot>x" if A: "A \<in> \<A>" for A
   proof -
-    from yJ obtain a b where ab: "a \<in> A" "b \<in> B" "a \<Up> b" and yeq: "y = a \<squnion> b"
-      using memJ by blast
-    have ay: "a \<sqsubseteq> y" using joinableD(1)[OF ab(3)] yeq by simp
-    have by': "b \<sqsubseteq> y" using joinableD(2)[OF ab(3)] yeq by simp
-    have aPy: "a \<sqsubseteq> A.proj y" by (rule A.below_proj_of[OF ab(1) ay])
-    have bPy: "b \<sqsubseteq> B.proj y" by (rule B.below_proj_of[OF ab(2) by'])
-    have PyA: "A.proj y \<sqsubseteq> y" by (rule A.proj_below)
-    have PyB: "B.proj y \<sqsubseteq> y" by (rule B.proj_below)
-    have jPy: "A.proj y \<Up> B.proj y" by (rule joinableI[OF PyA PyB])
-    show "A.proj y \<squnion> B.proj y = y"
-    proof (rule below_antisym)
-      show "A.proj y \<squnion> B.proj y \<sqsubseteq> y" using PyA PyB by (rule join_belowI)
-      have "a \<sqsubseteq> A.proj y \<squnion> B.proj y" using aPy joinableD(1)[OF jPy] by (rule below_trans)
-      moreover have "b \<sqsubseteq> A.proj y \<squnion> B.proj y" using bPy joinableD(2)[OF jPy] by (rule below_trans)
-      ultimately show "y \<sqsubseteq> A.proj y \<squnion> B.proj y" unfolding yeq by (rule join_belowI)
+    interpret A: stable_subdomain A using A by (rule stable)
+    have "A.p\<cdot>x \<in> A" by (simp add: A.proj_in_S)
+    moreover have le: "A.p\<cdot>y \<sqsubseteq> A.p\<cdot>x" using yx by (rule monofun_cfun_arg)
+    ultimately show "A.p\<cdot>y = y \<sqinter> A.p\<cdot>x" by (rule A.p_meet)
+  qed
+  have "dd\<cdot>y = lub ((\<lambda>A. stable_subdomain.p A\<cdot>y) ` \<A>)" by (rule dd_app)
+  also have "(\<lambda>A. stable_subdomain.p A\<cdot>y) ` \<A> = (\<lambda>A. y \<sqinter> stable_subdomain.p A\<cdot>x) ` \<A>"
+    by (rule image_cong[OF refl]) (simp add: key)
+  also have "(\<lambda>A. y \<sqinter> stable_subdomain.p A\<cdot>x) ` \<A> = (\<lambda>z. y \<sqinter> z) ` Px"
+    unfolding Px_def by (simp add: image_image)
+  also have "lub ((\<lambda>z. y \<sqinter> z) ` Px) = y \<sqinter> lub Px"
+    by (rule cont_directed_lub[OF cont_meet_arg2 dirPx nePx])
+  also have "y \<sqinter> lub Px = y" by (metis ddx fx yx meet_absorbI)
+  finally show "dd\<cdot>y = y" .
+qed
+
+lemma proj_at_directed: "directed ((\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>)"
+proof -
+  have "(\<lambda>p. p\<cdot>x) ` P = (\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>"
+    unfolding P_def by (simp add: image_image)
+  moreover have "directed ((\<lambda>p. p\<cdot>x) ` P)"
+    by (fast intro: directed_mono_image[OF _ P_directed] monofun_cfun_fun)
+  ultimately show ?thesis by simp
+qed
+
+text \<open>The fixed points of @{term dd} form a stable subdomain (downward by
+  @{thm dd_fixed_downward}, strong-closed since @{term dd} is monotone and below @{term ID}).\<close>
+lemma dd_fixes_stable: "stable_subdomain {x. dd\<cdot>x = x}"
+proof
+  fix x y assume "y \<in> {x. dd\<cdot>x = x}" and yx: "x \<sqsubseteq> y"
+  then have "dd\<cdot>y = y" by simp
+  from this yx have "dd\<cdot>x = x" by (rule dd_fixed_downward)
+  then show "x \<in> {x. dd\<cdot>x = x}" by simp
+next
+  fix T t assume TF: "T \<subseteq> {x. dd\<cdot>x = x}" and lub: "T <<| t"
+  have "T <| dd\<cdot>t"
+  proof (rule is_ubI)
+    fix z assume zT: "z \<in> T"
+    then have "dd\<cdot>z = z" using TF by auto
+    moreover have "z \<sqsubseteq> t" using is_ubD[OF is_lubD1[OF lub] zT] .
+    ultimately show "z \<sqsubseteq> dd\<cdot>t" using monofun_cfun_arg by metis
+  qed
+  with lub have "t \<sqsubseteq> dd\<cdot>t" by (rule is_lubD2)
+  with dd_below[of t] have "dd\<cdot>t = t" by (rule below_antisym)
+  then show "t \<in> {x. dd\<cdot>x = x}" by simp
+qed
+
+text \<open>Each base subdomain consists of points fixed by @{term dd}: for \<open>a \<in> A\<close> we have
+  \<open>a = p\<^bsub>A\<^esub>\<cdot>a \<sqsubseteq> dd\<cdot>a \<sqsubseteq> a\<close>.\<close>
+lemma base_below_dd_fixes:
+  assumes A: "A \<in> \<A>" shows "A \<subseteq> {x. dd\<cdot>x = x}"
+proof (rule subsetI)
+  fix a assume aA: "a \<in> A"
+  interpret A: stable_subdomain A using A by (rule stable)
+  have pmem: "stable_subdomain.p A \<in> P" unfolding P_def using A by blast
+  have "a = A.p\<cdot>a" using aA by (simp add: A.p_fixed)
+  also have "A.p\<cdot>a \<sqsubseteq> dd\<cdot>a" using is_ubD[OF is_lubD1[OF P_dd] pmem] by (rule monofun_cfun_fun)
+  finally have "a \<sqsubseteq> dd\<cdot>a" .
+  with dd_below[of a] have "dd\<cdot>a = a" by (rule below_antisym)
+  then show "a \<in> {x. dd\<cdot>x = x}" by simp
+qed
+
+text \<open>\dots\ and the fixes are the \emph{least} such stable subdomain: any stable @{term S}
+  containing every base set contains them.  Each \<open>p\<^bsub>A\<^esub>\<cdot>x \<in> A \<subseteq> S\<close>;
+  their (directed) lub is @{term \<open>dd\<cdot>x = x\<close>}, which @{term S} contains by strong closure.\<close>
+lemma dd_fixes_least:
+  assumes S: "stable_subdomain S" and sub: "\<And>A. A \<in> \<A> \<Longrightarrow> A \<subseteq> S"
+  shows "{x. dd\<cdot>x = x} \<subseteq> S"
+proof (rule subsetI)
+  fix x assume "x \<in> {x. dd\<cdot>x = x}"
+  then have fx: "dd\<cdot>x = x" by simp
+  interpret S: stable_subdomain S by (rule S)
+  have "(\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A> \<subseteq> S"
+  proof (rule subsetI)
+    fix z assume "z \<in> (\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>"
+    then obtain A where A: "A \<in> \<A>" and z: "z = stable_subdomain.p A\<cdot>x" by blast
+    interpret A: stable_subdomain A using A by (rule stable)
+    from A.p_in_S[of x] sub[OF A] z show "z \<in> S" by auto
+  qed
+  moreover have "(\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A> <<| x"
+  proof -
+    have "(\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A> <<| lub ((\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>)"
+      by (rule directed_lub[OF proj_at_directed])
+    moreover have "lub ((\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>) = x" using dd_app[of x] fx by simp
+    ultimately show ?thesis by simp
+  qed
+  ultimately show "x \<in> S" by (rule S.strong_closed)
+qed
+
+text \<open>Combining the three facts: the fixes of @{term dd} are exactly the least stable
+  subdomain containing every member of the family — i.e. the carrier of its supremum.\<close>
+lemma dd_fixes_eq_Inter:
+  "{x. dd\<cdot>x = x} = \<Inter>{S. stable_subdomain S \<and> (\<forall>A\<in>\<A>. A \<subseteq> S)}"
+  (is "?Fix = \<Inter>?\<S>")
+proof
+  show "?Fix \<subseteq> \<Inter>?\<S>"
+  proof (rule Inter_greatest)
+    fix X assume "X \<in> ?\<S>"
+    then have X: "stable_subdomain X" and sub: "\<forall>A\<in>\<A>. A \<subseteq> X" by auto
+    show "?Fix \<subseteq> X"
+    proof (rule dd_fixes_least[OF X])
+      fix A assume "A \<in> \<A>" with sub show "A \<subseteq> X" by blast
     qed
   qed
-  have "strong_subdomain J"
-  proof (rule strong_subdomainI[OF Jstable])
-    fix x y assume yJ: "y \<in> J" and slide_hyp: "stable_subdomain.p J\<cdot>x \<sqsubseteq> y"
-    have pJx_y: "J.proj x \<sqsubseteq> y" using slide_hyp by simp
-    define pa where "pa = A.proj y"
-    define pb where "pb = B.proj y"
-    have paA: "pa \<in> A" unfolding pa_def by (rule A.proj_in_S)
-    have pbB: "pb \<in> B" unfolding pb_def by (rule B.proj_in_S)
-    have pay: "pa \<sqsubseteq> y" unfolding pa_def by (rule A.proj_below)
-    have yab: "y = pa \<squnion> pb" unfolding pa_def pb_def using decomp[OF yJ] by (rule sym)
-    \<comment> \<open>\<open>p\<^bsub>A\<^esub> x \<sqsubseteq> pa\<close>, hence by @{term A}'s slide condition \<open>x \<Up> pa\<close>.\<close>
-    have pAxJ: "A.proj x \<sqsubseteq> J.proj x" by (rule proj_mono_subdomain[OF Asd Jstable AJ])
-    have pAx_y: "A.proj x \<sqsubseteq> y" using pAxJ pJx_y by (rule below_trans)
-    have pAx_pa: "A.proj x \<sqsubseteq> pa" unfolding pa_def by (rule A.below_proj_of[OF A.proj_in_S pAx_y])
-    have "A.p\<cdot>x \<sqsubseteq> pa" using pAx_pa by simp
-    from A.slide_rule[OF paA this] have x_pa: "x \<Up> pa" .
-    have pa_x: "pa \<Up> x" using x_pa by (simp add: joinable_sym)
-    \<comment> \<open>\<open>p\<^bsub>B\<^esub> (pa \<squnion> x) \<sqsubseteq> pb\<close>, hence by @{term B}'s slide condition \<open>pa \<squnion> x \<Up> pb\<close>.\<close>
-    have pBpa_pb: "B.proj pa \<sqsubseteq> pb" unfolding pb_def by (rule B.proj_monoD[OF pay])
-    have pBxJ: "B.proj x \<sqsubseteq> J.proj x" by (rule proj_mono_subdomain[OF Bsd Jstable BJ])
-    have pBx_y: "B.proj x \<sqsubseteq> y" using pBxJ pJx_y by (rule below_trans)
-    have pBx_pb: "B.proj x \<sqsubseteq> pb" unfolding pb_def by (rule B.below_proj_of[OF B.proj_in_S pBx_y])
-    have "B.proj (pa \<squnion> x) = B.proj pa \<squnion> B.proj x" by (rule B.proj_join[OF pa_x])
-    moreover have "B.proj pa \<squnion> B.proj x \<sqsubseteq> pb" using pBpa_pb pBx_pb by (rule join_belowI)
-    ultimately have "B.proj (pa \<squnion> x) \<sqsubseteq> pb" by simp
-    then have "B.p\<cdot>(pa \<squnion> x) \<sqsubseteq> pb" by simp
-    from B.slide_rule[OF pbB this] have pax_pb: "pa \<squnion> x \<Up> pb" .
-    \<comment> \<open>Both \<open>x\<close> and \<open>y\<close> lie below \<open>(pa \<squnion> x) \<squnion> pb\<close>, so \<open>x \<Up> y\<close>.\<close>
-    have xw: "x \<sqsubseteq> (pa \<squnion> x) \<squnion> pb"
-      using joinableD(2)[OF pa_x] joinableD(1)[OF pax_pb] by (rule below_trans)
-    have paw: "pa \<sqsubseteq> (pa \<squnion> x) \<squnion> pb"
-      using joinableD(1)[OF pa_x] joinableD(1)[OF pax_pb] by (rule below_trans)
-    have pbw: "pb \<sqsubseteq> (pa \<squnion> x) \<squnion> pb" by (rule joinableD(2)[OF pax_pb])
-    have yw: "y \<sqsubseteq> (pa \<squnion> x) \<squnion> pb" unfolding yab using paw pbw by (rule join_belowI)
-    show "x \<Up> y" using xw yw by (rule joinableI)
-  qed
-  then show ?thesis unfolding J_def .
+  have "?Fix \<in> ?\<S>" using dd_fixes_stable base_below_dd_fixes by blast
+  then show "\<Inter>?\<S> \<subseteq> ?Fix" by (rule Inter_lower)
 qed
+
+
+end
 
 typedef 'a stable_subdom = "{S :: 'a set. stable_subdomain S}"
   morphisms set_of_subdom subdom_of_set
@@ -740,6 +920,18 @@ setup_lifting type_definition_stable_subdom
 lemma stable_subdomain_Int:
   "stable_subdomain S \<Longrightarrow> stable_subdomain T \<Longrightarrow> stable_subdomain (S \<inter> T)"
   using stable_subdomain_Inter[of "{S, T}"] by auto
+
+lift_definition stable_subdom_p :: "'a stable_subdom \<Rightarrow> 'a \<rightarrow> 'a"
+   (\<open>\<p>\<index>\<close>)
+is "stable_subdomain.p" .
+
+lemma stable_subdomain_of_set_of_subdom:
+  "stable_subdomain (set_of_subdom A)"
+  using set_of_subdom by auto
+
+interpretation subdom: stable_subdomain "set_of_subdom A"
+  rewrites "stable_subdomain.p (set_of_subdom A) \<equiv> \<p>\<^bsub>A\<^esub>"
+  by (simp_all add: stable_subdomain_of_set_of_subdom stable_subdom_p.rep_eq)
 
 instantiation stable_subdom :: ("{bifinite,distributive_cpo}") bounded_lattice
 begin
@@ -753,8 +945,8 @@ lift_definition inf_stable_subdom :: "'a stable_subdom \<Rightarrow> 'a stable_s
   is "(\<inter>)" by (auto intro: stable_subdomain_Int)
 
 lift_definition sup_stable_subdom :: "'a stable_subdom \<Rightarrow> 'a stable_subdom \<Rightarrow> 'a stable_subdom"
-  is "\<lambda>A B. \<Inter>{S. stable_subdomain S \<and> A \<subseteq> S \<and> B \<subseteq> S}"
-  by (auto intro: stable_subdomain_Inter)
+  is "\<lambda>A B. {p \<squnion> q |p q. p \<in> A \<and> q \<in> B \<and> p \<Up> q}"
+  by (auto intro: stable_subdomain_join)
 
 lift_definition top_stable_subdom :: "'a stable_subdom"
   is UNIV by (rule stable_subdomain_UNIV)
@@ -763,7 +955,7 @@ lift_definition bot_stable_subdom :: "'a stable_subdom"
   is "{\<bottom>}" by (rule stable_subdomain_bot)
 
 instance
-  by (standard; transfer) (auto intro: stable_subdomain.bot_in_S)
+  by (standard; transfer) (auto intro: stable_subdomain.bot_in_S simp add: J_eq_Inter)
 
 end
 
@@ -781,4 +973,400 @@ instance
 
 end
 
+lemma p_fixes: "\<p>\<^bsub>A\<^esub>\<cdot>x = x \<longleftrightarrow> x \<in> set_of_subdom A"
+  using subdom.p_fixes
+  by auto
+
+lemma le_of_p_below: "\<p>\<^bsub>A\<^esub> \<sqsubseteq> \<p>\<^bsub>B\<^esub> \<Longrightarrow> A \<le> B"
+  using subdom.deflation_p p_fixes deflation.belowD
+  unfolding less_eq_stable_subdom.rep_eq
+  by fast
+
+lemma p_below_of_le: "A \<le> B \<Longrightarrow> \<p>\<^bsub>A\<^esub> \<sqsubseteq> \<p>\<^bsub>B\<^esub>"
+  by transfer (intro p_mono_subdomain)
+
+lemma p_below_iff_le: "\<p>\<^bsub>A\<^esub> \<sqsubseteq> \<p>\<^bsub>B\<^esub> \<longleftrightarrow> A \<le> B"
+  using le_of_p_below p_below_of_le ..
+
+text \<open>The bottom subdomain @{term \<open>{\<bottom>}\<close>} satisfies the slide condition trivially.\<close>
+lemma strong_subdomain_bot: "strong_subdomain {\<bottom>}"
+proof (intro strong_subdomain.intro[OF stable_subdomain_bot] strong_subdomain_axioms.intro)
+  fix x y assume "y \<in> {\<bottom>}" and "stable_subdomain.p {\<bottom>}\<cdot>x \<sqsubseteq> y"
+  then have "y = \<bottom>" by simp
+  then show "x \<Up> y" by simp
+qed
+
+definition "is_strong A \<equiv> strong_subdomain (set_of_subdom A)"
+
+lemma is_strongI:
+  assumes slide: "\<And>x y. y \<in> set_of_subdom A \<Longrightarrow> \<p>\<^bsub>A\<^esub>\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
+  shows "is_strong A"
+  unfolding is_strong_def using assms
+  by transfer (intro strong_subdomain_axioms.intro strong_subdomain.intro)
+
+lemma is_strong_bot: "is_strong bot"
+  by (rule is_strongI, transfer, simp)
+
+lemma is_strong_top: "is_strong top"
+  by (rule is_strongI, transfer)
+    (auto intro: joinableI simp add: p_UNIV)
+
+text \<open>@{const strong_subdomain} lifts through the binary join (Jung 4.1.9(i)).\<close>
+lemma strong_subdomain_sup:
+  assumes "is_strong a" and "is_strong b"
+  shows "is_strong (sup a b)"
+  using assms
+  unfolding is_strong_def by (transfer, intro strong_subdomain_join)
+
+text \<open>\dots\ and hence, by induction, through finite suprema.\<close>
+lemma finite_strong_Sup:
+  assumes "finite \<A>" and "\<And>A. A \<in> \<A> \<Longrightarrow> is_strong A"
+  shows "is_strong (Sup \<A>)"
+  using assms
+proof (induction \<A> rule: finite_induct)
+  case empty
+  show ?case by (simp add: is_strong_def strong_subdomain_bot bot_stable_subdom.rep_eq)
+next
+  case (insert A \<A>)
+  from insert.prems have "is_strong A" by blast
+  moreover have "is_strong (Sup \<A>)"
+    by (rule insert.IH) (use insert.prems in blast)
+  ultimately show ?case using strong_subdomain_sup
+    by simp
+qed
+
+lemma directed_stable_proj_sup:
+  fixes \<A> :: "'a stable_subdom set"
+  assumes directed: "\<And>X Y. X \<in> \<A> \<Longrightarrow> Y \<in> \<A> \<Longrightarrow> \<exists>Z \<in> \<A>. X \<le> Z \<and> Y \<le> Z"
+    and nonempty: "\<A> \<noteq> {}"
+  shows "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` \<A> <<| \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x"
+proof -
+  from assms interpret directed_stable_family "set_of_subdom ` \<A>"
+    apply (intro directed_stable_family.intro)
+    using stable_subdomain_of_set_of_subdom
+    unfolding less_eq_stable_subdom.rep_eq by force+
+  let ?P = "{\<p>\<^bsub>A\<^esub> | A. A \<in> \<A>}"
+  have "?P = P"
+    unfolding P_def stable_subdom_p.rep_eq
+    by blast
+  from dd_fixes_eq_Inter
+  have "{x. dd\<cdot>x = x} = set_of_subdom (Sup \<A>)"
+    by transfer' simp
+  then have "dd = \<p>\<^bsub>Sup \<A>\<^esub>"
+    unfolding stable_subdom_p.rep_eq
+    using stable_subdomain_deflation
+      stable_subdomain_of_set_of_subdom
+      deflation_dd
+    by fastforce
+  with dd_app_is_lub
+  show ?thesis by (simp add: image_image stable_subdom_p.rep_eq)
+qed
+
+lemma directed_strong_sup:
+  fixes \<A> :: "'a stable_subdom set"
+  assumes directed: "\<And>X Y. X \<in> \<A> \<Longrightarrow> Y \<in> \<A> \<Longrightarrow> \<exists>Z \<in> \<A>. X \<le> Z \<and> Y \<le> Z"
+    and nonempty: "\<A> \<noteq> {}"
+    and strong: "\<And>A. A \<in> \<A> \<Longrightarrow> is_strong A"
+  shows "is_strong (Sup \<A>)"
+proof (rule is_strongI)
+  fix x y assume y: "y \<in> set_of_subdom (Sup \<A>)"
+  assume px_below: "\<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x \<sqsubseteq> y"
+  from directed_stable_proj_sup[OF directed nonempty]
+  have p_lub: "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` \<A> <<| \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x" for x .
+  let ?P = "{\<p>\<^bsub>A\<^esub> | A. A \<in> \<A>}"
+  let ?p = "\<p>\<^bsub>Sup \<A>\<^esub>"
+
+  interpret \<A>: stable_subdomain "set_of_subdom (Sup \<A>)"
+    by (rule stable_subdomain_of_set_of_subdom)
+
+  have xpAy: "x \<Up> \<p>\<^bsub>A\<^esub>\<cdot>y" if "A \<in> \<A>" for A
+  proof - 
+    interpret A: strong_subdomain "set_of_subdom A"
+      rewrites "stable_subdomain.p (set_of_subdom A) \<equiv> \<p>\<^bsub>A\<^esub>"
+      by (simp_all add: strong[OF that, unfolded is_strong_def] stable_subdom_p.rep_eq)
+    have "\<p>\<^bsub>A\<^esub> \<in> ?P" by (auto simp add: that)
+    from that have pA_dd: "\<p>\<^bsub>A\<^esub> \<sqsubseteq> ?p" by (intro p_below_of_le Sup_upper)
+    then have "\<p>\<^bsub>A\<^esub>\<cdot>x = \<p>\<^bsub>A\<^esub>\<cdot>(?p\<cdot>x)"
+      (*TODO: this could be a lemma *)
+      by (simp add: deflation_below_comp1[OF subdom.deflation_p subdom.deflation_p])
+      
+    also have "\<dots> \<sqsubseteq> \<p>\<^bsub>A\<^esub>\<cdot>y" using px_below by (rule monofun_cfun_arg)
+    finally have "\<p>\<^bsub>A\<^esub>\<cdot>x \<sqsubseteq> \<p>\<^bsub>A\<^esub>\<cdot>y" .
+    with subdom.p_in_S show "x \<Up> \<p>\<^bsub>A\<^esub>\<cdot>y" by (rule A.slide_rule)
+  qed
+  let ?W = "(\<lambda>A. x \<squnion> \<p>\<^bsub>A\<^esub>\<cdot>y) ` \<A>"
+  have dirW: "directed ?W"
+  proof (rule directedI)
+    fix u v assume "u \<in> ?W" "v \<in> ?W"
+    then obtain A B where A: "A \<in> \<A>" "u = x \<squnion> \<p>\<^bsub>A\<^esub>\<cdot>y"
+      and B: "B \<in> \<A>" "v = x \<squnion> \<p>\<^bsub>B\<^esub>\<cdot>y" by blast
+    from directed[OF A(1) B(1)] obtain C where C: "C \<in> \<A>" "A \<le> C" "B \<le> C" by blast
+    from C(2) have AC: "\<p>\<^bsub>A\<^esub>\<cdot>y \<sqsubseteq> \<p>\<^bsub>C\<^esub>\<cdot>y"
+      by (auto intro: p_below_of_le monofun_cfun_fun)
+    from C(3) have BC: "\<p>\<^bsub>B\<^esub>\<cdot>y \<sqsubseteq> \<p>\<^bsub>C\<^esub>\<cdot>y"
+      by (auto intro: p_below_of_le monofun_cfun_fun)
+    have "u \<sqsubseteq> x \<squnion> \<p>\<^bsub>C\<^esub>\<cdot>y" unfolding A(2)
+      by (rule join_mono2[OF xpAy[OF C(1)] AC])
+    moreover have "v \<sqsubseteq> x \<squnion> \<p>\<^bsub>C\<^esub>\<cdot>y" unfolding B(2)
+      by (rule join_mono2[OF xpAy[OF C(1)] BC])
+    moreover have "x \<squnion> \<p>\<^bsub>C\<^esub>\<cdot>y \<in> ?W" using C(1) by blast
+    ultimately show "\<exists>z\<in>?W. u \<sqsubseteq> z \<and> v \<sqsubseteq> z" by blast
+  qed
+  define w where "w = lub ?W"
+  have Wlub: "?W <<| w" unfolding w_def using dirW by (rule directed_lub)
+  from nonempty obtain A0 where A0: "A0 \<in> \<A>" by blast
+  have memA0: "x \<squnion> \<p>\<^bsub>A0\<^esub>\<cdot>y \<in> ?W" using A0 by blast
+  have "x \<sqsubseteq> x \<squnion> \<p>\<^bsub>A0\<^esub>\<cdot>y" by (rule joinableD(1)[OF xpAy[OF A0]])
+  also have "\<dots> \<sqsubseteq> w" using is_ubD[OF is_lubD1[OF Wlub] memA0] .
+  finally have xw: "x \<sqsubseteq> w" .
+  have Py_y: "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>y) ` \<A> <<| y"
+    using p_lub[of y] subdom.p_fixed[OF y] by simp
+  have Py_w: "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>y) ` \<A> <| w"
+  proof (rule ub_imageI)
+    fix A assume A: "A \<in> \<A>"
+    have memA: "x \<squnion> \<p>\<^bsub>A\<^esub>\<cdot>y \<in> ?W" using A by blast
+    have "\<p>\<^bsub>A\<^esub>\<cdot>y \<sqsubseteq> x \<squnion>  \<p>\<^bsub>A\<^esub>\<cdot>y" by (rule joinableD(2)[OF xpAy[OF A]])
+    also have "\<dots> \<sqsubseteq> w" using is_ubD[OF is_lubD1[OF Wlub] memA] .
+    finally show "\<p>\<^bsub>A\<^esub>\<cdot>y \<sqsubseteq> w" .
+  qed
+  have yw: "y \<sqsubseteq> w" using Py_y Py_w by (rule is_lubD2)
+  show "x \<Up> y" using xw yw by (rule joinableI)
+qed
+
+lemma Fpow_singleton: "x \<in> A \<Longrightarrow> {x} \<in> Fpow A"
+  by (simp add: Fpow_def)
+
+lemma (in complete_lattice) Sup_of_Fpow: "Sup (Sup ` Fpow(\<A>)) = Sup \<A>"
+proof (rule order_antisym)
+  show "Sup \<A> \<le> Sup (Sup ` Fpow \<A>)"
+    by (rule Sup_least, rule Sup_upper, drule Fpow_singleton, force)
+  show "Sup (Sup ` Fpow \<A>) \<le> Sup \<A>"
+    by (rule Sup_least, erule imageE, auto simp add: Sup_subset_mono Fpow_def )
+qed
+
+lemma strong_sup:
+  fixes \<A> :: "'a stable_subdom set"
+  assumes strong: "\<And>A. A \<in> \<A> \<Longrightarrow> is_strong A"
+  shows "is_strong (Sup \<A>)"
+proof -
+  have directed: "X \<in> Sup ` Fpow(\<A>) \<Longrightarrow> Y \<in> Sup ` Fpow(\<A>) \<Longrightarrow> \<exists>Z \<in> Sup ` Fpow(\<A>). X \<le> Z \<and> Y \<le> Z"
+    for X Y
+  proof (simp, safe, intro bexI)
+    fix x y :: "'a stable_subdom set"
+    show "Sup x \<le> Sup (x \<union> y) \<and> Sup y \<le> Sup (x \<union> y)"
+      by (simp add: Sup_subset_mono)
+    assume "x \<in> Fpow(\<A>)" "y \<in> Fpow(\<A>)"
+    then show "x \<union> y \<in> Fpow(\<A>)" by (simp add: Fpow_def)
+  qed
+  moreover have "Sup ` Fpow(\<A>) \<noteq> {}" by (simp add: Fpow_not_empty)
+  moreover have "B \<in> Sup ` Fpow(\<A>) \<Longrightarrow> is_strong (B)" for B
+    using finite_strong_Sup strong unfolding Fpow_def by auto
+  ultimately have "is_strong (Sup (Sup ` Fpow(\<A>)))"
+    by (rule directed_strong_sup)
+  then show ?thesis by (simp add: Sup_of_Fpow)
+qed
+
+
+text \<open>Composition of projections is the projection onto the intersection (pointwise):
+  \<open>p\<^bsub>B\<^esub>\<cdot>(p\<^bsub>A\<^esub>\<cdot>x) = p\<^bsub>A\<inter>B\<^esub>\<cdot>x\<close>.  Projecting \<open>x\<close> into \<open>A\<close> is the lub of the
+  directed below-set \<open>{a\<in>A. a\<sqsubseteq>x}\<close>; applying \<open>p\<^bsub>B\<^esub>\<close> (continuous) sends it to the lub of
+  its image, which is exactly \<open>{z\<in>A\<inter>B. z\<sqsubseteq>x}\<close>: each \<open>p\<^bsub>B\<^esub>\<cdot>a \<sqsubseteq> a \<in> A\<close> is in \<open>A\<close>
+  (downward) and in \<open>B\<close>, and every \<open>z\<in>A\<inter>B\<close> below \<open>x\<close> is its own \<open>p\<^bsub>B\<^esub>\<close>-image.\<close>
+lemma p_compose_Int:
+  assumes A: "stable_subdomain A" and B: "stable_subdomain B"
+  shows "stable_subdomain.p B\<cdot>(stable_subdomain.p A\<cdot>x) = stable_subdomain.p (A \<inter> B)\<cdot>x"
+proof -
+  interpret A: stable_subdomain A by (rule A)
+  interpret B: stable_subdomain B by (rule B)
+  interpret AB: stable_subdomain "A \<inter> B" using A B by (rule stable_subdomain_Int)
+  have Apx: "A.p\<cdot>x = lub {a \<in> A. a \<sqsubseteq> x}"
+    using lub_eqI[OF A.proj_is_lub] by (simp add: A.p_beta)
+  have ABpx: "AB.p\<cdot>x = lub {z \<in> A \<inter> B. z \<sqsubseteq> x}"
+    using lub_eqI[OF AB.proj_is_lub] by (simp add: AB.p_beta)
+  have setEq: "(\<lambda>z. B.p\<cdot>z) ` {a \<in> A. a \<sqsubseteq> x} = {z \<in> A \<inter> B. z \<sqsubseteq> x}"
+  proof (intro set_eqI iffI)
+    fix w assume "w \<in> (\<lambda>z. B.p\<cdot>z) ` {a \<in> A. a \<sqsubseteq> x}"
+    then obtain a where a: "a \<in> A" "a \<sqsubseteq> x" and w: "w = B.p\<cdot>a" by auto
+    have le: "B.p\<cdot>a \<sqsubseteq> a" by (rule B.p_below)
+    from a(1) le have "B.p\<cdot>a \<in> A" by (rule A.downward)
+    moreover have "B.p\<cdot>a \<in> B" by simp
+    moreover have "B.p\<cdot>a \<sqsubseteq> x" using le a(2) by (rule below_trans)
+    ultimately show "w \<in> {z \<in> A \<inter> B. z \<sqsubseteq> x}" using w by simp
+  next
+    fix w assume "w \<in> {z \<in> A \<inter> B. z \<sqsubseteq> x}"
+    then have w: "w \<in> A" "w \<in> B" "w \<sqsubseteq> x" by auto
+    from w(2) have "B.p\<cdot>w = w" by (rule B.p_fixed)
+    moreover from w(1) w(3) have "w \<in> {a \<in> A. a \<sqsubseteq> x}" by simp
+    ultimately show "w \<in> (\<lambda>z. B.p\<cdot>z) ` {a \<in> A. a \<sqsubseteq> x}" by force
+  qed
+  have "B.p\<cdot>(A.p\<cdot>x) = lub ((\<lambda>z. B.p\<cdot>z) ` {a \<in> A. a \<sqsubseteq> x})"
+    unfolding Apx
+    by (rule cont_directed_lub[OF cont_Rep_cfun2 A.proj_set_directed A.proj_set_ne, symmetric])
+  also have "\<dots> = lub {z \<in> A \<inter> B. z \<sqsubseteq> x}" unfolding setEq ..
+  also have "\<dots> = AB.p\<cdot>x" unfolding ABpx ..
+  finally show "stable_subdomain.p B\<cdot>(stable_subdomain.p A\<cdot>x) = stable_subdomain.p (A \<inter> B)\<cdot>x" .
+qed
+
+lemma set_of_subdom_inf: "set_of_subdom (inf a b) = set_of_subdom a \<inter> set_of_subdom b"
+  by (rule inf_stable_subdom.rep_eq)
+
+text \<open>Lifted to @{typ "'a stable_subdom"} (pointwise), and commutative.\<close>
+lemma p_app_inf: "\<p>\<^bsub>b\<^esub>\<cdot>(\<p>\<^bsub>a\<^esub>\<cdot>x) = \<p>\<^bsub>inf a b\<^esub>\<cdot>x"
+  using p_compose_Int[OF stable_subdomain_of_set_of_subdom stable_subdomain_of_set_of_subdom]
+  by (simp add: stable_subdom_p.rep_eq inf_stable_subdom.rep_eq)
+
+lemma p_app_commute: "\<p>\<^bsub>a\<^esub>\<cdot>(\<p>\<^bsub>b\<^esub>\<cdot>x) = \<p>\<^bsub>b\<^esub>\<cdot>(\<p>\<^bsub>a\<^esub>\<cdot>x)"
+proof -
+  have "\<p>\<^bsub>a\<^esub>\<cdot>(\<p>\<^bsub>b\<^esub>\<cdot>x) = \<p>\<^bsub>inf b a\<^esub>\<cdot>x" by (rule p_app_inf)
+  also have "\<dots> = \<p>\<^bsub>inf a b\<^esub>\<cdot>x" by (simp add: inf_commute)
+  also have "\<dots> = \<p>\<^bsub>b\<^esub>\<cdot>(\<p>\<^bsub>a\<^esub>\<cdot>x)" by (rule p_app_inf[symmetric])
+  finally show ?thesis .
+qed
+
+text \<open>Jung, Lemma 4.1.9(ii): the meet of two strong subdomains is strong.  Using
+  \<open>p\<^bsub>a\<sqinter>b\<^esub>\<cdot>x = p\<^bsub>a\<^esub>\<cdot>(p\<^bsub>b\<^esub>\<cdot>x)\<close>, the slide condition of @{term a} gives
+  \<open>p\<^bsub>b\<^esub>\<cdot>x \<Up> y\<close>; the join \<open>p\<^bsub>b\<^esub>\<cdot>x \<squnion> y\<close> lies in @{term b}, and the slide condition of
+  @{term b} then bounds @{term x} and @{term y}.\<close>
+lemma is_strong_inf:
+  assumes a: "is_strong a" and b: "is_strong b"
+  shows "is_strong (inf a b)"
+proof (rule is_strongI)
+  fix x y assume y: "y \<in> set_of_subdom (inf a b)" and px: "\<p>\<^bsub>inf a b\<^esub>\<cdot>x \<sqsubseteq> y"
+  from y have yA: "y \<in> set_of_subdom a" and yB: "y \<in> set_of_subdom b"
+    by (auto simp: set_of_subdom_inf)
+  interpret A: strong_subdomain "set_of_subdom a"
+    rewrites "stable_subdomain.p (set_of_subdom a) \<equiv> \<p>\<^bsub>a\<^esub>"
+    by (simp_all add: a[unfolded is_strong_def] stable_subdom_p.rep_eq)
+  interpret B: strong_subdomain "set_of_subdom b"
+    rewrites "stable_subdomain.p (set_of_subdom b) \<equiv> \<p>\<^bsub>b\<^esub>"
+    by (simp_all add: b[unfolded is_strong_def] stable_subdom_p.rep_eq)
+  have decomp: "\<p>\<^bsub>inf a b\<^esub>\<cdot>x = \<p>\<^bsub>a\<^esub>\<cdot>(\<p>\<^bsub>b\<^esub>\<cdot>x)"
+  proof -
+    have "\<p>\<^bsub>inf a b\<^esub>\<cdot>x = \<p>\<^bsub>b\<^esub>\<cdot>(\<p>\<^bsub>a\<^esub>\<cdot>x)" by (rule p_app_inf[symmetric])
+    also have "\<dots> = \<p>\<^bsub>a\<^esub>\<cdot>(\<p>\<^bsub>b\<^esub>\<cdot>x)" by (rule p_app_commute[symmetric])
+    finally show ?thesis .
+  qed
+  have pby_le: "\<p>\<^bsub>a\<^esub>\<cdot>(\<p>\<^bsub>b\<^esub>\<cdot>x) \<sqsubseteq> y" using px decomp by simp
+  have step1: "\<p>\<^bsub>b\<^esub>\<cdot>x \<Up> y" using yA pby_le by (rule A.slide_rule)
+  have memB: "(\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y \<in> set_of_subdom b" (*this could be lifted to a lemma*)
+  proof -
+    have "{\<p>\<^bsub>b\<^esub>\<cdot>x, y} \<subseteq> set_of_subdom b" using subdom.p_in_S yB by auto
+    moreover have "{\<p>\<^bsub>b\<^esub>\<cdot>x, y} <<| (\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y"
+      by (rule join_is_lub[OF joinableD(1)[OF step1] joinableD(2)[OF step1]])
+    ultimately show ?thesis by (rule subdom.strong_closed)
+  qed
+  have pbx_le: "\<p>\<^bsub>b\<^esub>\<cdot>x \<sqsubseteq> (\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y" by (rule joinableD(1)[OF step1])
+  from B.slide_rule[OF memB pbx_le] have step2: "x \<Up> (\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y" .
+  have "x \<sqsubseteq> x \<squnion> ((\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y)" by (rule joinableD(1)[OF step2])
+  moreover have "y \<sqsubseteq> x \<squnion> ((\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y)"
+    using joinableD(2)[OF step1] joinableD(2)[OF step2] by (rule below_trans)
+  ultimately show "x \<Up> y" by (rule joinableI)
+qed
+
+text \<open>The pairwise projection-of-sup, lifted pointwise to @{typ "'a stable_subdom"}:
+  \<open>p\<^bsub>a\<squnion>b\<^esub>\<cdot>x = p\<^bsub>a\<^esub>\<cdot>x \<squnion> p\<^bsub>b\<^esub>\<cdot>x\<close>.\<close>
+lemma p_app_sup: "\<p>\<^bsub>sup a b\<^esub>\<cdot>x = \<p>\<^bsub>a\<^esub>\<cdot>x \<squnion> \<p>\<^bsub>b\<^esub>\<cdot>x"
+  by (transfer, rule stable_subdomain_join_proj[symmetric])
+
+
+lemma insert_join_is_lub:
+  assumes Sl: "S <<| l" and j: "z \<Up> l"
+  shows "insert z S <<| z \<squnion> l"
+proof (rule is_lubI)
+  show "insert z S <| z \<squnion> l"
+  proof (rule is_ubI)
+    fix w assume w: "w \<in> insert z S"
+    show "w \<sqsubseteq> z \<squnion> l"
+    proof (cases "w = z")
+      case True then show ?thesis by (simp add: joinableD(1)[OF j])
+    next
+      case False with w have "w \<in> S" by simp
+      with is_lubD1[OF Sl] have "w \<sqsubseteq> l" by (rule is_ubD)
+      also have "l \<sqsubseteq> z \<squnion> l" by (rule joinableD(2)[OF j])
+      finally show ?thesis .
+    qed
+  qed
+next
+  fix u assume "insert z S <| u"
+  then have zu: "z \<sqsubseteq> u" and Su: "S <| u" by (auto simp: is_ub_insert)
+  from Sl Su have "l \<sqsubseteq> u" by (rule is_lubD2)
+  with zu show "z \<squnion> l \<sqsubseteq> u" by (rule join_belowI)
+qed
+
+text \<open>The projection of a finite (nonempty) sup is the lub of the pointwise projections.\<close>
+lemma finite_proj_sup:
+  assumes "finite \<A>" and "\<A> \<noteq> {}"
+  shows "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` \<A> <<| \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x"
+  using assms
+proof (induction rule: finite_ne_induct)
+  case (singleton A)
+  have "{\<p>\<^bsub>A\<^esub>\<cdot>x} <<| \<p>\<^bsub>A\<^esub>\<cdot>x" by (rule is_lub_singleton)
+  then show ?case by simp
+next
+  case (insert A \<A>)
+  have j: "\<p>\<^bsub>A\<^esub>\<cdot>x \<Up> \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x" by (rule joinableI[OF subdom.p_below subdom.p_below])
+  have "insert (\<p>\<^bsub>A\<^esub>\<cdot>x) ((\<lambda>B. \<p>\<^bsub>B\<^esub>\<cdot>x) ` \<A>) <<| \<p>\<^bsub>A\<^esub>\<cdot>x \<squnion> \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x"
+    by (rule insert_join_is_lub[OF insert.IH j])
+  moreover have "(\<lambda>B. \<p>\<^bsub>B\<^esub>\<cdot>x) ` insert A \<A> = insert (\<p>\<^bsub>A\<^esub>\<cdot>x) ((\<lambda>B. \<p>\<^bsub>B\<^esub>\<cdot>x) ` \<A>)" by simp
+  moreover have "\<p>\<^bsub>A\<^esub>\<cdot>x \<squnion> \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x = \<p>\<^bsub>Sup (insert A \<A>)\<^esub>\<cdot>x"
+    by (simp add: p_app_sup)
+  ultimately show ?case by simp
+qed
+
+text \<open>The projection of an \emph{arbitrary} sup is the lub of the pointwise projections
+  (Jung's full \<open>p\<^bsub>\<Squnion>\<A>\<^esub>\<cdot>x = \<Squnion>\<^bsub>A\<in>\<A>\<^esub> p\<^bsub>A\<^esub>\<cdot>x\<close>, in @{text "<<|"} form): combine the
+  directed result over @{term "Sup ` Fpow \<A>"} (whose sup is @{term "Sup \<A>"}) with the
+  finite case.  An upper bound of the pointwise projections bounds every finite sub-join,
+  hence the directed lub, hence @{term "\<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x"}.\<close>
+lemma proj_Sup:
+  fixes \<A> :: "'a stable_subdom set"
+  shows "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` \<A> <<| \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x"
+proof -
+  have dir: "X \<in> Sup ` Fpow \<A> \<Longrightarrow> Y \<in> Sup ` Fpow \<A> \<Longrightarrow> \<exists>Z \<in> Sup ` Fpow \<A>. X \<le> Z \<and> Y \<le> Z"
+    for X Y
+  proof (simp, safe, intro bexI)
+    fix x y :: "'a stable_subdom set"
+    show "Sup x \<le> Sup (x \<union> y) \<and> Sup y \<le> Sup (x \<union> y)" by (simp add: Sup_subset_mono)
+    assume "x \<in> Fpow \<A>" "y \<in> Fpow \<A>"
+    then show "x \<union> y \<in> Fpow \<A>" by (simp add: Fpow_def)
+  qed
+  have neF: "Sup ` Fpow \<A> \<noteq> {}" by (simp add: Fpow_not_empty)
+  have D: "(\<lambda>F. \<p>\<^bsub>F\<^esub>\<cdot>x) ` (Sup ` Fpow \<A>) <<| \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x"
+    using directed_stable_proj_sup[OF dir neF] by (simp add: Sup_of_Fpow)
+  show ?thesis
+  proof (rule is_lubI)
+    show "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` \<A> <| \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x"
+    proof (rule ub_imageI)
+      fix A assume "A \<in> \<A>"
+      then have "\<p>\<^bsub>A\<^esub> \<sqsubseteq> \<p>\<^bsub>Sup \<A>\<^esub>" by (intro p_below_of_le Sup_upper)
+      then show "\<p>\<^bsub>A\<^esub>\<cdot>x \<sqsubseteq> \<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x" by (rule monofun_cfun_fun)
+    qed
+  next
+    fix u assume u: "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` \<A> <| u"
+    have "(\<lambda>F. \<p>\<^bsub>F\<^esub>\<cdot>x) ` (Sup ` Fpow \<A>) <| u"
+    proof (rule ub_imageI)
+      fix F assume "F \<in> Sup ` Fpow \<A>"
+      then obtain G where G: "G \<in> Fpow \<A>" and F: "F = Sup G" by auto
+      from G have finG: "finite G" and GA: "G \<subseteq> \<A>" by (auto simp: Fpow_def)
+      show "\<p>\<^bsub>F\<^esub>\<cdot>x \<sqsubseteq> u"
+      proof (cases "G = {}")
+        case True
+        have "\<p>\<^bsub>bot\<^esub>\<cdot>x = \<bottom>" using subdom.p_in_S[of bot x] by (simp add: bot_stable_subdom.rep_eq)
+        with True F show ?thesis by simp
+      next
+        case False
+        have lub: "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` G <<| \<p>\<^bsub>Sup G\<^esub>\<cdot>x" using finG False by (rule finite_proj_sup)
+        have "(\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` G <| u"
+        proof (rule ub_imageI)
+          fix A assume "A \<in> G"
+          with GA have "\<p>\<^bsub>A\<^esub>\<cdot>x \<in> (\<lambda>A. \<p>\<^bsub>A\<^esub>\<cdot>x) ` \<A>" by auto
+          with u show "\<p>\<^bsub>A\<^esub>\<cdot>x \<sqsubseteq> u" by (rule is_ubD)
+        qed
+        with lub have "\<p>\<^bsub>Sup G\<^esub>\<cdot>x \<sqsubseteq> u" by (rule is_lubD2)
+        with F show ?thesis by simp
+      qed
+    qed
+    with D show "\<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x \<sqsubseteq> u" by (rule is_lubD2)
+  qed
+qed
 end

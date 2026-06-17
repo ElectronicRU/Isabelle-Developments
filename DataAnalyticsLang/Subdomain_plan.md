@@ -100,10 +100,74 @@ The sup of a family `(Aᵢ)` of subdomains is the **pointwise join**
 2. [DONE] `strong_subdomain_join` — slide condition preserved under pairwise join (4.1.9(i)).
 3. [DONE] Reusable intro rule `stable_subdomainI`; `strong_subdomainI`.
 
-### Revised strategy for the STRONG-subdomain lattice (per user, supersedes the
-### "explicit arbitrary-join + directed_join_of_finite_subsets" route)
-Only the PAIRWISE join needs an explicit expression (done, used for the slide-iff).
-- **Finite joins:** slide preservation on finite sets by induction from `strong_subdomain_join`.
+### Refactor note (user): the pairwise join now lives in a `context fixes A B J`
+`assumes` stable `A`,`B`, `defines J ≡ {a⊔b|a∈A,b∈B,a⇑b}`. Inside: `memJ`, `A_sub_join`
+(`A⊆J`), `B_sub_join`, `J_join` (`p_A x ⊔ p_B x = x` for `x∈J`), `stable_subdomain_join`
+(`J` stable), `pA_below_pJ`/`pB_below_pJ` (`p_A⊑p_J`), `stable_subdomain_join_proj`
+(`p_A ⊔ p_B = p_J`), `strong_subdomain_join'` (J strong). NEW (done):
+- `J_below` (`A⊆K, B⊆K, stable K ⟹ J⊆K` — `K` closed under joinable joins via `strong_closed`);
+- `J_eq_Inter` (`J = ⋂{S. stable S ∧ A⊆S ∧ B⊆S}` = carrier of the lattice binary join).
+
+### DIRECTED development (done, locale `directed_stable_family 𝒜`: 𝒜 stable, ⊆-directed, ≠{}):
+`P = 𝗉 ` 𝒜`, `dd = lub P`; `P_bounded`(⊑ID)/`P_dd`/`P_directed`; `dd_app`
+(`dd⋅x = ⨆ p_A⋅x`); `dd_below`; `proj_at_directed`; `dd_fixed_downward`; `dd_fixes_stable`
+(fixes form a stable subdomain); `base_below_dd_fixes` (`A∈𝒜 ⟹ A⊆fixes`); `dd_fixes_least`;
+`dd_fixes_eq_Inter` (`{x. dd⋅x=x} = ⋂{S. stable S ∧ ∀A∈𝒜. A⊆S}` = carrier of directed Sup).
+
+### Finite joins on `stable_subdom` (DONE): `set_of_subdom_sup` (carrier of `sup a b` =
+explicit pairwise join, via `sup_stable_subdom.rep_eq` + `J_eq_Inter`); `strong_subdomain_bot`
+(`{⊥}` strong); `strong_subdomain_sup` (strong lifts through binary `sup`, = lift of
+`strong_subdomain_join'`); `strong_subdomain_finite_Sup` (strong through finite `Sup`, by
+`finite_induct`: base `{⊥}`, step `Sup_insert`+`strong_subdomain_sup`).
+NB: in this theory `⊔` is the HOLCF join on the ELEMENT type — the lattice binary sup on
+`stable_subdom` must be written `sup a b`. `strong_subdomainI` was removed in refactor; use
+`strong_subdomain.intro[OF ..] strong_subdomain_axioms.intro`.
+
+### Directed joins (DONE at set/locale level):
+- `directed_stable_proj_sup` (user): `𝗉⇘Sup 𝒜⇙ = lub {𝗉⇘A⇙|A∈𝒜}` for ⊆-directed 𝒜.
+- `dd_fixes_strong` (in `directed_stable_family`, Jung 4.1.9 iii): if all `A∈𝒜` strong then
+  `{x. dd⋅x=x}` strong. Slide proof: for `dd⋅x⊑y`, `dd⋅y=y`, each `A` gives `x ⇑ 𝗉⇘A⇙⋅y`
+  (`deflation_below_comp1` so `𝗉⇘A⇙⋅x=𝗉⇘A⇙⋅(dd⋅x)⊑𝗉⇘A⇙⋅y`, then slide A); the joins
+  `x⊔𝗉⇘A⇙⋅y` form a directed set (via `updir`+`join_mono2`), lub `w` bounds `x` and
+  `y=lub{𝗉⇘A⇙⋅y}` (bifinite⊆dcpo gives the directed lub). NB needs `deflation_dd`,
+  `stable_subdomain_deflation` (so `dd = 𝗉` of its fixes).
+
+### Lattice of strong subdomains (DONE by user): `is_strong A ≡ strong_subdomain
+(set_of_subdom A)`, `is_strongI`, `is_strong_bot`/`_top`, `strong_subdomain_sup` (binary),
+`finite_strong_Sup`, `directed_strong_sup` (type-level Jung 4.1.9 iii), `strong_sup`
+(arbitrary `Sup`, via `Fpow` + `Sup_of_Fpow`). `dd_fixes_strong` dropped (superseded by
+`directed_strong_sup`). Next: define `'a strong_subdom` typedef + complete_lattice (Sup as
+Sup, Inf as Sup of lower bounds).
+
+### Meet + projection-composition results (DONE): `p_compose_Int` (set level, POINTWISE
+`p_B⋅(p_A⋅x) = p_{A∩B}⋅x`, via directed below-set + `cont_directed_lub`); `set_of_subdom_inf`
+(inf = ∩); `p_app_inf` (type level pointwise); `p_app_commute`; `is_strong_inf` (Jung
+4.1.9 ii, meet of strong is strong, via `p_{a⊓b} = p_a∘p_b` + both slide conditions).
+IDIOM (user): under a local `strong_subdomain` interpretation, stable facts come from the
+GLOBAL `subdom.…` interpretation (`subdom.p_in_S`, `subdom.strong_closed`, `subdom.p_below`,
+`subdom.p_fixed`), NOT `A.…`; only the strong-specific `A.slide_rule` uses the local prefix.
+User prefers POINTWISE composition lemmas (`p_a⋅(p_b⋅x)=…`) over `oo` (oo derivable when needed).
+
+### `sup_stable_subdom` redefined (user) to the EXPLICIT pointwise join
+`λA B. {p⊔q|p q. p∈A ∧ q∈B ∧ p⇑q}` (well-defined by `stable_subdomain_join`), so `transfer`
+gives the nice form directly. (Caveat: only valid for distributive lattices; `Sup` is still
+the closure `⋂{S stable. ∀A⊆S}`.) Many lemmas now one-liners.
+- (a) DONE (user): `p_app_sup : 𝗉⇘sup a b⇙⋅x = 𝗉⇘a⇙⋅x ⊔ 𝗉⇘b⇙⋅x`
+  `by (transfer, rule stable_subdomain_join_proj[symmetric])`.
+
+### Projection of ARBITRARY sup (DONE), `<<|` form: `proj_Sup`:
+`(λA. 𝗉⇘A⇙⋅x) ` 𝒜 <<| 𝗉⇘Sup 𝒜⇙⋅x` for ARBITRARY 𝒜 (no nonemptiness needed).
+- (b) `insert_join_is_lub` (`S<<|l, z⇑l ⟹ insert z S <<| z⊔l`); `finite_proj_sup` (finite
+  nonempty, by `finite_ne_induct` off `p_app_sup`).
+- (c) `proj_Sup`: combine via `directed_stable_proj_sup` over `Sup`Fpow 𝒜` (directedness as
+  in `strong_sup`; `Sup_of_Fpow`). UB: `p_below_of_le`+`Sup_upper`. LUB: a bound of the
+  pointwise projections bounds every finite sub-join (`finite_proj_sup`), incl. empty
+  `Fpow` elt giving `𝗉⇘⊥⇙⋅x = ⊥` (`subdom.p_in_S`+`bot_stable_subdom.rep_eq`).
+
+ALL THREE requested results (meet/inf, projection-composition, arbitrary-sup projection)
+are now proved and the file is clean (only the cosmetic bibtex error remains).
+- Higher-level cleaner approach (user): show lub structure is preserved passing to projections
+  from arbitrary sets; then join commutes with lub for arbitrary sets.
 - **Directed joins via DEFLATIONS (not sets):** a directed (by ⊆) family of strong
   subdomains ⟹ their projections form a po-directed set of deflations ⟹ has a lub in the
   dcpo of deflations/cfuns; that lub is a deflation (deflation-ness is admissible,

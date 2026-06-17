@@ -92,14 +92,18 @@ lemma meet_sym: "a \<sqinter> b = b \<sqinter> a"
   by (simp only: insert_commute)
 
 definition joinable (infix "\<Up>" 50)
-  where "a \<Up> b \<equiv> {a, b} <<| a \<squnion> b"
+  where "a \<Up> b \<equiv> \<exists>z. a \<sqsubseteq> z \<and> b \<sqsubseteq> z"
+
+lemma joinable_lub: "a \<Up> b \<Longrightarrow> {a, b} <<| a \<squnion> b"
+  unfolding joinable_def
+  by (fast intro: join_is_lub)
 
 lemma joinableI: "a \<sqsubseteq> c \<Longrightarrow> b \<sqsubseteq> c \<Longrightarrow> a \<Up> b"
   unfolding joinable_def
-  by (rule join_is_lub)
+  by fast
 
 lemma joinableD: "a \<Up> b \<Longrightarrow> a \<sqsubseteq> a \<squnion> b" "a \<Up> b \<Longrightarrow> b \<sqsubseteq> a \<squnion> b"
-  unfolding joinable_def
+  using joinable_lub
   by (auto dest: is_lubD1 is_ubD)
 
 lemma joinable_mono1: "a \<Up> b \<Longrightarrow> c \<sqsubseteq> a \<Longrightarrow> c \<Up> b"
@@ -109,16 +113,16 @@ lemma joinable_mono1: "a \<Up> b \<Longrightarrow> c \<sqsubseteq> a \<Longright
   .
 
 lemma joinable_refl[simp]: "a \<Up> a"
-  unfolding joinable_def join_def by simp
+  unfolding joinable_def join_def by fast
 
 lemma joinable_sym: "a \<Up> b \<longleftrightarrow> b \<Up> a"
   unfolding joinable_def
-  by (simp add: bin_join_ex_symm join_sym)
+  by fast
 
 lemma joinable_mono2: "a \<Up> b \<Longrightarrow> c \<sqsubseteq> b \<Longrightarrow> a \<Up> c"
   using joinable_mono1 joinable_sym by metis
 
-sublocale semilattice_inf meet below below_strict
+sublocale semilattice_meet: semilattice_inf meet below below_strict
   by unfold_locales (fact meet_below1 meet_below2 meet_greatest)+
 
 lemma join_mono1: "c \<squnion> b \<sqsubseteq> a \<squnion> b" if "a \<Up> b" "c \<sqsubseteq> a"
@@ -148,8 +152,14 @@ corollary join_absorb_meet[simp]: "(a \<sqinter> b) \<squnion> b = b"
 corollary join_absorb_meet2[simp]: "a \<squnion> (a \<sqinter> b) = a"
   using join_absorb_meet join_sym meet_sym by metis
 
+corollary join_absorb_meet3[simp]: "(b \<sqinter> a) \<squnion> b = b"
+  by (simp add: meet_sym)
+
+corollary join_absorb_meet4[simp]: "a \<squnion> (b \<sqinter> a) = a"
+  by (simp add: meet_sym)
+
 lemma meet_absorbI: "a \<sqsubseteq> b \<Longrightarrow> a \<sqinter> b = a"
-  by (rule inf_absorb1)
+  by (rule semilattice_meet.inf_absorb1)
 
 corollary meet_absorb_join[simp]: "a \<Up> b \<Longrightarrow> (a \<squnion> b) \<sqinter> a = a"
   using meet_absorbI[OF joinableD(1)] by (simp add: meet_sym)
@@ -194,7 +204,7 @@ proof -
   also have "... = ((a \<squnion> b) \<sqinter> a) \<squnion> ((a \<squnion> b) \<sqinter> c)"
     by (simp add: that)
   also have "... = (a \<squnion> b) \<sqinter> (a \<squnion> c)"
-    by (simp add: that meet_join_distrib)
+    by (simp add: that meet_join_distrib meet_sym)
   finally show ?thesis .
 qed
 
@@ -235,14 +245,13 @@ proof
   then have finite_lub: "finite B \<Longrightarrow> B <| z \<Longrightarrow> B <<| lub B" for z and B :: "'a set"
     using is_lub_lub by auto
   fix A and b :: 'a assume "A \<noteq> {}" "A <| b"
-  define PfinA where "PfinA = {B. B \<subseteq> A \<and> finite B}"
-  from \<open>A <| b\<close> have "B \<in> PfinA \<Longrightarrow> B <| b" for B
-    unfolding PfinA_def is_ub_def by fast
-  moreover have "B \<in> PfinA \<Longrightarrow> finite B" for B by (simp add: PfinA_def)
-  ultimately have "B \<in> PfinA \<Longrightarrow> B <<| lub B" for B
+  from \<open>A <| b\<close> have "B \<in> Fpow(A) \<Longrightarrow> B <| b" for B
+    unfolding Fpow_def is_ub_def by fast
+  moreover have "B \<in> Fpow(A) \<Longrightarrow> finite B" for B by (simp add: Fpow_def)
+  ultimately have "B \<in> Fpow(A) \<Longrightarrow> B <<| lub B" for B
     using finite_lub by fast
   with directed_join_of_finite_subsets(2)
-  have "A <<| lub (lub ` PfinA)" unfolding PfinA_def by blast
+  have "A <<| lub (lub ` Fpow(A))" by blast
   then show "\<exists>a. A <<| a" ..
 qed
 
@@ -503,7 +512,7 @@ proof
 qed
 
 lemma fun_bounded_complete:
-  fixes A :: "('a::type \<Rightarrow> 'b::bounded_complete) set"
+  fixes A :: "('a \<Rightarrow> 'b) set"
     and b
   assumes "A <| b"
   shows "A <<| (\<lambda>p. (\<Squnion>f \<in> A. f p))"
@@ -519,6 +528,24 @@ qed
 instance proof qed (blast intro: fun_bounded_complete)
 
 end
+
+lemma fun_lub:
+  fixes A :: "('a::type \<Rightarrow> 'b::bounded_complete) set"
+    and b
+  assumes "A <| b"
+  shows "lub A = (\<lambda>p. (\<Squnion>f \<in> A. f p))"
+  using lub_eqI[OF fun_bounded_complete, OF assms] .
+
+lemma fun_join:
+  fixes f g :: "'a::type \<Rightarrow> 'b::bounded_complete"
+  assumes "f \<Up> g"
+  shows "f \<squnion> g = (\<lambda>x. f x \<squnion> g x)"
+proof -
+  from assms obtain z where "{f, g} <| z"
+    by (auto simp add: joinable_def is_ub_def)
+  from fun_lub[OF this]
+  show ?thesis unfolding join_def by simp
+qed
 
 instantiation cfun :: (cpo, bounded_complete) bounded_complete
 begin
@@ -560,6 +587,25 @@ instance proof qed (blast intro: cfun_bounded_complete)
 
 end
 
+lemma cfun_lub:
+  fixes A :: "('a::cpo \<rightarrow> 'b::bounded_complete) set"
+    and b
+  assumes "A <| b"
+  shows "(lub A)\<cdot>p = (\<Squnion>f \<in> A. f\<cdot>p)"
+  using cfun_bounded_complete[OF assms, THEN lub_eqI]
+  cfun_bound_cont[OF assms] by simp
+
+lemma cfun_join:
+  fixes f g :: "'a::cpo \<rightarrow> 'b::bounded_complete"
+  assumes "f \<Up> g"
+  shows "(f \<squnion> g)\<cdot>p = f\<cdot>p \<squnion> g\<cdot>p"
+proof -
+  from assms obtain z where "{f, g} <| z"
+    by (auto simp add: joinable_def is_ub_def)
+  from cfun_lub[OF this]
+  show ?thesis unfolding join_def by simp
+qed
+
 instantiation sfun :: (pcpo, bounded_complete) bounded_complete
 begin
 
@@ -568,7 +614,7 @@ context
   assumes Ab: "A <| b"
 begin
 
-private lemma cfun_lub: "(\<lambda>f. sfun_rep\<cdot>f) ` A <<| (\<Squnion>f \<in> A. sfun_rep\<cdot>f)"
+private lemma sfun_cfun_lub: "(\<lambda>f. sfun_rep\<cdot>f) ` A <<| (\<Squnion>f \<in> A. sfun_rep\<cdot>f)"
 proof -
   from Ab have "(\<lambda>f. sfun_rep\<cdot>f) ` A <| sfun_rep\<cdot>b"
     by (auto dest: is_ubD intro!: is_ubI monofun_cfun_arg)
@@ -579,16 +625,16 @@ lemma sfun_lub_strict: "strictify\<cdot>(\<Squnion>f \<in> A. sfun_rep\<cdot>f) 
 (is "strictify\<cdot>?lub = ?lub")
 proof (rule below_antisym)
   show "strictify\<cdot>?lub \<sqsubseteq> ?lub" by (rule cfun_belowI) (simp add: strictify_conv_if)
-  show "?lub \<sqsubseteq> strictify\<cdot>?lub" using cfun_lub
+  show "?lub \<sqsubseteq> strictify\<cdot>?lub" using sfun_cfun_lub
     apply (rule is_lubD2, intro is_ubI cfun_belowI)
     by (auto simp add: strictify_conv_if
-          intro!: cfun_lub[THEN is_lubD1, THEN is_ubD, THEN monofun_cfun_fun])
+          intro!: sfun_cfun_lub[THEN is_lubD1, THEN is_ubD, THEN monofun_cfun_fun])
 qed
 
 lemma sfun_bounded_complete:
   "A <<| sfun_abs\<cdot>(\<Squnion>f \<in> A. sfun_rep\<cdot>f)" (is "?A <<| sfun_abs\<cdot>?lub")
 proof -
-  from cfun_lub have "(\<lambda>f. sfun_rep\<cdot>f) ` A <<| sfun_rep\<cdot>(sfun_abs\<cdot>?lub)"
+  from sfun_cfun_lub have "(\<lambda>f. sfun_rep\<cdot>f) ` A <<| sfun_rep\<cdot>(sfun_abs\<cdot>?lub)"
     by (simp add: sfun_lub_strict)
   then show ?thesis
     by (simp add: is_lub_def is_ub_def sfun_below_iff)
