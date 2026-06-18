@@ -102,7 +102,7 @@ lemma joinableI: "a \<sqsubseteq> c \<Longrightarrow> b \<sqsubseteq> c \<Longri
   unfolding joinable_def
   by fast
 
-lemma joinableD: "a \<Up> b \<Longrightarrow> a \<sqsubseteq> a \<squnion> b" "a \<Up> b \<Longrightarrow> b \<sqsubseteq> a \<squnion> b"
+lemma joinableD[simp]: "a \<Up> b \<Longrightarrow> a \<sqsubseteq> a \<squnion> b" "a \<Up> b \<Longrightarrow> b \<sqsubseteq> a \<squnion> b"
   using joinable_lub
   by (auto dest: is_lubD1 is_ubD)
 
@@ -127,8 +127,8 @@ sublocale semilattice_meet: semilattice_inf meet below below_strict
 
 lemma join_mono1: "c \<squnion> b \<sqsubseteq> a \<squnion> b" if "a \<Up> b" "c \<sqsubseteq> a"
 proof -
-  from that have "c \<sqsubseteq> a \<squnion> b" by (fast dest: joinableD(1) intro: below_trans)
-  also from that have "b \<sqsubseteq> a \<squnion> b" by (fast dest: joinableD(2))
+  from that have "c \<sqsubseteq> a \<squnion> b" by (auto intro: below_trans)
+  also from that have "b \<sqsubseteq> a \<squnion> b" by auto
   finally(join_belowI) show ?thesis.
 qed
 
@@ -136,9 +136,7 @@ lemma join_mono2: "a \<squnion> c \<sqsubseteq> a \<squnion> b" if "a \<Up> b" "
   by (metis join_mono1 join_sym joinable_sym that)
 
 lemma join_absorbI: "a \<sqsubseteq> b \<Longrightarrow> a \<squnion> b = b"
-  using joinableI[of a b b] joinableD[of a b]
-    join_belowI[of a b b]
-  by simp
+  by (meson below_antisym below_refl join_belowI joinableD(2) joinableI)
 
 lemma joinable_if_below1[simp]: "a \<sqsubseteq> b \<Longrightarrow> a \<Up> b"
   by (auto intro: joinableI)
@@ -690,7 +688,7 @@ global_interpretation lower_pd_lattice: conditionally_complete_lattice "glb :: (
 
 end
 
-definition min_ub :: "'a \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> bool"
+definition min_ub :: "'a::po \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> bool"
   where "min_ub a b z \<equiv> a \<sqsubseteq> z \<and> b \<sqsubseteq> z \<and> (\<forall>w. a \<sqsubseteq> w \<longrightarrow> b \<sqsubseteq> w \<longrightarrow> w \<sqsubseteq> z \<longrightarrow> w = z)"
 
 lemma min_ubI[intro]:
@@ -698,7 +696,7 @@ lemma min_ubI[intro]:
   shows "min_ub a b z"
   unfolding min_ub_def using assms by blast
 
-lemma min_ub_of_compact: assumes "compact a" "compact b"
+lemma min_ub_of_compact: fixes a b :: "'a::bifinite" assumes "compact a" "compact b"
   shows min_ub_below: "a \<sqsubseteq> z \<Longrightarrow> b \<sqsubseteq> z \<Longrightarrow> \<exists>w. min_ub a b w \<and> w \<sqsubseteq> z"
     and min_ub_compact: "\<And>w. min_ub a b w \<Longrightarrow> compact w"
     and min_ub_finite: "finite {w. min_ub a b w}"
@@ -821,8 +819,9 @@ lemma pd_sup_rep: "pd_sup_set A B \<noteq> {} \<Longrightarrow> Rep_pd_basis (pd
     Abs_pd_basis_inverse[unfolded pd_basis_def mem_Collect_eq]
   by blast
 
-lemma min_ub_Cb_def: 
-  "min_ub (Cb a) (Cb b) (Cb z) \<longleftrightarrow> a \<sqsubseteq> z \<and> b \<sqsubseteq> z \<and> (\<forall>w. a \<sqsubseteq> w \<longrightarrow> b \<sqsubseteq> w \<longrightarrow> w \<sqsubseteq> z \<longrightarrow> w = z)"
+lemma min_ub_Cb_def:
+  fixes a b z :: "'a::bifinite compact_basis"
+  shows "min_ub (Cb a) (Cb b) (Cb z) \<longleftrightarrow> a \<sqsubseteq> z \<and> b \<sqsubseteq> z \<and> (\<forall>w. a \<sqsubseteq> w \<longrightarrow> b \<sqsubseteq> w \<longrightarrow> w \<sqsubseteq> z \<longrightarrow> w = z)"
 proof -
   let ?noncompact = "\<forall>w. Cb a \<sqsubseteq> w \<longrightarrow> Cb b \<sqsubseteq> w \<longrightarrow> w \<sqsubseteq> Cb z \<longrightarrow> w = Cb z"
   let ?compact = "\<forall>w. a \<sqsubseteq> w \<longrightarrow> b \<sqsubseteq> w \<longrightarrow> w \<sqsubseteq> z \<longrightarrow> w = z"
@@ -845,7 +844,9 @@ proof -
   then show ?thesis unfolding min_ub_def by simp
 qed
 
-lemma min_ub_below': "a \<sqsubseteq> z \<Longrightarrow> b \<sqsubseteq> z \<Longrightarrow> \<exists>w. min_ub (Cb a) (Cb b) (Cb w) \<and> w \<sqsubseteq> z"
+lemma min_ub_below':
+  fixes a z :: "'a::bifinite compact_basis"
+  shows "a \<sqsubseteq> z \<Longrightarrow> b \<sqsubseteq> z \<Longrightarrow> \<exists>w. min_ub (Cb a) (Cb b) (Cb w) \<and> w \<sqsubseteq> z"
 proof -
   assume "a \<sqsubseteq> z" "b \<sqsubseteq> z"
   from this[unfolded compact_le_def] obtain w where 1: "min_ub (Cb a) (Cb b) w" and 2: "w \<sqsubseteq> Cb z"
