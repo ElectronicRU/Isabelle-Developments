@@ -22,33 +22,6 @@ notation up_closure (\<open>(\<open>notation=\<open>prefix \<up>\<close>\<close>
 lemma up_closure_iff: "\<up>X = {y. \<exists>x \<in> X. x \<sqsubseteq> y}"
   by (auto simp add: up_closure.simps)
 
-lemma obtain_compact_chain:
-  fixes x :: "'a::profinite"
-  obtains X where "chain X" "\<forall>i. compact (X i)" "x = (\<Squnion>i. X i)"
-proof -
-  from compact_basis.obtain_principal_chain
-  obtain B' where B': "\<forall>i. B' i \<sqsubseteq> B' (Suc i)" "up\<cdot>x = (\<Squnion>i. Rep_compact_basis (B' i))"
-    .
-  define X' where "X' i = Rep_compact_basis (B' i)" for i
-  have "chain X'" unfolding X'_def using B'(1) by (rule compact_basis.ch2ch_principal)
-  have upx: "up\<cdot>x = (\<Squnion>i. X' i)" unfolding X'_def by fact
-  have "compact (X' i)" for i unfolding X'_def by simp
-  obtain X n where upX: "\<forall>i. up\<cdot>(X i) = X' (i + n)"
-    and "chain X" and x: "x = (\<Squnion>i. X i)"
-    using \<open>chain X'\<close>
-  proof (cases rule: up_chain_cases)
-    case 1
-    then have "(\<Squnion>i. X' i) = \<bottom>" by simp
-    with upx show ?thesis by simp
-  next
-    case (2 X n)
-    with upx show ?thesis using that by simp
-  qed
-  from upX \<open>\<And>i. compact (X' i)\<close> compact_upD have "\<forall>i. compact (X i)" 
-    by metis
-  from \<open>chain X\<close> this x show ?thesis by (rule that)
-qed
-
 locale proper_map =
   fixes f :: "'a::bifinite \<rightarrow> 'b::bifinite"
   assumes finite_generators:

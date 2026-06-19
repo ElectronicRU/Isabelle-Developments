@@ -13,6 +13,7 @@ thm below_refl
 thm is_ubI (*(\<And>x. x \<in> ?S \<Longrightarrow> below x ?u) \<Longrightarrow> po.is_ub below ?S ?u*)
 end
 
+
 (*but doesn't work with a HOL class *)
 class hol = linorder +
   assumes "\<exists>(a :: (nat\<Rightarrow>'a)). mono a"

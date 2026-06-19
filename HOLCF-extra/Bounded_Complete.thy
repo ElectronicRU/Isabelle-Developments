@@ -208,6 +208,8 @@ qed
 
 end
 
+class scott_domain = "domain" + distributive_cpo
+
 lemma bounded_complete_finite_joinI:
   assumes "\<And>a b c::'a::dcpo. \<lbrakk> a \<sqsubseteq> c; b \<sqsubseteq> c \<rbrakk> \<Longrightarrow> \<exists>z. {a, b} <<| z"
   shows "OFCLASS('a, bounded_complete_class)"
@@ -543,6 +545,41 @@ proof -
     by (auto simp add: joinable_def is_ub_def)
   from fun_lub[OF this]
   show ?thesis unfolding join_def by simp
+qed
+
+lemma fun_meet:
+  fixes f g :: "'a::type \<Rightarrow> 'b::bounded_complete"
+  shows "f \<sqinter> g = (\<lambda>x. f x \<sqinter> g x)"
+proof (rule below_antisym)
+  show "f \<sqinter> g \<sqsubseteq> (\<lambda>x. f x \<sqinter> g x)"
+  proof (rule fun_belowI)
+    fix x
+    have "(f \<sqinter> g) x \<sqsubseteq> f x" "(f \<sqinter> g) x \<sqsubseteq> g x"
+      by (auto intro: fun_belowD meet_below1 meet_below2)
+    thus "(f \<sqinter> g) x \<sqsubseteq> (\<lambda>x. f x \<sqinter> g x) x" by (simp add: meet_greatest)
+  qed
+next
+  show "(\<lambda>x. f x \<sqinter> g x) \<sqsubseteq> f \<sqinter> g"
+    by (rule meet_greatest; rule fun_belowI) (simp_all add: meet_below1 meet_below2)
+qed
+
+instance "fun" :: (type, distributive_cpo) distributive_cpo
+proof
+  fix a b c :: "'a \<Rightarrow> 'b"
+  assume ab: "a \<Up> b"
+  have ptw: "a x \<Up> b x" for x
+  proof -
+    from ab obtain z where "a \<sqsubseteq> z" "b \<sqsubseteq> z" unfolding joinable_def by blast
+    thus "a x \<Up> b x" by (meson fun_belowD joinableI)
+  qed
+  have cab: "(c \<sqinter> a) \<Up> (c \<sqinter> b)" by (rule joinableI[OF meet_below1 meet_below1])
+  have "c \<sqinter> (a \<squnion> b) = (\<lambda>x. c x \<sqinter> (a x \<squnion> b x))"
+    using ab by (simp add: fun_meet fun_join)
+  also have "... = (\<lambda>x. (c x \<sqinter> a x) \<squnion> (c x \<sqinter> b x))"
+    using ptw by (simp add: meet_join_distrib)
+  also have "... = (c \<sqinter> a) \<squnion> (c \<sqinter> b)"
+    using cab by (simp add: fun_meet fun_join)
+  finally show "c \<sqinter> (a \<squnion> b) = (c \<sqinter> a) \<squnion> (c \<sqinter> b)" .
 qed
 
 instantiation cfun :: (cpo, bounded_complete) bounded_complete

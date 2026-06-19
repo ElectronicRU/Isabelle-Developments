@@ -1,6 +1,7 @@
 ---
 name: isabelle-q
-description: Interface with Isabelle/HOLCF through the Isabelle/Q (I/Q) MCP server — authenticate, read and edit .thy files via the live jEdit/PIDE session, inspect proof state, goals and diagnostics, and run proof exploration (sledgehammer, find_theorems, Isar try-steps) or the I/R REPL. Use whenever working with Isabelle theory files or proofs in this project.
+description: Interface with Isabelle/HOLCF through the Isabelle/Q (I/Q) MCP server — read and edit .thy files via the live jEdit/PIDE session, inspect proof state, goals and diagnostics, and run proof exploration (sledgehammer, find_theorems, Isar try-steps) or the I/R REPL. Use whenever working with Isabelle theory files or proofs in this project.
+user-invocable: false
 ---
 
 # Isabelle/Q (I/Q)
@@ -33,28 +34,14 @@ Consult them when a tool's behavior is unclear or you need detail beyond this sk
      matches disk, `get_diagnostics`/`get_processing_status` to confirm it reprocessed)
      before making further I/Q edits. If a buffer didn't reload, reopen it / ask the user
      to reload rather than editing a stale buffer.
-2. **Authenticate first** every session — see below. Nothing else works until you do.
-3. **A file must be tracked before you can read/edit it.** `read_file`/`write_file`
+2. **A file must be tracked before you can read/edit it.** `read_file`/`write_file`
    fail with "No file found" until you `open_file` it (it then becomes `tracked`).
-4. **Explore before you commit.** Use `explore` (query=`proof`) to try a tactic
+3. **Explore before you commit.** Use `explore` (query=`proof`) to try a tactic
    non-invasively; only `write_file` once it works. Don't rewrite whole proof scripts —
    edit incrementally, 1–2 tactics at a time (see `iq_guidance.md`).
-5. After an edit, **check it landed**: inspect the returned `file_summary`
+4. After an edit, **check it landed**: inspect the returned `file_summary`
    (`errors`, `commands_failed`) — `edits_failed=0` does NOT mean the theory is clean,
    since commands outside the edited range may have broken.
-
-## Session start: authenticate
-
-The token lives in the `IQ_AUTH_TOKEN` environment variable; you do not need the user
-to supply it. Retrieve it and pass it (MCP args do **not** expand shell `$VAR`):
-
-```
-Bash:  printenv IQ_AUTH_TOKEN
-mcp__Isabelle_Q__authenticate(token=<that literal value>)
-```
-
-Auth persists for the connection. If a later call returns "Not authenticated", just
-re-authenticate.
 
 ## Tool catalog
 

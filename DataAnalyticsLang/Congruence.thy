@@ -1,0 +1,309 @@
+theory Congruence
+  imports HOLCF
+begin
+
+default_sort pcpo
+
+section \<open>Levels of detail as continuous congruences (intrinsic complete lattice)\<close>
+
+text \<open>
+  An LOD over a cpo \<^typ>\<open>'a\<close> is modelled \<^emph>\<open>intrinsically\<close> as the quotient \<^emph>\<open>preorder\<close>
+  induced by a continuous map: a relation \<^term>\<open>R\<close> on \<^typ>\<open>'a\<close> that is transitive,
+  refines the cpo order \<^term>\<open>(\<sqsubseteq>)\<close>, and is admissible (Scott-closed) in each argument.
+
+  Unlike a bare partition this keeps the quotient order (the placement-insensitive content
+  that \<^file>\<open>Coslice.thy\<close>'s factoring relation got entangled with the embedding into
+  \<^typ>\<open>udom\<close>).  Being an \<^emph>\<open>intersection-closed family of admissible predicates\<close> — a Moore
+  family inside the complete lattice \<^typ>\<open>'a \<Rightarrow> 'a \<Rightarrow> bool\<close> — these form a \<^emph>\<open>complete\<close>
+  lattice, so all meets and joins exist.
+
+  Order convention here is the inherited relation inclusion: \<^term>\<open>a \<le> b\<close> iff
+  \<^term>\<open>rel_of a\<close> implies \<^term>\<open>rel_of b\<close>.  So a bigger relation = more rows identified =
+  \<^emph>\<open>coarser\<close>; thus \<^term>\<open>bot\<close> = \<^term>\<open>(\<sqsubseteq>)\<close> (the finest LOD, \<^typ>\<open>'a\<close> itself) and \<^term>\<open>top\<close> =
+  the total relation (the coarsest, no information).  This is the order-dual of the
+  ``finer = higher'' convention in \<^file>\<open>Coslice.thy\<close>.
+\<close>
+
+subsection \<open>Continuous congruences (admissible refining preorders)\<close>
+
+locale is_cong =
+  fixes R :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
+  assumes trans: "R x y \<Longrightarrow> R y z \<Longrightarrow> R x z"
+    and belowD: "x \<sqsubseteq> y \<Longrightarrow> R x y"
+    and adm1: "adm (\<lambda>x. R x y)"
+    and adm2: "adm (\<lambda>y. R x y)"
+begin
+lemmas axioms = trans belowD adm1 adm2
+end
+
+lemma (in is_cong) refl: "R x x"
+  by (auto simp: trans belowD)
+
+lemma is_cong_top: "is_cong top"
+  by (simp add: is_cong_def)
+
+lemma is_cong_below: "is_cong (\<lambda>x y. x \<sqsubseteq> y)"
+  by (auto simp: is_cong_def intro: below_trans adm_below cont_id cont_const)
+
+lemma is_cong_Inter:
+  assumes "\<And>i. i \<in> I \<Longrightarrow> is_cong (R i)"
+  shows "is_cong (\<lambda>x y. \<forall>i\<in>I. R i x y)"
+proof
+  show "\<forall>i \<in> I. R i x y \<Longrightarrow> \<forall>i \<in> I. R i y z \<Longrightarrow> \<forall>i \<in> I. R i x z" for x y z
+    using assms[THEN is_cong.trans] by blast
+  show "x \<sqsubseteq> y \<Longrightarrow> \<forall>i \<in> I. R i x y" for x y
+    using assms[THEN is_cong.belowD] by blast
+  show "adm (\<lambda>x. \<forall>i \<in> I. R i x y)" for y
+    using assms[THEN is_cong.adm1] adm_ball[of I] by force 
+  show "adm (\<lambda>y. \<forall>i \<in> I. R i x y)" for x
+    using assms[THEN is_cong.adm2] adm_ball[of I] by force
+qed
+
+lemma Inf_iff: "Inf \<R> = (\<lambda>x y. \<forall>R \<in> \<R>. R x y)"
+  by fast
+
+corollary is_cong_Inf: "(\<And>R. R \<in> \<R> \<Longrightarrow> is_cong R) \<Longrightarrow> is_cong (Inf \<R>)"
+  unfolding Inf_iff
+  using is_cong_Inter[of "\<R>" "(\<lambda>x. x)"] .
+
+lemma inf2_def: "inf R S = (\<lambda>x y. R x y \<and> S x y)"
+  by auto
+
+lemma is_cong_inf2:
+  assumes "is_cong R" "is_cong S" shows "is_cong (inf R S)"
+  unfolding inf2_def
+proof
+  from assms show "R x y \<and> S x y \<Longrightarrow> R y z \<and> S y z \<Longrightarrow> R x z \<and> S x z" for x y z
+    by (blast dest: is_cong.trans)
+  from assms show "x \<sqsubseteq> y \<Longrightarrow> R x y \<and> S x y" for x y
+    by (blast dest: is_cong.belowD)
+  from assms show "adm (\<lambda>x. R x y \<and> S x y)" for y
+    by (intro adm_conj) (blast intro: assms dest: is_cong.adm1)+
+  from assms show "adm (\<lambda>y. R x y \<and> S x y)" for x
+    by (intro adm_conj) (blast intro: assms dest: is_cong.adm2)+
+qed
+
+subsection \<open>The generated congruence (least cong above a relation)\<close>
+
+definition gen :: "('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> 'a \<Rightarrow> bool)" where
+  "gen B = (\<lambda>x y. \<forall>R. is_cong R \<longrightarrow> (\<forall>u v. B u v \<longrightarrow> R u v) \<longrightarrow> R x y)"
+
+lemma is_cong_gen: "is_cong (gen B)"
+proof -
+  have *: "gen B = (\<lambda>x y. \<forall>R\<in>{R. is_cong R \<and> (\<forall>u v. B u v \<longrightarrow> R u v)}. R x y)"
+    by (auto simp: gen_def fun_eq_iff)
+  show ?thesis unfolding * by (rule is_cong_Inter) auto
+qed
+
+lemma gen_upper: "B x y \<Longrightarrow> gen B x y"
+  by (auto simp: gen_def)
+
+lemma gen_least: "is_cong R \<Longrightarrow> (\<And>u v. B u v \<Longrightarrow> R u v) \<Longrightarrow> gen B x y \<Longrightarrow> R x y"
+  by (auto simp: gen_def)
+
+(*
+subsection \<open>The type of continuous congruences\<close>
+
+typedef 'a::cpo cong = "{R::'a \<Rightarrow> 'a \<Rightarrow> bool. is_cong R}"
+  morphisms rel_of Cong
+  using is_cong_top by blast
+
+setup_lifting type_definition_cong
+
+lemma is_cong_rel_of [simp, intro]: "is_cong (rel_of a)"
+  using rel_of[of a] by simp
+
+lemma rel_of_inject_eq: "rel_of a = rel_of b \<Longrightarrow> a = b"
+  by (simp add: rel_of_inject)
+
+subsection \<open>Complete lattice structure\<close>
+
+instantiation cong :: (cpo) order
+begin
+lift_definition less_eq_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> bool"
+is "(\<ge>)" .
+
+lift_definition less_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> bool"
+is "(>)" .
+
+instance
+  by (standard; transfer) (auto simp add: dual_order.strict_iff_not)
+
+end
+
+instantiation cong :: (cpo) lattice
+begin
+
+lift_definition inf_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> 'a cong"
+is "\<lambda> x y. Inf {z. z \<ge> sup x y \<and> is_cong z}"
+  by (intro is_cong_Inf) simp
+
+lift_definition sup_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> 'a cong"
+is "inf"
+  by (rule is_cong_inf2)
+
+instance
+  by (standard; transfer) fast+
+end
+
+instantiation cong :: (cpo) complete_lattice
+begin
+
+lift_definition top_cong :: "'a cong"
+is "(\<sqsubseteq>)"
+  by (rule is_cong_below)
+
+lift_definition bot_cong :: "'a cong"
+is "top"
+  by (rule is_cong_top)
+
+lift_definition Inf_cong :: "'a cong set \<Rightarrow> 'a cong"
+is "\<lambda>S. Inf {z. (\<forall>x \<in> S. x \<le> z) \<and> is_cong z}"
+  by (intro is_cong_Inf) simp
+
+lift_definition Sup_cong :: "'a cong set \<Rightarrow> 'a cong"
+is "Inf"
+  by (rule is_cong_Inf)
+
+lemma below_finest: "Inf (Collect is_cong) = (\<sqsubseteq>)"
+  using is_cong_below is_cong.belowD by blast
+
+
+instance
+  apply (standard; transfer)
+       apply fast
+      apply fast
+     apply fast
+    apply blast
+   apply (simp add: below_finest)
+  apply simp.
+end
+*)
+
+lemma map_is_cong: assumes "is_cong R" "cont f" shows "is_cong (inv_imagep R f)"
+  unfolding inv_imagep_def
+proof (standard)
+  from assms(1) show "R (f x) (f y) \<Longrightarrow> R (f y) (f z) \<Longrightarrow> R (f x) (f z)" for x y z
+    by (rule is_cong.trans)
+  from assms(1)[THEN is_cong.belowD] assms(2)[THEN cont2monofunE]
+  show "x \<sqsubseteq> y \<Longrightarrow> R (f x) (f y)" for x y
+    by presburger
+  from assms(2) assms(1)[THEN is_cong.adm1]
+  show "adm (\<lambda>x. R (f x) (f y))" for y by (rule adm_subst)
+  from assms(2) assms(1)[THEN is_cong.adm2]
+  show "adm (\<lambda>y. R (f x) (f y))" for x by (rule adm_subst)
+qed
+
+(*
+lift_definition cong_comap :: "('b \<rightarrow> 'a) \<Rightarrow> 'a cong \<Rightarrow> 'b cong"
+is "\<lambda>f R. inv_imagep R (Rep_cfun f)"
+  by (intro map_is_cong) simp_all
+
+definition cong_eq_on :: "('a \<rightarrow> 'b) \<Rightarrow> 'a cong"
+  where "cong_eq_on f = cong_comap f top"
+
+lemma rep_cong_eq_on: "rel_of (cong_eq_on f) x y \<longleftrightarrow> f\<cdot>x \<sqsubseteq> f\<cdot>y"
+  unfolding cong_eq_on_def
+  by transfer simp
+*)
+
+subsection \<open>Flat LODs (the generators)\<close>
+
+text \<open>A flat congruence is one whose quotient has height \<le> 1: a bottom class of
+  ``undefined'' points (each \<open>R\<close>-below everything) and an antichain of value classes above.
+  These arise exactly from continuous maps into flat domains, and generate the LOD frame.\<close>
+
+locale is_flat_cong = is_cong +
+  assumes height1: "R x y \<Longrightarrow> R y x \<or> (\<forall>z. R x z)"
+
+lemma is_flat_cong_eq_on:
+  fixes f :: "'a \<rightarrow> 'b::flat"
+  shows "is_flat_cong (\<lambda>x y. f\<cdot>x \<sqsubseteq> f\<cdot>y)"
+proof unfold_locales
+  show "f\<cdot>x \<sqsubseteq> f\<cdot>y \<Longrightarrow> f\<cdot>y \<sqsubseteq> f\<cdot>z \<Longrightarrow> f\<cdot>x \<sqsubseteq> f\<cdot>z" for x y z by (rule below_trans)
+  show "x \<sqsubseteq> y \<Longrightarrow> f\<cdot>x \<sqsubseteq> f\<cdot>y" for x y by (rule monofun_cfun_arg)
+  show "adm (\<lambda>x. f\<cdot>x \<sqsubseteq> f\<cdot>y)" for y by simp
+  show "adm (\<lambda>y. f\<cdot>x \<sqsubseteq> f\<cdot>y)" for x by simp
+  show "f\<cdot>x \<sqsubseteq> f\<cdot>y \<Longrightarrow> f\<cdot>y \<sqsubseteq> f\<cdot>x \<or> (\<forall>z. f\<cdot>x \<sqsubseteq> f\<cdot>z)" for x y
+    by (metis ax_flat minimal)
+qed
+
+text \<open>The family generated by the flats under arbitrary cong-joins, i.e.\ boolean-level
+  intersections (\<^term>\<open>Inf\<close> at the predicate level = \<^const>\<open>Sup\<close> at the cong level).\<close>
+
+definition is_flat_gen :: "('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow> bool" where
+  "is_flat_gen R \<longleftrightarrow> (\<exists>\<F>. (\<forall>f\<in>\<F>. is_flat_cong f) \<and> R = Inf \<F>)"
+
+lemma is_flat_gen_flat: "is_flat_cong f \<Longrightarrow> is_flat_gen f"
+  unfolding is_flat_gen_def by (rule exI[of _ "{f}"]) simp
+
+text \<open>Meet of two flats is flat: the generated congruence stays height \<le> 1.  No induction,
+  no distributivity of @{typ 'a} — the symmetric companion @{term U} is squeezed in between.\<close>
+
+lemma is_flat_cong_meet:
+  fixes f g :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
+  assumes f: "is_flat_cong f" and g: "is_flat_cong g"
+  shows "is_flat_cong (gen (sup f g))"
+proof -
+  let ?R = "gen (sup f g)"
+  have R: "is_cong ?R" by (rule is_cong_gen)
+  have cf: "is_cong f" using f by (simp add: is_flat_cong_def)
+  note fh = is_flat_cong.height1[OF f]
+  note gh = is_flat_cong.height1[OF g]
+  have sup1: "?R a b" if "f a b" for a b
+  proof -
+    have "sup f g a b" using that by simp
+    thus "?R a b" by (rule gen_upper)
+  qed
+  have sup2: "?R a b" if "g a b" for a b
+  proof -
+    have "sup f g a b" using that by simp
+    thus "?R a b" by (rule gen_upper)
+  qed
+  define U :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
+    where "U = (\<lambda>x y. (\<forall>z. ?R x z) \<or> (?R x y \<and> ?R y x))"
+  have Ucong: "is_cong U"
+  proof unfold_locales
+    fix x y z assume xy: "U x y" and yz: "U y z"
+    show "U x z" unfolding U_def
+      using xy[unfolded U_def] yz[unfolded U_def] is_cong.trans[OF R] by metis
+  next
+    fix x y :: "'a" assume "x \<sqsubseteq> y"
+    hence fxy: "f x y" by (rule is_cong.belowD[OF cf])
+    hence Rxy: "?R x y" by (rule sup1)
+    from fh[OF fxy] show "U x y" unfolding U_def
+    proof (elim disjE)
+      assume "f y x" hence "?R y x" by (rule sup1)
+      with Rxy show "(\<forall>z. ?R x z) \<or> (?R x y \<and> ?R y x)" by blast
+    next
+      assume "\<forall>z. f x z" hence "\<forall>z. ?R x z" using sup1 by blast
+      thus "(\<forall>z. ?R x z) \<or> (?R x y \<and> ?R y x)" by blast
+    qed
+  next
+    fix y show "adm (\<lambda>x. U x y)" unfolding U_def
+      by (intro adm_disj adm_all adm_conj is_cong.adm1[OF R] is_cong.adm2[OF R])
+  next
+    fix x show "adm (\<lambda>y. U x y)" unfolding U_def
+      by (intro adm_disj adm_const adm_conj is_cong.adm2[OF R] is_cong.adm1[OF R])
+  qed
+  have supU: "U u v" if huv: "sup f g u v" for u v
+    unfolding U_def using sup1 sup2 fh gh
+    by (metis sup1 fh sup2 gh that sup_apply sup_bool_def)
+  have RU: "?R x y \<Longrightarrow> U x y" for x y
+    by (rule gen_least[OF Ucong supU])
+  show "is_flat_cong ?R"
+  proof unfold_locales
+    show "?R x y \<Longrightarrow> ?R y z \<Longrightarrow> ?R x z" for x y z by (rule is_cong.trans[OF R])
+    show "x \<sqsubseteq> y \<Longrightarrow> ?R x y" for x y by (rule is_cong.belowD[OF R])
+    show "adm (\<lambda>x. ?R x y)" for y by (rule is_cong.adm1[OF R])
+    show "adm (\<lambda>y. ?R x y)" for x by (rule is_cong.adm2[OF R])
+    show "?R x y \<Longrightarrow> ?R y x \<or> (\<forall>z. ?R x z)" for x y
+      using RU unfolding U_def by blast
+  qed
+qed
+
+lemma gen_inf: "gen R = Inf {z. z \<ge> R \<and> is_cong z}"
+  unfolding gen_def
+  by blast
+
+end
