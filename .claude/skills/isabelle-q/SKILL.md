@@ -16,8 +16,23 @@ Consult them when a tool's behavior is unclear or you need detail beyond this sk
 
 ## Golden rules
 
-1. **Never** touch `.thy` files with `Read`/`Edit`/`Write`/`cat`/`sed`. Always use I/Q
-   tools. (Filesystem tools are fine for `ROOT`, `.tex`, `.bib`, docs.)
+1. **Never** read or edit existing `.thy` files with `Read`/`Edit`/`Write`/`cat`/`sed`.
+   Always use I/Q tools, so edits go through the live jEdit/PIDE buffer and stay in sync.
+   (Filesystem tools are fine for `ROOT`, `.tex`, `.bib`, docs.)
+   - **Exception — creating a brand-new `.thy`:** since I/Q has no copy-file primitive,
+     you *may* create a new theory file with filesystem ops (e.g. `cp` an existing
+     theory, or `Write` a fresh one) **provided you then `open_file` it in jEdit** before
+     reading/editing it further. After that, the no-filesystem rule applies again: all
+     subsequent edits go through I/Q. Never use filesystem ops on a `.thy` that is
+     already open/tracked in jEdit.
+   - **Exception — VCS operations:** `jj`/`git` commands that rewrite tracked `.thy`
+     files on disk (`jj restore`/`revert`/`abandon`/`new`, `git checkout`/`restore`/
+     `stash`, rebases, etc.) are fine — they're whole-file VCS ops, not hand edits. The
+     editor is set to auto-reload changed buffers, so jEdit picks the new content up;
+     **after any such op, re-sync and verify via I/Q** (`read_file` to confirm the buffer
+     matches disk, `get_diagnostics`/`get_processing_status` to confirm it reprocessed)
+     before making further I/Q edits. If a buffer didn't reload, reopen it / ask the user
+     to reload rather than editing a stale buffer.
 2. **Authenticate first** every session — see below. Nothing else works until you do.
 3. **A file must be tracked before you can read/edit it.** `read_file`/`write_file`
    fail with "No file found" until you `open_file` it (it then becomes `tracked`).
