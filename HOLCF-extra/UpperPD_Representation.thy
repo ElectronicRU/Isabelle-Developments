@@ -158,7 +158,7 @@ next
 qed
 
 lemma chain_finite_nonempty_Inter:
-  fixes \<F> :: "'a set set"
+  fixes \<F> :: "'a::type set set"
   assumes ne:    "\<F> \<noteq> {}"
       and chain: "\<And>S T. \<lbrakk>S \<in> \<F>; T \<in> \<F>\<rbrakk> \<Longrightarrow> S \<subseteq> T \<or> T \<subseteq> S"
       and fin:   "\<And>S. S \<in> \<F> \<Longrightarrow> finite S"
@@ -211,7 +211,7 @@ proof -
   from assms(2) have C_ne: "C i \<noteq> {}" for i by (simp add: C_def)
   have C_glb: "is_glb (C i) (glb (C i))" and C_mem: "glb (C i) \<in> C i" for i
   proof -
-    from below_order.finite_has_minimal[OF C_finite C_ne]
+    from order.finite_has_minimal[OF below_order C_finite C_ne]
     obtain m where m: "m \<in> C i" and m_min: "\<forall>b \<in> C i. b \<sqsubseteq> m \<longrightarrow> m = b" ..
     then have "\<forall>b \<in> C i. m \<sqsubseteq> b"
       using ChainE[OF C_Chain m] by metis

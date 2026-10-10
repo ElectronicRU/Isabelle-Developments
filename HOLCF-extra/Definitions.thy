@@ -6,7 +6,10 @@ context po begin
 
 definition below_strict (infix \<open>\<sqsubset>\<close> 50) where "a \<sqsubset> b = (a \<sqsubseteq> b \<and> \<not>(b \<sqsubseteq> a))"
 
-sublocale below_order: order below below_strict
+text \<open>Stated as a fact rather than a \<open>sublocale\<close>: a sublocale into a locale with derived constants
+  breaks later subclasses whose assumptions need a finer sort (Isabelle class bug).\<close>
+
+lemma below_order: "class.order below below_strict"
   by unfold_locales (fact below_strict_def below_refl below_trans below_antisym)+
 
 theorem lub_below_iff': "A <<| a \<Longrightarrow> a \<sqsubseteq> x \<longleftrightarrow> (\<forall>y \<in> A. y \<sqsubseteq> x)"

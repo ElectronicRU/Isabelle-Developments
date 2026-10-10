@@ -203,7 +203,7 @@ proof -
   moreover from ub_db d.idem d.below[of b] have "bounds \<noteq> {}"
     unfolding bounds_def by blast
   ultimately have "\<exists>m \<in> bounds. \<forall>b \<in> bounds. b \<sqsubseteq> m \<longrightarrow> m = b"
-    by (rule below_order.finite_has_minimal)
+    by (rule order.finite_has_minimal[OF below_order])
   then obtain m where 1: "m \<in> bounds" 
     and 2: "\<forall>b \<in> bounds. b \<sqsubseteq> m \<longrightarrow> m = b"..
   from 1 have fixm: "d\<cdot>m = m" and ubm: "A <| m" and mleb: "m \<sqsubseteq> b"
@@ -218,13 +218,13 @@ proof -
     fix c assume "A <| c" "c \<sqsubseteq> m"
     from \<open>c \<sqsubseteq> m\<close> fixm monofun_cfun_arg[of c m d]
     have dclem: "d\<cdot>c \<sqsubseteq> m" by simp
-    with mleb have "d\<cdot>c \<sqsubseteq> b" by order
+    with mleb have "d\<cdot>c \<sqsubseteq> b" by (rule below_trans[rotated])
     moreover from d.deflation_axioms sub \<open>A <| c\<close> have "A <| d\<cdot>c"
       by (rule deflation_ub)
     ultimately have "d\<cdot>c \<in> bounds" unfolding bounds_def using d.idem
       by auto
     with dclem 2 have "m = d\<cdot>c" by fast
-    with d.below[of c] \<open>c \<sqsubseteq> m\<close> show "c = m" by order
+    with d.below[of c] \<open>c \<sqsubseteq> m\<close> show "c = m" by (metis below_antisym)
   qed
   from p1 p2 mleb show thesis by (rule that)
 qed
@@ -252,7 +252,7 @@ proof -
   let ?c = "Abs_compact_basis c"
   from \<open>compact c\<close> have *: "Rep_compact_basis ?c = c" by simp
   with mub2 mub_compact_basis_bwd have "is_mub A ?c" by metis
-  moreover from * cleb have "Rep_compact_basis ?c \<sqsubseteq> b" by order
+  moreover from * cleb have "Rep_compact_basis ?c \<sqsubseteq> b" by simp
   ultimately show ?thesis by (rule that)
 qed
 
@@ -274,7 +274,7 @@ next
   from mub2[THEN is_mubD1] have "A <| c" .
   with mub[THEN is_mubD2] clea
   have "c = a" by fast
-  with cleb blea show "b = Rep_compact_basis a" by simp
+  with cleb blea show "b = Rep_compact_basis a" by (simp add: po_eq_conv)
 qed
 
 lemma finite_mub_closure_cb:
@@ -313,7 +313,7 @@ proof -
   with fin_img show "finite (mub_closure S)" by (rule finite_imageD)
 qed
 
-text \<open>Proposition 2.2.16 from Abramsky & Jung's Domain Theory - compactness for directed sets\<close>
+text \<open>Proposition 2.2.16 from Abramsky and Jung's Domain Theory - compactness for directed sets\<close>
 
 lemma directed_compactD:
   fixes x :: "'a::bifinite" and D :: "'a set"
@@ -408,7 +408,7 @@ next
   have "Rep_compact_basis b \<sqsubseteq> g a" unfolding g_def by blast
   moreover assume "x \<sqsubseteq> b"
   ultimately show "Rep_compact_basis x \<sqsubseteq> g a"
-    unfolding compact_le_def by order
+    unfolding compact_le_def by (rule below_trans[rotated])
 qed
 
 definition "down_closure (A::'b::po set) = {x. \<exists>y \<in> A. x \<sqsubseteq> y}"
@@ -511,7 +511,7 @@ next
   then obtain y where y: "y \<in> below_set ?a" and le: "a \<sqsubseteq> y" by blast
   from y have y: "y \<in> S" and le2: "y \<sqsubseteq> a"
     unfolding below_set_def compact_le_def by auto
-  from le le2 have "a = y" by order
+  from le le2 have "a = y" by (rule below_antisym)
   with y show "a \<in> S" by simp
 qed
 

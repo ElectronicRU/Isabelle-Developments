@@ -122,8 +122,11 @@ lemma joinable_sym: "a \<Up> b \<longleftrightarrow> b \<Up> a"
 lemma joinable_mono2: "a \<Up> b \<Longrightarrow> c \<sqsubseteq> b \<Longrightarrow> a \<Up> c"
   using joinable_mono1 joinable_sym by metis
 
-sublocale semilattice_meet: semilattice_inf meet below below_strict
-  by unfold_locales (fact meet_below1 meet_below2 meet_greatest)+
+text \<open>A fact rather than a \<open>sublocale\<close>, for the same reason as @{thm [source] below_order}.\<close>
+
+lemma semilattice_meet: "class.semilattice_inf meet below below_strict"
+  by (rule class.semilattice_inf.intro[OF below_order])
+    (unfold_locales, (fact meet_below1 meet_below2 meet_greatest)+)
 
 lemma join_mono1: "c \<squnion> b \<sqsubseteq> a \<squnion> b" if "a \<Up> b" "c \<sqsubseteq> a"
 proof -
@@ -157,7 +160,7 @@ corollary join_absorb_meet4[simp]: "a \<squnion> (b \<sqinter> a) = a"
   by (simp add: meet_sym)
 
 lemma meet_absorbI: "a \<sqsubseteq> b \<Longrightarrow> a \<sqinter> b = a"
-  by (rule semilattice_meet.inf_absorb1)
+  by (rule semilattice_inf.inf_absorb1[OF semilattice_meet])
 
 corollary meet_absorb_join[simp]: "a \<Up> b \<Longrightarrow> (a \<squnion> b) \<sqinter> a = a"
   using meet_absorbI[OF joinableD(1)] by (simp add: meet_sym)
@@ -175,9 +178,9 @@ lemma joinable_simps[simp]:
   "a \<Up> b \<sqinter> d" "a \<sqinter> c \<Up> b"
   "a \<sqinter> c \<Up> b \<sqinter> d"
 proof -
-  from assms show "a \<sqinter> c \<Up> b" by (auto intro: joinable_mono1)
-  then show "a \<sqinter> c \<Up> b \<sqinter> d" by (auto intro: joinable_mono2)
-  from assms show "a \<Up> b \<sqinter> d" by (auto intro: joinable_mono2)
+  from assms show "a \<sqinter> c \<Up> b" by (auto intro: joinable_mono1 meet_below1)
+  then show "a \<sqinter> c \<Up> b \<sqinter> d" by (auto intro: joinable_mono2 meet_below1)
+  from assms show "a \<Up> b \<sqinter> d" by (auto intro: joinable_mono2 meet_below1)
 qed (auto intro: joinable_mono1 joinable_mono2 joinableD[OF assms] joinableI)
 
 end
@@ -473,6 +476,301 @@ proof
   qed
 qed
 
+lemma meet_bottom [simp]:
+  fixes x :: "'a::bounded_complete"
+  shows "x \<sqinter> \<bottom> = \<bottom>" "\<bottom> \<sqinter> x = \<bottom>"
+  by (simp_all add: meet_sym meet_absorbI)
+
+lemma up_joinable_iff [simp]:
+  fixes x y :: "'a::bounded_complete"
+  shows "up\<cdot>x \<Up> up\<cdot>y \<longleftrightarrow> x \<Up> y"
+proof
+  assume "up\<cdot>x \<Up> up\<cdot>y"
+  then obtain z where "up\<cdot>x \<sqsubseteq> z" "up\<cdot>y \<sqsubseteq> z" unfolding joinable_def by blast
+  then show "x \<Up> y" by (cases z) (auto intro: joinableI)
+next
+  assume "x \<Up> y"
+  then obtain z where "x \<sqsubseteq> z" "y \<sqsubseteq> z" unfolding joinable_def by blast
+  then show "up\<cdot>x \<Up> up\<cdot>y" by (auto intro: joinableI[of _ "up\<cdot>z"])
+qed
+
+lemma up_join:
+  fixes x y :: "'a::bounded_complete"
+  assumes "x \<Up> y" shows "up\<cdot>x \<squnion> up\<cdot>y = up\<cdot>(x \<squnion> y)"
+proof (rule below_antisym)
+  have xy: "up\<cdot>x \<Up> up\<cdot>y" using assms by simp
+  show "up\<cdot>x \<squnion> up\<cdot>y \<sqsubseteq> up\<cdot>(x \<squnion> y)"
+    by (rule join_belowI) (simp_all add: joinableD[OF assms])
+  have "up\<cdot>x \<sqsubseteq> up\<cdot>x \<squnion> up\<cdot>y" "up\<cdot>y \<sqsubseteq> up\<cdot>x \<squnion> up\<cdot>y" using joinableD[OF xy] by simp_all
+  then show "up\<cdot>(x \<squnion> y) \<sqsubseteq> up\<cdot>x \<squnion> up\<cdot>y"
+    by (cases "up\<cdot>x \<squnion> up\<cdot>y") (simp_all add: join_belowI)
+qed
+
+lemma up_meet [simp]:
+  fixes x y :: "'a::bounded_complete"
+  shows "up\<cdot>x \<sqinter> up\<cdot>y = up\<cdot>(x \<sqinter> y)"
+proof (rule below_antisym)
+  show "up\<cdot>(x \<sqinter> y) \<sqsubseteq> up\<cdot>x \<sqinter> up\<cdot>y"
+    by (rule meet_greatest) (simp_all add: meet_below1 meet_below2)
+  have "up\<cdot>x \<sqinter> up\<cdot>y \<sqsubseteq> up\<cdot>x" "up\<cdot>x \<sqinter> up\<cdot>y \<sqsubseteq> up\<cdot>y" by (rule meet_below1, rule meet_below2)
+  then show "up\<cdot>x \<sqinter> up\<cdot>y \<sqsubseteq> up\<cdot>(x \<sqinter> y)"
+    by (cases "up\<cdot>x \<sqinter> up\<cdot>y") (simp_all add: meet_greatest)
+qed
+
+instance u :: (distributive_cpo) distributive_cpo
+proof
+  fix a b c :: "'a u" assume ab: "a \<Up> b"
+  show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
+  proof (cases a; cases b; cases c)
+    fix a' b' c' assume *: "a = up\<cdot>a'" "b = up\<cdot>b'" "c = up\<cdot>c'"
+    with ab have a'b': "a' \<Up> b'" by simp
+    have "c' \<sqinter> a' \<Up> c' \<sqinter> b'" by (rule joinableI[OF meet_below1 meet_below1])
+    with * a'b' show ?thesis by (simp add: up_join meet_join_distrib)
+  qed simp_all
+qed
+
+subsection \<open>Strict sums\<close>
+
+text \<open>A bounded set of a strict sum lies on one side, so its lub is computed there: projecting
+  onto the side with \<open>sscase\<close> transports bounds back and forth.\<close>
+
+lemma ssum_lub_sinl:
+  fixes A :: "('a::bounded_complete \<oplus> 'b::bounded_complete) set"
+  assumes "A <| sinl\<cdot>b" shows "\<exists>a. A <<| a"
+proof -
+  define d where "d = (sscase\<cdot>ID\<cdot>\<bottom> :: 'a \<oplus> 'b \<rightarrow> 'a)"
+  define l where "l = lub ((\<lambda>x. d\<cdot>x) ` A)"
+  have sinl_d_below: "sinl\<cdot>(d\<cdot>u) \<sqsubseteq> u" for u by (cases u) (simp_all add: d_def)
+  have sinl_d: "x = sinl\<cdot>(d\<cdot>x)" if "x \<sqsubseteq> sinl\<cdot>b" for x
+    using that by (cases x) (simp_all add: d_def)
+  have "d\<cdot>x \<sqsubseteq> b" if "x \<in> A" for x
+    using monofun_cfun_arg[OF is_ubD[OF assms that], of d] by (cases "b = \<bottom>") (simp_all add: d_def)
+  then have "(\<lambda>x. d\<cdot>x) ` A <| b" by (auto intro: is_ubI)
+  then have l: "(\<lambda>x. d\<cdot>x) ` A <<| l" unfolding l_def by (rule ex_bound_lub)
+  have "A <<| sinl\<cdot>l"
+  proof (rule is_lubI)
+    show "A <| sinl\<cdot>l"
+    proof (rule is_ubI)
+      fix x assume x: "x \<in> A"
+      have "d\<cdot>x \<sqsubseteq> l" using x by (blast intro: is_ubD[OF is_lubD1[OF l]])
+      then have "sinl\<cdot>(d\<cdot>x) \<sqsubseteq> sinl\<cdot>l" by (rule monofun_cfun_arg)
+      then show "x \<sqsubseteq> sinl\<cdot>l"
+        by (rule back_subst) (rule sinl_d[OF is_ubD[OF assms x], symmetric])
+    qed
+  next
+    fix u assume "A <| u"
+    then have "(\<lambda>x. d\<cdot>x) ` A <| d\<cdot>u" by (auto intro!: is_ubI monofun_cfun_arg dest: is_ubD)
+    with l have "l \<sqsubseteq> d\<cdot>u" by (rule is_lubD2)
+    then have "sinl\<cdot>l \<sqsubseteq> sinl\<cdot>(d\<cdot>u)" by (rule monofun_cfun_arg)
+    then show "sinl\<cdot>l \<sqsubseteq> u" using sinl_d_below by (rule below_trans)
+  qed
+  then show ?thesis ..
+qed
+
+lemma ssum_lub_sinr:
+  fixes A :: "('a::bounded_complete \<oplus> 'b::bounded_complete) set"
+  assumes "A <| sinr\<cdot>b" shows "\<exists>a. A <<| a"
+proof -
+  define d where "d = (sscase\<cdot>\<bottom>\<cdot>ID :: 'a \<oplus> 'b \<rightarrow> 'b)"
+  define l where "l = lub ((\<lambda>x. d\<cdot>x) ` A)"
+  have sinr_d_below: "sinr\<cdot>(d\<cdot>u) \<sqsubseteq> u" for u by (cases u) (simp_all add: d_def)
+  have sinr_d: "x = sinr\<cdot>(d\<cdot>x)" if "x \<sqsubseteq> sinr\<cdot>b" for x
+    using that by (cases x) (simp_all add: d_def)
+  have "d\<cdot>x \<sqsubseteq> b" if "x \<in> A" for x
+    using monofun_cfun_arg[OF is_ubD[OF assms that], of d] by (cases "b = \<bottom>") (simp_all add: d_def)
+  then have "(\<lambda>x. d\<cdot>x) ` A <| b" by (auto intro: is_ubI)
+  then have l: "(\<lambda>x. d\<cdot>x) ` A <<| l" unfolding l_def by (rule ex_bound_lub)
+  have "A <<| sinr\<cdot>l"
+  proof (rule is_lubI)
+    show "A <| sinr\<cdot>l"
+    proof (rule is_ubI)
+      fix x assume x: "x \<in> A"
+      have "d\<cdot>x \<sqsubseteq> l" using x by (blast intro: is_ubD[OF is_lubD1[OF l]])
+      then have "sinr\<cdot>(d\<cdot>x) \<sqsubseteq> sinr\<cdot>l" by (rule monofun_cfun_arg)
+      then show "x \<sqsubseteq> sinr\<cdot>l"
+        by (rule back_subst) (rule sinr_d[OF is_ubD[OF assms x], symmetric])
+    qed
+  next
+    fix u assume "A <| u"
+    then have "(\<lambda>x. d\<cdot>x) ` A <| d\<cdot>u" by (auto intro!: is_ubI monofun_cfun_arg dest: is_ubD)
+    with l have "l \<sqsubseteq> d\<cdot>u" by (rule is_lubD2)
+    then have "sinr\<cdot>l \<sqsubseteq> sinr\<cdot>(d\<cdot>u)" by (rule monofun_cfun_arg)
+    then show "sinr\<cdot>l \<sqsubseteq> u" using sinr_d_below by (rule below_trans)
+  qed
+  then show ?thesis ..
+qed
+
+instance ssum :: (bounded_complete, bounded_complete) bounded_complete
+proof
+  fix A :: "('a \<oplus> 'b) set" and b assume b: "A <| b"
+  show "\<exists>a. A <<| a"
+  proof (cases b)
+    case bottom with b show ?thesis using ssum_lub_sinl[of A \<bottom>] by simp
+  next
+    case (sinl x) with b show ?thesis by (simp add: ssum_lub_sinl)
+  next
+    case (sinr y) with b show ?thesis by (simp add: ssum_lub_sinr)
+  qed
+qed
+
+context
+  fixes x x' :: "'a::bounded_complete" and y y' :: "'b::bounded_complete"
+begin
+
+lemma sinl_meet [simp]: "sinl\<cdot>x \<sqinter> sinl\<cdot>x' = (sinl\<cdot>(x \<sqinter> x') :: 'a \<oplus> 'b)"
+proof (rule below_antisym)
+  let ?m = "sinl\<cdot>x \<sqinter> sinl\<cdot>x' :: 'a \<oplus> 'b"
+  show "sinl\<cdot>(x \<sqinter> x') \<sqsubseteq> ?m"
+    by (rule meet_greatest) (simp_all add: meet_below1 meet_below2)
+  have "?m \<sqsubseteq> sinl\<cdot>x" "?m \<sqsubseteq> sinl\<cdot>x'" by (rule meet_below1, rule meet_below2)
+  then show "?m \<sqsubseteq> sinl\<cdot>(x \<sqinter> x')"
+    by (cases ?m) (simp_all add: meet_greatest)
+qed
+
+lemma sinr_meet [simp]: "sinr\<cdot>y \<sqinter> sinr\<cdot>y' = (sinr\<cdot>(y \<sqinter> y') :: 'a \<oplus> 'b)"
+proof (rule below_antisym)
+  let ?m = "sinr\<cdot>y \<sqinter> sinr\<cdot>y' :: 'a \<oplus> 'b"
+  show "sinr\<cdot>(y \<sqinter> y') \<sqsubseteq> ?m"
+    by (rule meet_greatest) (simp_all add: meet_below1 meet_below2)
+  have "?m \<sqsubseteq> sinr\<cdot>y" "?m \<sqsubseteq> sinr\<cdot>y'" by (rule meet_below1, rule meet_below2)
+  then show "?m \<sqsubseteq> sinr\<cdot>(y \<sqinter> y')"
+    by (cases ?m) (simp_all add: meet_greatest)
+qed
+
+lemma sinl_sinr_meet [simp]: "sinl\<cdot>x \<sqinter> sinr\<cdot>y = (\<bottom> :: 'a \<oplus> 'b)" "sinr\<cdot>y \<sqinter> sinl\<cdot>x = (\<bottom> :: 'a \<oplus> 'b)"
+proof -
+  have "sinl\<cdot>x \<sqinter> sinr\<cdot>y \<sqsubseteq> sinl\<cdot>x" "sinl\<cdot>x \<sqinter> sinr\<cdot>y \<sqsubseteq> (sinr\<cdot>y :: 'a \<oplus> 'b)"
+    by (rule meet_below1, rule meet_below2)
+  then show "sinl\<cdot>x \<sqinter> sinr\<cdot>y = (\<bottom> :: 'a \<oplus> 'b)"
+    by (cases "sinl\<cdot>x \<sqinter> sinr\<cdot>y :: 'a \<oplus> 'b") simp_all
+  then show "sinr\<cdot>y \<sqinter> sinl\<cdot>x = (\<bottom> :: 'a \<oplus> 'b)" by (simp add: meet_sym)
+qed
+
+lemma sinl_joinable_iff [simp]: "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinl\<cdot>x' \<longleftrightarrow> x \<Up> x'"
+proof
+  assume "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinl\<cdot>x'"
+  then obtain z :: "'a \<oplus> 'b" where "sinl\<cdot>x \<sqsubseteq> z" "sinl\<cdot>x' \<sqsubseteq> z" unfolding joinable_def by blast
+  then show "x \<Up> x'" by (cases z) (auto intro: joinableI)
+next
+  assume "x \<Up> x'"
+  then obtain z where "x \<sqsubseteq> z" "x' \<sqsubseteq> z" unfolding joinable_def by blast
+  then show "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinl\<cdot>x'" by (auto intro: joinableI[of _ "sinl\<cdot>z"])
+qed
+
+lemma sinr_joinable_iff [simp]: "(sinr\<cdot>y :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y' \<longleftrightarrow> y \<Up> y'"
+proof
+  assume "(sinr\<cdot>y :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y'"
+  then obtain z :: "'a \<oplus> 'b" where "sinr\<cdot>y \<sqsubseteq> z" "sinr\<cdot>y' \<sqsubseteq> z" unfolding joinable_def by blast
+  then show "y \<Up> y'" by (cases z) (auto intro: joinableI)
+next
+  assume "y \<Up> y'"
+  then obtain z where "y \<sqsubseteq> z" "y' \<sqsubseteq> z" unfolding joinable_def by blast
+  then show "(sinr\<cdot>y :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y'" by (auto intro: joinableI[of _ "sinr\<cdot>z"])
+qed
+
+lemma sinl_sinr_joinable_iff [simp]:
+  "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y \<longleftrightarrow> x = \<bottom> \<or> y = \<bottom>" "(sinr\<cdot>y :: 'a \<oplus> 'b) \<Up> sinl\<cdot>x \<longleftrightarrow> x = \<bottom> \<or> y = \<bottom>"
+proof -
+  have "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y \<longleftrightarrow> x = \<bottom> \<or> y = \<bottom>"
+  proof
+    assume "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y"
+    then obtain z :: "'a \<oplus> 'b" where "sinl\<cdot>x \<sqsubseteq> z" "sinr\<cdot>y \<sqsubseteq> z" unfolding joinable_def by blast
+    then show "x = \<bottom> \<or> y = \<bottom>" by (cases z) simp_all
+  qed auto
+  then show "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y \<longleftrightarrow> x = \<bottom> \<or> y = \<bottom>"
+    "(sinr\<cdot>y :: 'a \<oplus> 'b) \<Up> sinl\<cdot>x \<longleftrightarrow> x = \<bottom> \<or> y = \<bottom>" by (simp_all add: joinable_sym)
+qed
+
+lemma sinl_join: "x \<Up> x' \<Longrightarrow> sinl\<cdot>x \<squnion> sinl\<cdot>x' = (sinl\<cdot>(x \<squnion> x') :: 'a \<oplus> 'b)"
+proof (rule below_antisym)
+  assume xx: "x \<Up> x'"
+  let ?j = "sinl\<cdot>x \<squnion> sinl\<cdot>x' :: 'a \<oplus> 'b"
+  have j: "(sinl\<cdot>x :: 'a \<oplus> 'b) \<Up> sinl\<cdot>x'" using xx by simp
+  show "?j \<sqsubseteq> sinl\<cdot>(x \<squnion> x')"
+    by (rule join_belowI) (simp_all add: joinableD[OF xx])
+  have "sinl\<cdot>x \<sqsubseteq> ?j" "sinl\<cdot>x' \<sqsubseteq> ?j" using joinableD[OF j] by simp_all
+  then show "sinl\<cdot>(x \<squnion> x') \<sqsubseteq> ?j"
+    by (cases ?j) (simp_all add: join_belowI)
+qed
+
+lemma sinr_join: "y \<Up> y' \<Longrightarrow> sinr\<cdot>y \<squnion> sinr\<cdot>y' = (sinr\<cdot>(y \<squnion> y') :: 'a \<oplus> 'b)"
+proof (rule below_antisym)
+  assume yy: "y \<Up> y'"
+  let ?j = "sinr\<cdot>y \<squnion> sinr\<cdot>y' :: 'a \<oplus> 'b"
+  have j: "(sinr\<cdot>y :: 'a \<oplus> 'b) \<Up> sinr\<cdot>y'" using yy by simp
+  show "?j \<sqsubseteq> sinr\<cdot>(y \<squnion> y')"
+    by (rule join_belowI) (simp_all add: joinableD[OF yy])
+  have "sinr\<cdot>y \<sqsubseteq> ?j" "sinr\<cdot>y' \<sqsubseteq> ?j" using joinableD[OF j] by simp_all
+  then show "sinr\<cdot>(y \<squnion> y') \<sqsubseteq> ?j"
+    by (cases ?j) (simp_all add: join_belowI)
+qed
+
+end
+
+instance ssum :: (distributive_cpo, distributive_cpo) distributive_cpo
+proof
+  fix a b c :: "'a \<oplus> 'b" assume ab: "a \<Up> b"
+  have ml: "x \<sqinter> x' \<Up> x \<sqinter> x''" for x x' x'' :: 'a by (rule joinableI[OF meet_below1 meet_below1])
+  have mr: "y \<sqinter> y' \<Up> y \<sqinter> y''" for y y' y'' :: 'b by (rule joinableI[OF meet_below1 meet_below1])
+  show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
+    using ab by (cases a; cases b; cases c)
+      (simp_all add: sinl_join sinr_join meet_join_distrib ml mr)
+qed
+
+subsection \<open>Cartesian products\<close>
+
+text \<open>Everything is componentwise.\<close>
+
+lemma prod_ub_iff: "A <| b \<longleftrightarrow> fst ` A <| fst b \<and> snd ` A <| snd b"
+  by (auto simp: is_ub_def below_prod_def)
+
+instance prod :: (bounded_complete, bounded_complete) bounded_complete
+proof
+  fix A :: "('a \<times> 'b) set" and b assume "A <| b"
+  then have "fst ` A <<| lub (fst ` A)" "snd ` A <<| lub (snd ` A)"
+    by (auto simp: prod_ub_iff intro: ex_bound_lub)
+  then have "A <<| (lub (fst ` A), lub (snd ` A))"
+    by (auto simp: is_lub_def prod_ub_iff below_prod_def)
+  then show "\<exists>a. A <<| a" ..
+qed
+
+lemma prod_joinable_iff: "x \<Up> y \<longleftrightarrow> fst x \<Up> fst y \<and> snd x \<Up> snd y"
+  unfolding joinable_def below_prod_def by (metis fst_conv snd_conv)
+
+context
+  fixes x y :: "'a::bounded_complete \<times> 'b::bounded_complete"
+begin
+
+lemma prod_meet: "x \<sqinter> y = (fst x \<sqinter> fst y, snd x \<sqinter> snd y)"
+proof (rule below_antisym)
+  show "x \<sqinter> y \<sqsubseteq> (fst x \<sqinter> fst y, snd x \<sqinter> snd y)"
+    using meet_below1[of x y] meet_below2[of x y] by (simp add: below_prod_def meet_greatest)
+  show "(fst x \<sqinter> fst y, snd x \<sqinter> snd y) \<sqsubseteq> x \<sqinter> y"
+    by (rule meet_greatest) (simp_all add: below_prod_def meet_below1 meet_below2)
+qed
+
+lemma prod_join: "x \<Up> y \<Longrightarrow> x \<squnion> y = (fst x \<squnion> fst y, snd x \<squnion> snd y)"
+proof (rule below_antisym)
+  assume xy: "x \<Up> y"
+  then have c: "fst x \<Up> fst y" "snd x \<Up> snd y" by (simp_all add: prod_joinable_iff)
+  show "x \<squnion> y \<sqsubseteq> (fst x \<squnion> fst y, snd x \<squnion> snd y)"
+    by (rule join_belowI) (simp_all add: below_prod_def joinableD[OF c(1)] joinableD[OF c(2)])
+  show "(fst x \<squnion> fst y, snd x \<squnion> snd y) \<sqsubseteq> x \<squnion> y"
+    using joinableD[OF xy] by (simp add: below_prod_def join_belowI)
+qed
+
+end
+
+instance prod :: (distributive_cpo, distributive_cpo) distributive_cpo
+proof
+  fix a b c :: "'a \<times> 'b" assume ab: "a \<Up> b"
+  then have c: "fst a \<Up> fst b" "snd a \<Up> snd b" by (simp_all add: prod_joinable_iff)
+  have "c \<sqinter> a \<Up> c \<sqinter> b" by (rule joinableI[OF meet_below1 meet_below1])
+  with ab c show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
+    by (simp add: prod_meet prod_join meet_join_distrib)
+qed
+
+
 subclass (in flat) bounded_complete
 proof
   fix A :: "'a set" and b :: 'a
@@ -483,6 +781,18 @@ proof
     by fast
   then show "\<exists>z. A <<| z"
     by (cases) (auto intro: is_lubI is_ubI dest: is_ubD)
+qed
+
+text \<open>Two joinable elements of a flat domain are comparable, so distributivity is a case split.\<close>
+
+instance flat \<subseteq> distributive_cpo
+proof
+  fix a b c :: 'a assume ab: "a \<Up> b"
+  have mb: "x \<sqinter> \<bottom> = \<bottom>" for x :: 'a by (simp add: meet_sym meet_absorbI)
+  from joinableD[OF ab] have "a = \<bottom> \<or> b = \<bottom> \<or> a = b"
+    by (metis ax_flat)
+  then show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
+    by (elim disjE) (simp_all add: mb join_bottom)
 qed
 
 instantiation "fun" :: (type, bounded_complete) bounded_complete
@@ -686,19 +996,20 @@ default_sort bifinite
 lemma (in bounded_complete) lattice:
   assumes "\<And>a b. a \<Up> b"
   shows "class.lattice meet below below_strict join"
-  by unfold_locales (auto intro: joinableD[OF assms] join_belowI)
+  by (intro class.lattice.intro semilattice_meet class.semilattice_sup.intro below_order)
+    (unfold_locales, auto intro: joinableD[OF assms] join_belowI)
 
 lemma (in bounded_complete) bdd_above_iff:
 "preorder.bdd_above (\<sqsubseteq>) A \<longleftrightarrow> (\<exists>a. A <| a)"
-  unfolding preorder.bdd_above_def[OF below_order.preorder_axioms] is_ub_def
+  unfolding preorder.bdd_above_def[OF class.order.axioms(1)[OF below_order]] is_ub_def
   by fast
 
 lemma (in bounded_complete) cclattice:
   assumes "\<And>a b. a \<Up> b"
   shows "class.conditionally_complete_lattice glb lub meet below below_strict join"
-proof
-qed (auto intro: joinableD[OF assms] join_belowI glb_below glb_greatest
-    lub_belowI[unfolded is_ub_def] below_lubI simp add: bdd_above_iff)
+  by (intro class.conditionally_complete_lattice.intro lattice[OF assms])
+    (unfold_locales, auto intro: joinableD[OF assms] join_belowI glb_below glb_greatest
+      lub_belowI[unfolded is_ub_def] below_lubI simp add: bdd_above_iff)
 
 instantiation lower_pd :: (bifinite) bounded_complete
 begin

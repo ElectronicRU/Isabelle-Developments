@@ -8,5 +8,12 @@ session "HOLCF-extra" = HOLCF +
     FiniteCF
     Bounded_Complete
     Directed
+    Definitions
+    MUB_Closure
+    Deflations
+    Koenigs
+    LowerPD_Representation
+    UpperPD_Representation
+    Cpo_Topology
   document_files
     "root.tex"
