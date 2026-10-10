@@ -1,7 +1,16 @@
 theory Subdomain 
   imports HOLCF "HOLCF-extra.Directed" "HOLCF-extra.Bounded_Complete"
+    "Order_Lattice_Props.Order_Lattice_Props"
   abbrevs ",," = "\<downharpoonright>"
 begin
+
+text \<open>\<open>Order_Lattice_Props\<close> switches on HOL's lattice syntax (bottom, meet, and so on), takes the
+  up-arrow for up-sets, and has its own order-based notion of directedness; HOLCF's meanings win
+  here.\<close>
+
+unbundle no lattice_syntax
+no_notation ord_class.upset_set (\<open>\<Up>\<close>)
+hide_const (open) ord_class.directed
 
 default_sort "{bifinite, distributive_cpo}"
 
@@ -22,7 +31,7 @@ next
   fix y assume "y \<in> D"
   with directed_lub[OF D(1)] is_lubD1 is_ubD have "y \<sqsubseteq> lub D" by blast
   moreover assume "x \<sqsubseteq> y"
-  ultimately show "x \<sqsubseteq> lub D" by order
+  ultimately show "x \<sqsubseteq> lub D" by (rule below_trans[rotated])
 qed
 
 lemma directed_approximants:
@@ -34,7 +43,7 @@ lemma directed_approximants:
 
 locale stable_subdomain =
   fixes S :: "'a set" (structure)
-  assumes strong_closed:  "T \<subseteq> S \<Longrightarrow> T <<| t \<Longrightarrow> t \<in> S"
+  assumes lub_closed:  "T \<subseteq> S \<Longrightarrow> T <<| t \<Longrightarrow> t \<in> S"
   assumes downward: "y \<in> S \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> x \<in> S"
 begin
 definition "proj a = lub {x \<in> S. x \<sqsubseteq> a}"
@@ -44,7 +53,7 @@ proof (rule directedI, safe)
   fix x y assume S: "x \<in> S" "y \<in> S"
   assume a: "x \<sqsubseteq> a" "y \<sqsubseteq> a"
   then have lub: "{x, y} <<| (x \<squnion> y)" by (rule join_is_lub)
-  from strong_closed[OF _ this] S have lubS: "x \<squnion> y \<in> S"
+  from lub_closed[OF _ this] S have lubS: "x \<squnion> y \<in> S"
     by blast
   from lub have le: "x \<sqsubseteq> x \<squnion> y" "y \<sqsubseteq> x \<squnion> y" by (auto dest: is_lubD1 is_ubD)
   moreover from a have "x \<squnion> y \<sqsubseteq> a"
@@ -54,7 +63,7 @@ proof (rule directedI, safe)
 qed
 
 lemma bot_in_S: "\<bottom> \<in> S"
-  using strong_closed[of "{}" "\<bottom>"] by simp
+  using lub_closed[of "{}" "\<bottom>"] by simp
 
 lemma proj_set_ne: "{x \<in> S. x \<sqsubseteq> a} \<noteq> {}"
 proof -
@@ -66,7 +75,7 @@ corollary proj_is_lub: "{x \<in> S. x \<sqsubseteq> a} <<| proj a"
   unfolding proj_def using proj_set_directed by (rule directed_lub)
 
 corollary proj_in_S: "proj a \<in> S"
-  using strong_closed[OF _ proj_is_lub] by blast
+  using lub_closed[OF _ proj_is_lub] by blast
 
 lemma proj_below: "proj a \<sqsubseteq> a"
   by (blast intro: proj_is_lub[THEN is_lubD2, of a a] is_ubI)
@@ -202,7 +211,7 @@ lemma p_range: "range (\<lambda>x. p\<cdot>x) = S"
 end
 
 
-locale strong_subdomain = stable_subdomain +
+locale semi_factor_subdomain = stable_subdomain +
   assumes slide_rule: "y \<in> S \<Longrightarrow> p\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
 
 lemma stable_subdomain_deflation:
@@ -231,7 +240,7 @@ text \<open>The range of any deflation is automatically closed under lubs of bou
   subsets: only downward closure distinguishes a stable-subdomain projection from a
   general deflation.\<close>
 
-lemma deflation_strong_closed:
+lemma deflation_lub_closed:
   assumes d: "deflation d" and T: "T \<subseteq> {x. d\<cdot>x = x}" and lub: "T <<| t"
   shows "d\<cdot>t = t"
 proof -
@@ -256,7 +265,7 @@ proof
   with dc show "x \<in> {x. d\<cdot>x = x}" by simp
 next
   fix T t assume "T \<subseteq> {x. d\<cdot>x = x}" "T <<| t"
-  with deflation_strong_closed[OF d] show "t \<in> {x. d\<cdot>x = x}" by simp
+  with deflation_lub_closed[OF d] show "t \<in> {x. d\<cdot>x = x}" by simp
 qed
 
 subsection \<open>Stable subdomains as a type of deflations\<close>
@@ -323,7 +332,7 @@ proof (rule admI)
     qed
     have rcx: "range C <<| x" using cpo_lubI[OF C(1)] C(3) by simp
     have "range C \<subseteq> {z. p\<cdot>z = z}" using fixed by auto
-    from deflation_strong_closed[OF defl this rcx]
+    from deflation_lub_closed[OF defl this rcx]
     show "cast\<cdot>(\<Squnion>i. D i)\<cdot>x = x" by (simp add: p_def)
   qed
 qed
@@ -339,7 +348,7 @@ lemma bounded_complete_subtypeI:
   fixes Rep :: "'b::pcpo \<Rightarrow> 'a::bounded_complete"
   assumes type: "type_definition Rep Abs Q"
     and below: "\<And>x y. (x \<sqsubseteq> y) = (Rep x \<sqsubseteq> Rep y)"
-    and Q_strong_closed: "\<And>A a. A \<subseteq> Q \<Longrightarrow> A <<| a \<Longrightarrow> a \<in> Q"
+    and Q_lub_closed: "\<And>A a. A \<subseteq> Q \<Longrightarrow> A <<| a \<Longrightarrow> a \<in> Q"
   shows "OFCLASS('b, bounded_complete_class)"
 proof
   interpret type_definition Rep Abs Q by (rule type)
@@ -354,7 +363,7 @@ proof
   qed
   then obtain l where l: "Rep ` A <<| l" using ex_bound_ex_lub by blast
   have "Rep ` A \<subseteq> Q" using Rep by auto
-  from Q_strong_closed[OF this l] have lQ: "l \<in> Q" .
+  from Q_lub_closed[OF this l] have lQ: "l \<in> Q" .
   have "A <<| Abs l"
   proof (rule is_lubI)
     show "A <| Abs l"
@@ -417,49 +426,6 @@ lemma cont2cont_meet [simp, cont2cont]:
   by (rule cont_apply [OF contg cont_meet_arg2 cont_compose [OF cont_meet_arg contf]])
 
 
-subsection \<open>Meet of two deflations\<close>
-
-text \<open>The meet of two deflations in the deflation order (the projection onto
-  @{term \<open>{x. f\<cdot>x = x} \<inter> {x. g\<cdot>x = x}\<close>}) is the glb of the descending chain of
-  composition-iterates of the cfun meet @{term \<open>f \<sqinter> g\<close>} (which is below @{term ID}
-  but in general not idempotent).\<close>
-
-definition defl_meet :: "('a \<rightarrow> 'a) \<Rightarrow> ('a \<rightarrow> 'a) \<Rightarrow> ('a \<rightarrow> 'a)" where
-  "defl_meet f g = glb (range (\<lambda>n. iterate n\<cdot>(f \<sqinter> g)))"
-
-lemma defl_meet_is_glb: "is_glb (range (\<lambda>n. iterate n\<cdot>(f \<sqinter> g))) (defl_meet f g)"
-  unfolding defl_meet_def by (rule glb) auto
-
-lemma defl_meet_below_iterate: "defl_meet f g \<sqsubseteq> iterate n\<cdot>(f \<sqinter> g)"
-  using defl_meet_is_glb is_glb_below by blast
-
-lemma defl_meet_greatest: "(\<And>n. b \<sqsubseteq> iterate n\<cdot>(f \<sqinter> g)) \<Longrightarrow> b \<sqsubseteq> defl_meet f g"
-  using defl_meet_is_glb is_glb_greatest by blast
-
-lemma iterate_0_ID: "iterate 0\<cdot>F = ID"
-  by (simp add: cfun_eq_iff iterate_0)
-
-lemma defl_meet_below_ID: "defl_meet f g \<sqsubseteq> ID"
-  using defl_meet_below_iterate[where n=0] by (simp add: iterate_0_ID)
-
-lemma defl_meet_idem_below:
-  "defl_meet f g oo defl_meet f g \<sqsubseteq> defl_meet f g"
-proof (rule defl_meet_greatest)
-  fix n
-  have "defl_meet f g oo defl_meet f g \<sqsubseteq> iterate n\<cdot>(f \<sqinter> g) oo ID"
-    by (intro monofun_cfun monofun_cfun_arg defl_meet_below_iterate defl_meet_below_ID)
-  then show "defl_meet f g oo defl_meet f g \<sqsubseteq> iterate n\<cdot>(f \<sqinter> g)" by simp
-qed
-
-lemma defl_meet_idem:
-  assumes f: "deflation f"
-  shows "defl_meet f g oo defl_meet f g = defl_meet f g"
-proof (rule below_antisym[OF defl_meet_idem_below])
-  show "defl_meet f g \<sqsubseteq> defl_meet f g oo defl_meet f g"
-    sorry
-qed
-
-
 section \<open>Stable subdomains as a lattice of sets\<close>
 
 text \<open>Stable subdomains form a closure system: they contain @{term UNIV} and are
@@ -499,11 +465,11 @@ next
     fix X assume "X \<in> \<S>"
     with assms have "stable_subdomain X" by simp
     moreover from T \<open>X \<in> \<S>\<close> have "T \<subseteq> X" by auto
-    ultimately show "t \<in> X" using lub by (rule stable_subdomain.strong_closed)
+    ultimately show "t \<in> X" using lub by (rule stable_subdomain.lub_closed)
   qed
 qed
 
-text \<open>Jung, Lemma 4.1.5(ii) (one direction): a finer strong ideal has a smaller projection.\<close>
+text \<open>Jung, Lemma 4.1.5(ii) (one direction): a finer stable subdomain has a smaller projection.\<close>
 (* NOTE: this can be shown without going to definitions by lemma deflation.belowI *)
 lemma proj_mono_subdomain:
   assumes A: "stable_subdomain A" and S: "stable_subdomain S" and sub: "A \<subseteq> S"
@@ -648,16 +614,16 @@ proof -
   finally show "A.p\<cdot>y \<squnion> B.p\<cdot>y = J.p\<cdot>y" .
 qed
 
-text \<open>Jung, Lemma 4.1.9(i): the pointwise join of two strong subdomains again satisfies the
+text \<open>Jung, Lemma 4.1.9(i): the pointwise join of two semi-factors again satisfies the
   slide condition.  The projection of the join decomposes as \<open>p\<^bsub>A\<^esub> y \<squnion> p\<^bsub>B\<^esub> y\<close>, and the
   argument slides first through @{term A} and then through @{term B}.\<close>
 
-lemma strong_subdomain_join':
-  assumes As: "strong_subdomain A" and Bs: "strong_subdomain B"
-  shows "strong_subdomain J"
+lemma semi_factor_subdomain_join':
+  assumes As: "semi_factor_subdomain A" and Bs: "semi_factor_subdomain B"
+  shows "semi_factor_subdomain J"
 proof
-  interpret As: strong_subdomain A by (rule As)
-  interpret Bs: strong_subdomain B by (rule Bs)
+  interpret As: semi_factor_subdomain A by (rule As)
+  interpret Bs: semi_factor_subdomain B by (rule Bs)
   fix x y assume yJ: "y \<in> J" and pJx_y: "J.p\<cdot>x \<sqsubseteq> y"
   define pa where "pa = A.p\<cdot>y"
   define pb where "pb = B.p\<cdot>y"
@@ -704,7 +670,7 @@ proof (rule subsetI)
   have "{a, b} \<subseteq> K" using a b AK BK by blast
   moreover have "{a, b} <<| a \<squnion> b"
     by (rule join_is_lub[OF joinableD(1)[OF ab] joinableD(2)[OF ab]])
-  ultimately have "a \<squnion> b \<in> K" by (rule K.strong_closed)
+  ultimately have "a \<squnion> b \<in> K" by (rule K.lub_closed)
   with x show "x \<in> K" by simp
 qed
 
@@ -723,9 +689,9 @@ qed
 
 end
 
-lemma strong_subdomain_join: "strong_subdomain A \<Longrightarrow> strong_subdomain B \<Longrightarrow>
-  strong_subdomain {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
-  using strong_subdomain_join'[OF strong_subdomain.axioms(1) strong_subdomain.axioms(1)]
+lemma semi_factor_subdomain_join: "semi_factor_subdomain A \<Longrightarrow> semi_factor_subdomain B \<Longrightarrow>
+  semi_factor_subdomain {a \<squnion> b |a b. a \<in> A \<and> b \<in> B \<and> a \<Up> b}"
+  using semi_factor_subdomain_join'[OF semi_factor_subdomain.axioms(1) semi_factor_subdomain.axioms(1)]
   by fast
 
 lemma lub_join:
@@ -828,7 +794,7 @@ proof -
 qed
 
 text \<open>The fixed points of @{term dd} form a stable subdomain (downward by
-  @{thm dd_fixed_downward}, strong-closed since @{term dd} is monotone and below @{term ID}).\<close>
+  @{thm dd_fixed_downward}, closed under existing lubs since @{term dd} is monotone and below @{term ID}).\<close>
 lemma dd_fixes_stable: "stable_subdomain {x. dd\<cdot>x = x}"
 proof
   fix x y assume "y \<in> {x. dd\<cdot>x = x}" and yx: "x \<sqsubseteq> y"
@@ -866,7 +832,7 @@ qed
 
 text \<open>\dots\ and the fixes are the \emph{least} such stable subdomain: any stable @{term S}
   containing every base set contains them.  Each \<open>p\<^bsub>A\<^esub>\<cdot>x \<in> A \<subseteq> S\<close>;
-  their (directed) lub is @{term \<open>dd\<cdot>x = x\<close>}, which @{term S} contains by strong closure.\<close>
+  their (directed) lub is @{term \<open>dd\<cdot>x = x\<close>}, which @{term S} contains, being closed under lubs.\<close>
 lemma dd_fixes_least:
   assumes S: "stable_subdomain S" and sub: "\<And>A. A \<in> \<A> \<Longrightarrow> A \<subseteq> S"
   shows "{x. dd\<cdot>x = x} \<subseteq> S"
@@ -888,7 +854,7 @@ proof (rule subsetI)
     moreover have "lub ((\<lambda>A. stable_subdomain.p A\<cdot>x) ` \<A>) = x" using dd_app[of x] fx by simp
     ultimately show ?thesis by simp
   qed
-  ultimately show "x \<in> S" by (rule S.strong_closed)
+  ultimately show "x \<in> S" by (rule S.lub_closed)
 qed
 
 text \<open>Combining the three facts: the fixes of @{term dd} are exactly the least stable
@@ -991,49 +957,49 @@ lemma p_below_iff_le: "\<p>\<^bsub>A\<^esub> \<sqsubseteq> \<p>\<^bsub>B\<^esub>
   using le_of_p_below p_below_of_le ..
 
 text \<open>The bottom subdomain @{term \<open>{\<bottom>}\<close>} satisfies the slide condition trivially.\<close>
-lemma strong_subdomain_bot: "strong_subdomain {\<bottom>}"
-proof (intro strong_subdomain.intro[OF stable_subdomain_bot] strong_subdomain_axioms.intro)
+lemma semi_factor_subdomain_bot: "semi_factor_subdomain {\<bottom>}"
+proof (intro semi_factor_subdomain.intro[OF stable_subdomain_bot] semi_factor_subdomain_axioms.intro)
   fix x y assume "y \<in> {\<bottom>}" and "stable_subdomain.p {\<bottom>}\<cdot>x \<sqsubseteq> y"
   then have "y = \<bottom>" by simp
   then show "x \<Up> y" by simp
 qed
 
-definition "is_strong A \<equiv> strong_subdomain (set_of_subdom A)"
+definition "is_semi_factor A \<equiv> semi_factor_subdomain (set_of_subdom A)"
 
-lemma is_strongI:
+lemma is_semi_factorI:
   assumes slide: "\<And>x y. y \<in> set_of_subdom A \<Longrightarrow> \<p>\<^bsub>A\<^esub>\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
-  shows "is_strong A"
-  unfolding is_strong_def using assms
-  by transfer (intro strong_subdomain_axioms.intro strong_subdomain.intro)
+  shows "is_semi_factor A"
+  unfolding is_semi_factor_def using assms
+  by transfer (intro semi_factor_subdomain_axioms.intro semi_factor_subdomain.intro)
 
-lemma is_strong_bot: "is_strong bot"
-  by (rule is_strongI, transfer, simp)
+lemma is_semi_factor_bot: "is_semi_factor bot"
+  by (rule is_semi_factorI, transfer, simp)
 
-lemma is_strong_top: "is_strong top"
-  by (rule is_strongI, transfer)
+lemma is_semi_factor_top: "is_semi_factor top"
+  by (rule is_semi_factorI, transfer)
     (auto intro: joinableI simp add: p_UNIV)
 
-text \<open>@{const strong_subdomain} lifts through the binary join (Jung 4.1.9(i)).\<close>
-lemma strong_subdomain_sup:
-  assumes "is_strong a" and "is_strong b"
-  shows "is_strong (sup a b)"
+text \<open>@{const semi_factor_subdomain} lifts through the binary join (Jung 4.1.9(i)).\<close>
+lemma is_semi_factor_sup:
+  assumes "is_semi_factor a" and "is_semi_factor b"
+  shows "is_semi_factor (sup a b)"
   using assms
-  unfolding is_strong_def by (transfer, intro strong_subdomain_join)
+  unfolding is_semi_factor_def by (transfer, intro semi_factor_subdomain_join)
 
 text \<open>\dots\ and hence, by induction, through finite suprema.\<close>
-lemma finite_strong_Sup:
-  assumes "finite \<A>" and "\<And>A. A \<in> \<A> \<Longrightarrow> is_strong A"
-  shows "is_strong (Sup \<A>)"
+lemma finite_semi_factor_Sup:
+  assumes "finite \<A>" and "\<And>A. A \<in> \<A> \<Longrightarrow> is_semi_factor A"
+  shows "is_semi_factor (Sup \<A>)"
   using assms
 proof (induction \<A> rule: finite_induct)
   case empty
-  show ?case by (simp add: is_strong_def strong_subdomain_bot bot_stable_subdom.rep_eq)
+  show ?case by (simp add: is_semi_factor_def semi_factor_subdomain_bot bot_stable_subdom.rep_eq)
 next
   case (insert A \<A>)
-  from insert.prems have "is_strong A" by blast
-  moreover have "is_strong (Sup \<A>)"
+  from insert.prems have "is_semi_factor A" by blast
+  moreover have "is_semi_factor (Sup \<A>)"
     by (rule insert.IH) (use insert.prems in blast)
-  ultimately show ?case using strong_subdomain_sup
+  ultimately show ?case using is_semi_factor_sup
     by simp
 qed
 
@@ -1064,13 +1030,13 @@ proof -
   show ?thesis by (simp add: image_image stable_subdom_p.rep_eq)
 qed
 
-lemma directed_strong_sup:
+lemma directed_semi_factor_Sup:
   fixes \<A> :: "'a stable_subdom set"
   assumes directed: "\<And>X Y. X \<in> \<A> \<Longrightarrow> Y \<in> \<A> \<Longrightarrow> \<exists>Z \<in> \<A>. X \<le> Z \<and> Y \<le> Z"
     and nonempty: "\<A> \<noteq> {}"
-    and strong: "\<And>A. A \<in> \<A> \<Longrightarrow> is_strong A"
-  shows "is_strong (Sup \<A>)"
-proof (rule is_strongI)
+    and sf: "\<And>A. A \<in> \<A> \<Longrightarrow> is_semi_factor A"
+  shows "is_semi_factor (Sup \<A>)"
+proof (rule is_semi_factorI)
   fix x y assume y: "y \<in> set_of_subdom (Sup \<A>)"
   assume px_below: "\<p>\<^bsub>Sup \<A>\<^esub>\<cdot>x \<sqsubseteq> y"
   from directed_stable_proj_sup[OF directed nonempty]
@@ -1083,9 +1049,9 @@ proof (rule is_strongI)
 
   have xpAy: "x \<Up> \<p>\<^bsub>A\<^esub>\<cdot>y" if "A \<in> \<A>" for A
   proof - 
-    interpret A: strong_subdomain "set_of_subdom A"
+    interpret A: semi_factor_subdomain "set_of_subdom A"
       rewrites "stable_subdomain.p (set_of_subdom A) \<equiv> \<p>\<^bsub>A\<^esub>"
-      by (simp_all add: strong[OF that, unfolded is_strong_def] stable_subdom_p.rep_eq)
+      by (simp_all add: sf[OF that, unfolded is_semi_factor_def] stable_subdom_p.rep_eq)
     have "\<p>\<^bsub>A\<^esub> \<in> ?P" by (auto simp add: that)
     from that have pA_dd: "\<p>\<^bsub>A\<^esub> \<sqsubseteq> ?p" by (intro p_below_of_le Sup_upper)
     then have "\<p>\<^bsub>A\<^esub>\<cdot>x = \<p>\<^bsub>A\<^esub>\<cdot>(?p\<cdot>x)"
@@ -1146,10 +1112,10 @@ proof (rule order_antisym)
     by (rule Sup_least, erule imageE, auto simp add: Sup_subset_mono Fpow_def )
 qed
 
-lemma strong_sup:
+lemma is_semi_factor_Sup:
   fixes \<A> :: "'a stable_subdom set"
-  assumes strong: "\<And>A. A \<in> \<A> \<Longrightarrow> is_strong A"
-  shows "is_strong (Sup \<A>)"
+  assumes sf: "\<And>A. A \<in> \<A> \<Longrightarrow> is_semi_factor A"
+  shows "is_semi_factor (Sup \<A>)"
 proof -
   have directed: "X \<in> Sup ` Fpow(\<A>) \<Longrightarrow> Y \<in> Sup ` Fpow(\<A>) \<Longrightarrow> \<exists>Z \<in> Sup ` Fpow(\<A>). X \<le> Z \<and> Y \<le> Z"
     for X Y
@@ -1161,10 +1127,10 @@ proof -
     then show "x \<union> y \<in> Fpow(\<A>)" by (simp add: Fpow_def)
   qed
   moreover have "Sup ` Fpow(\<A>) \<noteq> {}" by (simp add: Fpow_not_empty)
-  moreover have "B \<in> Sup ` Fpow(\<A>) \<Longrightarrow> is_strong (B)" for B
-    using finite_strong_Sup strong unfolding Fpow_def by auto
-  ultimately have "is_strong (Sup (Sup ` Fpow(\<A>)))"
-    by (rule directed_strong_sup)
+  moreover have "B \<in> Sup ` Fpow(\<A>) \<Longrightarrow> is_semi_factor (B)" for B
+    using finite_semi_factor_Sup sf unfolding Fpow_def by auto
+  ultimately have "is_semi_factor (Sup (Sup ` Fpow(\<A>)))"
+    by (rule directed_semi_factor_Sup)
   then show ?thesis by (simp add: Sup_of_Fpow)
 qed
 
@@ -1228,7 +1194,7 @@ proof -
   then have "y \<sqsubseteq> \<p>\<^bsub>inf A B\<^esub>\<cdot>x \<longleftrightarrow> y \<sqsubseteq> \<p>\<^bsub>A\<^esub>\<cdot>x \<and> y \<sqsubseteq> \<p>\<^bsub>B\<^esub>\<cdot>x" for y
     by fast
   then show ?thesis
-    by (intro below_antisym) auto
+    using meet_below1 meet_below2 by (blast intro: below_antisym meet_greatest)
 qed
 
 lemma p_joinable[simp]: "\<p>\<^bsub>A\<^esub>\<cdot>x \<Up> \<p>\<^bsub>B\<^esub>\<cdot>x"
@@ -1236,7 +1202,7 @@ lemma p_joinable[simp]: "\<p>\<^bsub>A\<^esub>\<cdot>x \<Up> \<p>\<^bsub>B\<^esu
 
 lemma stable_subdom_proj_eqI:
 "\<p>\<^bsub>A\<^esub> = \<p>\<^bsub>B\<^esub> \<Longrightarrow> A = B"
-  by (intro order_antisym le_of_p_below, simp_all)
+  by (intro order.antisym le_of_p_below, simp_all)
 
 instance stable_subdom :: ("{bifinite,distributive_cpo}") distrib_lattice
   by (intro_classes, intro stable_subdom_proj_eqI cfun_eqI)
@@ -1258,26 +1224,26 @@ lemma p_comp_inf2:  "\<p>\<^bsub>a\<^esub>\<cdot>(\<p>\<^bsub>b\<^esub>\<cdot>x)
 
 lemma (in stable_subdomain) join_closed:
   "a \<Up> b \<Longrightarrow> a \<in> S \<Longrightarrow> b \<in> S \<Longrightarrow> a \<squnion> b \<in> S"
-  using strong_closed[OF _ joinable_lub]
+  using lub_closed[OF _ joinable_lub]
   by fast
 
-text \<open>Jung, Lemma 4.1.9(ii): the meet of two strong subdomains is strong.  Using
+text \<open>Jung, Lemma 4.1.9(ii): the meet of two semi-factors is a semi-factor.  Using
   \<open>p\<^bsub>a\<sqinter>b\<^esub>\<cdot>x = p\<^bsub>a\<^esub>\<cdot>(p\<^bsub>b\<^esub>\<cdot>x)\<close>, the slide condition of @{term a} gives
   \<open>p\<^bsub>b\<^esub>\<cdot>x \<Up> y\<close>; the join \<open>p\<^bsub>b\<^esub>\<cdot>x \<squnion> y\<close> lies in @{term b}, and the slide condition of
   @{term b} then bounds @{term x} and @{term y}.\<close>
-lemma is_strong_inf:
-  assumes a: "is_strong a" and b: "is_strong b"
-  shows "is_strong (inf a b)"
-proof (rule is_strongI)
+lemma is_semi_factor_inf:
+  assumes a: "is_semi_factor a" and b: "is_semi_factor b"
+  shows "is_semi_factor (inf a b)"
+proof (rule is_semi_factorI)
   fix x y assume y: "y \<in> set_of_subdom (inf a b)" and px: "\<p>\<^bsub>inf a b\<^esub>\<cdot>x \<sqsubseteq> y"
   from y have yA: "y \<in> set_of_subdom a" and yB: "y \<in> set_of_subdom b"
     by (auto simp: set_of_subdom_inf)
-  interpret A: strong_subdomain "set_of_subdom a"
+  interpret A: semi_factor_subdomain "set_of_subdom a"
     rewrites "stable_subdomain.p (set_of_subdom a) \<equiv> \<p>\<^bsub>a\<^esub>"
-    by (simp_all add: a[unfolded is_strong_def] stable_subdom_p.rep_eq)
-  interpret B: strong_subdomain "set_of_subdom b"
+    by (simp_all add: a[unfolded is_semi_factor_def] stable_subdom_p.rep_eq)
+  interpret B: semi_factor_subdomain "set_of_subdom b"
     rewrites "stable_subdomain.p (set_of_subdom b) \<equiv> \<p>\<^bsub>b\<^esub>"
-    by (simp_all add: b[unfolded is_strong_def] stable_subdom_p.rep_eq)
+    by (simp_all add: b[unfolded is_semi_factor_def] stable_subdom_p.rep_eq)
   from px have "\<p>\<^bsub>a\<^esub>\<cdot>(\<p>\<^bsub>b\<^esub>\<cdot>x) \<sqsubseteq> y" by (simp add: p_comp_inf2)
   with yA have step1: "\<p>\<^bsub>b\<^esub>\<cdot>x \<Up> y" by (rule A.slide_rule)
   with yB have memB: "(\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y \<in> set_of_subdom b"
@@ -1391,24 +1357,58 @@ proof -
   qed
 qed
 
+text \<open>The frame law: binary meet distributes over arbitrary joins.  An element of
+  \<open>A \<sqinter> \<Squnion>\<B>\<close> is the lub of its projections through the members of \<open>\<B>\<close> (@{thm [source] proj_Sup}),
+  and each of those lies in \<open>A \<sqinter> B\<close>.\<close>
+
+lemma inf_Sup_stable_subdom:
+  fixes A :: "'a stable_subdom"
+  shows "inf A (Sup \<B>) = (SUP B\<in>\<B>. inf A B)"
+proof (rule order.antisym)
+  show "(SUP B\<in>\<B>. inf A B) \<le> inf A (Sup \<B>)"
+    by (rule SUP_least) (auto intro: inf_mono Sup_upper le_infI2)
+  show "inf A (Sup \<B>) \<le> (SUP B\<in>\<B>. inf A B)"
+    unfolding less_eq_stable_subdom.rep_eq
+  proof
+    fix y assume "y \<in> set_of_subdom (inf A (Sup \<B>))"
+    then have yA: "y \<in> set_of_subdom A" and yB: "y \<in> set_of_subdom (Sup \<B>)"
+      by (simp_all add: inf_stable_subdom.rep_eq)
+    let ?C = "SUP B\<in>\<B>. inf A B"
+    have "\<p>\<^bsub>Sup \<B>\<^esub>\<cdot>y = y" using yB by (simp add: p_fixes)
+    then have lub: "(\<lambda>B. \<p>\<^bsub>B\<^esub>\<cdot>y) ` \<B> <<| y" using proj_Sup[where \<A> = \<B> and x = y] by simp
+    have "(\<lambda>B. \<p>\<^bsub>B\<^esub>\<cdot>y) ` \<B> \<subseteq> set_of_subdom ?C"
+    proof safe
+      fix B assume B: "B \<in> \<B>"
+      have "\<p>\<^bsub>B\<^esub>\<cdot>y \<in> set_of_subdom (inf A B)"
+        using subdom.downward[OF yA subdom.p_below] by (simp add: inf_stable_subdom.rep_eq)
+      moreover have "inf A B \<le> ?C" using B by (rule SUP_upper)
+      ultimately show "\<p>\<^bsub>B\<^esub>\<cdot>y \<in> set_of_subdom ?C" by (auto simp: less_eq_stable_subdom.rep_eq)
+    qed
+    then show "y \<in> set_of_subdom ?C" using lub by (rule subdom.lub_closed)
+  qed
+qed
+
+instance stable_subdom :: ("{bifinite,distributive_cpo}") complete_heyting_algebra
+  by standard (rule inf_Sup_stable_subdom)
+
 lemma Sup_contains_top: "top \<in> (X::'a::complete_lattice set) \<Longrightarrow> Sup X = top"
-  by (rule order_antisym) (auto intro: Sup_upper)
+  by (rule order.antisym) (auto intro: Sup_upper)
 
-section \<open>The type of strong subdomains (semi-factors)\<close>
+section \<open>The type of semi-factors\<close>
 
-text \<open>Following Jung, the strong subdomains form a complete lattice.  Sups, binary
-  meets, top and bottom are inherited from the type \<open>'a stable_subdom\<close> (the strong
-  subdomains are closed under those operations), but an arbitrary intersection of
-  strong subdomains need not be strong.  The meet of a family is therefore recovered
-  as the sup of its strong lower bounds.\<close>
+text \<open>Following Jung, the semi-factors (stable subdomains satisfying the slide condition) form a
+  complete lattice.  Sups, binary meets, top and bottom are inherited from the type
+  \<open>'a stable_subdom\<close> (the semi-factors are closed under those operations), but an arbitrary
+  intersection of semi-factors need not be one.  The meet of a family is therefore recovered
+  as the sup of its semi-factor lower bounds.\<close>
 
-typedef 'a semi_factor = "{A :: 'a stable_subdom. is_strong A}"
+typedef 'a semi_factor = "{A :: 'a stable_subdom. is_semi_factor A}"
   morphisms subdom_of_factor factor_of_subdom
-  using is_strong_bot by blast
+  using is_semi_factor_bot by blast
 
 setup_lifting type_definition_semi_factor
 
-lemma is_strong_subdom_of_factor: "is_strong (subdom_of_factor F)"
+lemma is_semi_factor_subdom_of_factor: "is_semi_factor (subdom_of_factor F)"
   using subdom_of_factor by blast
 
 instantiation semi_factor :: ("{bifinite,distributive_cpo}") complete_lattice
@@ -1421,32 +1421,35 @@ lift_definition less_semi_factor :: "'a semi_factor \<Rightarrow> 'a semi_factor
   is "(<)" .
 
 lift_definition inf_semi_factor :: "'a semi_factor \<Rightarrow> 'a semi_factor \<Rightarrow> 'a semi_factor"
-  is "inf" by (rule is_strong_inf)
+  is "inf" by (rule is_semi_factor_inf)
 
 lift_definition sup_semi_factor :: "'a semi_factor \<Rightarrow> 'a semi_factor \<Rightarrow> 'a semi_factor"
-  is "sup" by (rule strong_subdomain_sup)
+  is "sup" by (rule is_semi_factor_sup)
 
 lift_definition top_semi_factor :: "'a semi_factor"
-  is "top" by (rule is_strong_top)
+  is "top" by (rule is_semi_factor_top)
 
 lift_definition bot_semi_factor :: "'a semi_factor"
-  is "bot" by (rule is_strong_bot)
+  is "bot" by (rule is_semi_factor_bot)
 
 lift_definition Sup_semi_factor :: "'a semi_factor set \<Rightarrow> 'a semi_factor"
-  is "Sup" by (rule strong_sup)
+  is "Sup" by (rule is_semi_factor_Sup)
 
-text \<open>Arbitrary meet = sup of the strong lower bounds.\<close>
+text \<open>Arbitrary meet = sup of the semi-factor lower bounds.\<close>
 lift_definition Inf_semi_factor :: "'a semi_factor set \<Rightarrow> 'a semi_factor" 
-  is "\<lambda>\<S>. Sup {b. (\<forall>a\<in>\<S>. b \<le> a) \<and> is_strong b}"
-  by (auto intro: strong_sup)
+  is "\<lambda>\<S>. Sup {b. (\<forall>a\<in>\<S>. b \<le> a) \<and> is_semi_factor b}"
+  by (auto intro: is_semi_factor_Sup)
 
 instance
-  by (standard; transfer) (auto intro: Sup_least Sup_upper is_strong_top Sup_contains_top)
+  by (standard; transfer) (auto intro: Sup_least Sup_upper is_semi_factor_top Sup_contains_top)
 
 end
 
 instance semi_factor ::  ("{bifinite,distributive_cpo}") distrib_lattice
   by (intro_classes, transfer', rule sup_inf_distrib1)
+
+instance semi_factor :: ("{bifinite,distributive_cpo}") complete_heyting_algebra
+  by standard (transfer, rule ch_dist)
 
 lift_definition semi_factor_p :: "'a semi_factor \<Rightarrow> 'a \<rightarrow> 'a"
 is "stable_subdom_p" .
@@ -1454,10 +1457,10 @@ is "stable_subdom_p" .
 lift_definition set_of_factor :: "'a semi_factor \<Rightarrow> 'a set"
 is "set_of_subdom" .
 
-interpretation semi_factor: strong_subdomain "set_of_factor A"
+interpretation semi_factor: semi_factor_subdomain "set_of_factor A"
   rewrites semi_factor_p_eq: "stable_subdomain.p (set_of_factor A) \<equiv> semi_factor_p A"
 proof -
-  show "strong_subdomain (set_of_factor A)" by (transfer, simp add: is_strong_def)
+  show "semi_factor_subdomain (set_of_factor A)" by (transfer, simp add: is_semi_factor_def)
   show "stable_subdomain.p (set_of_factor A) \<equiv> semi_factor_p A"
     unfolding set_of_factor.rep_eq semi_factor_p.rep_eq
       stable_subdom_p.rep_eq .

@@ -4,24 +4,18 @@ begin
 
 default_sort pcpo
 
-section \<open>Levels of detail as continuous congruences (intrinsic complete lattice)\<close>
+section \<open>Continuous congruences (functional-dependence relations)\<close>
 
 text \<open>
-  An LOD over a cpo \<^typ>\<open>'a\<close> is modelled \<^emph>\<open>intrinsically\<close> as the quotient \<^emph>\<open>preorder\<close>
-  induced by a continuous map: a relation \<^term>\<open>R\<close> on \<^typ>\<open>'a\<close> that is transitive,
-  refines the cpo order \<^term>\<open>(\<sqsubseteq>)\<close>, and is admissible (Scott-closed) in each argument.
+  A \<^emph>\<open>continuous congruence\<close> on a cpo \<^typ>\<open>'a\<close> is a relation \<^term>\<open>R\<close> that is transitive,
+  refines the cpo order \<^term>\<open>(\<sqsubseteq>)\<close>, and is admissible (Scott-closed) in each argument: a
+  coarser ``below''.  The motivating instance is the kernel order \<^term>\<open>\<lambda>x y. f\<cdot>x \<sqsubseteq> f\<cdot>y\<close> of a
+  continuous map; a bigger relation identifies more points, i.e.\ is \<^emph>\<open>coarser\<close>.
 
-  Unlike a bare partition this keeps the quotient order (the placement-insensitive content
-  that \<^file>\<open>Coslice.thy\<close>'s factoring relation got entangled with the embedding into
-  \<^typ>\<open>udom\<close>).  Being an \<^emph>\<open>intersection-closed family of admissible predicates\<close> — a Moore
-  family inside the complete lattice \<^typ>\<open>'a \<Rightarrow> 'a \<Rightarrow> bool\<close> — these form a \<^emph>\<open>complete\<close>
-  lattice, so all meets and joins exist.
-
-  Order convention here is the inherited relation inclusion: \<^term>\<open>a \<le> b\<close> iff
-  \<^term>\<open>rel_of a\<close> implies \<^term>\<open>rel_of b\<close>.  So a bigger relation = more rows identified =
-  \<^emph>\<open>coarser\<close>; thus \<^term>\<open>bot\<close> = \<^term>\<open>(\<sqsubseteq>)\<close> (the finest LOD, \<^typ>\<open>'a\<close> itself) and \<^term>\<open>top\<close> =
-  the total relation (the coarsest, no information).  This is the order-dual of the
-  ``finer = higher'' convention in \<^file>\<open>Coslice.thy\<close>.
+  These are used only as \<^emph>\<open>predicates\<close>, to state functional dependence between levels of
+  detail; levels of detail themselves are syntactic dimension sets (see the frame
+  development).  We deliberately do not build a type of congruences: the only reason to do so
+  would be meets, and finitely flat-generated congruences are not closed under them.
 \<close>
 
 subsection \<open>Continuous congruences (admissible refining preorders)\<close>
@@ -101,84 +95,6 @@ lemma gen_upper: "B x y \<Longrightarrow> gen B x y"
 lemma gen_least: "is_cong R \<Longrightarrow> (\<And>u v. B u v \<Longrightarrow> R u v) \<Longrightarrow> gen B x y \<Longrightarrow> R x y"
   by (auto simp: gen_def)
 
-(*
-subsection \<open>The type of continuous congruences\<close>
-
-typedef 'a::cpo cong = "{R::'a \<Rightarrow> 'a \<Rightarrow> bool. is_cong R}"
-  morphisms rel_of Cong
-  using is_cong_top by blast
-
-setup_lifting type_definition_cong
-
-lemma is_cong_rel_of [simp, intro]: "is_cong (rel_of a)"
-  using rel_of[of a] by simp
-
-lemma rel_of_inject_eq: "rel_of a = rel_of b \<Longrightarrow> a = b"
-  by (simp add: rel_of_inject)
-
-subsection \<open>Complete lattice structure\<close>
-
-instantiation cong :: (cpo) order
-begin
-lift_definition less_eq_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> bool"
-is "(\<ge>)" .
-
-lift_definition less_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> bool"
-is "(>)" .
-
-instance
-  by (standard; transfer) (auto simp add: dual_order.strict_iff_not)
-
-end
-
-instantiation cong :: (cpo) lattice
-begin
-
-lift_definition inf_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> 'a cong"
-is "\<lambda> x y. Inf {z. z \<ge> sup x y \<and> is_cong z}"
-  by (intro is_cong_Inf) simp
-
-lift_definition sup_cong :: "'a cong \<Rightarrow> 'a cong \<Rightarrow> 'a cong"
-is "inf"
-  by (rule is_cong_inf2)
-
-instance
-  by (standard; transfer) fast+
-end
-
-instantiation cong :: (cpo) complete_lattice
-begin
-
-lift_definition top_cong :: "'a cong"
-is "(\<sqsubseteq>)"
-  by (rule is_cong_below)
-
-lift_definition bot_cong :: "'a cong"
-is "top"
-  by (rule is_cong_top)
-
-lift_definition Inf_cong :: "'a cong set \<Rightarrow> 'a cong"
-is "\<lambda>S. Inf {z. (\<forall>x \<in> S. x \<le> z) \<and> is_cong z}"
-  by (intro is_cong_Inf) simp
-
-lift_definition Sup_cong :: "'a cong set \<Rightarrow> 'a cong"
-is "Inf"
-  by (rule is_cong_Inf)
-
-lemma below_finest: "Inf (Collect is_cong) = (\<sqsubseteq>)"
-  using is_cong_below is_cong.belowD by blast
-
-
-instance
-  apply (standard; transfer)
-       apply fast
-      apply fast
-     apply fast
-    apply blast
-   apply (simp add: below_finest)
-  apply simp.
-end
-*)
 
 lemma map_is_cong: assumes "is_cong R" "cont f" shows "is_cong (inv_imagep R f)"
   unfolding inv_imagep_def
@@ -194,22 +110,10 @@ proof (standard)
   show "adm (\<lambda>y. R (f x) (f y))" for x by (rule adm_subst)
 qed
 
-(*
-lift_definition cong_comap :: "('b \<rightarrow> 'a) \<Rightarrow> 'a cong \<Rightarrow> 'b cong"
-is "\<lambda>f R. inv_imagep R (Rep_cfun f)"
-  by (intro map_is_cong) simp_all
-
-definition cong_eq_on :: "('a \<rightarrow> 'b) \<Rightarrow> 'a cong"
-  where "cong_eq_on f = cong_comap f top"
-
-lemma rep_cong_eq_on: "rel_of (cong_eq_on f) x y \<longleftrightarrow> f\<cdot>x \<sqsubseteq> f\<cdot>y"
-  unfolding cong_eq_on_def
-  by transfer simp
-*)
 
 subsection \<open>Flat LODs (the generators)\<close>
 
-text \<open>A flat congruence is one whose quotient has height \<le> 1: a bottom class of
+text \<open>A flat congruence is one whose quotient has height at most 1: a bottom class of
   ``undefined'' points (each \<open>R\<close>-below everything) and an antichain of value classes above.
   These arise exactly from continuous maps into flat domains, and generate the LOD frame.\<close>
 
@@ -237,7 +141,7 @@ definition is_flat_gen :: "('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow
 lemma is_flat_gen_flat: "is_flat_cong f \<Longrightarrow> is_flat_gen f"
   unfolding is_flat_gen_def by (rule exI[of _ "{f}"]) simp
 
-text \<open>Meet of two flats is flat: the generated congruence stays height \<le> 1.  No induction,
+text \<open>Meet of two flats is flat: the generated congruence stays height at most 1.  No induction,
   no distributivity of @{typ 'a} — the symmetric companion @{term U} is squeezed in between.\<close>
 
 lemma is_flat_cong_meet:

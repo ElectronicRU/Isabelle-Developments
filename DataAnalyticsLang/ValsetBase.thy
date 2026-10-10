@@ -1,4 +1,4 @@
-theory ValsetBase imports HOLCF "HOLCF-extra.Cpo_Topology" "HOLCF-extra.Bounded_Complete" Subdomain
+theory ValsetBase imports HOLCF "HOLCF-extra.Bounded_Complete" Subdomain
 begin
 default_sort type
 class two = assumes exTwo: "\<exists>x y :: 'a. x \<noteq> y"
@@ -13,15 +13,11 @@ qed
 
 end
 
-term Least
-
 pcpodef ('a::type, 'b) tuple = "UNIV :: ('a \<Rightarrow> 'b::pcpo) set"
   morphisms "tget" "Abs_tuple"
   by simp_all
 
 lemma Abs_tuple_inverse': "tget (Abs_tuple t) = t" using Abs_tuple_inverse by simp
-
-find_theorems name: tuple name: ValsetBase
 
 definition "ctget \<equiv> \<Lambda> t a. tget t (undiscr a)"
 
@@ -372,9 +368,9 @@ lemma p_subdom_tcut:
   by (simp add: stable_subdom_p.rep_eq set_of_subdom_tcut
         stable_subdomain_deflation[OF tcut_deflation stable_subdomain_tcut, symmetric])
 
-lemma is_strong_tcut:
-  "is_strong (subdom_of_set {t. tcut A\<cdot>t = t} :: ('a::countable, 'b::scott_domain) tuple stable_subdom)"
-proof (rule is_strongI)
+lemma is_semi_factor_tcut:
+  "is_semi_factor (subdom_of_set {t. tcut A\<cdot>t = t} :: ('a::countable, 'b::scott_domain) tuple stable_subdom)"
+proof (rule is_semi_factorI)
   fix x y :: "('a, 'b) tuple"
   assume "y \<in> set_of_subdom (subdom_of_set {t. tcut A\<cdot>t = t})"
   hence yfix: "tcut A\<cdot>y = y" by (simp add: set_of_subdom_tcut)
@@ -412,7 +408,7 @@ definition dcut :: "'a::countable set \<Rightarrow> ('a, 'b::scott_domain) tuple
 lemma semi_factor_p_dcut:
   "semi_factor_p (dcut A) = (tcut A :: ('a::countable, 'b::scott_domain) tuple \<rightarrow> ('a,'b) tuple)"
   unfolding dcut_def semi_factor_p.rep_eq
-  by (simp add: factor_of_subdom_inverse is_strong_tcut p_subdom_tcut)
+  by (simp add: factor_of_subdom_inverse is_semi_factor_tcut p_subdom_tcut)
 
 text \<open>Projecting a tuple onto the dimensions of an LOD is exactly the coordinate cut.\<close>
 lemma dcut_proj: "x \<downharpoonright> dcut A = tcut A\<cdot>x"
@@ -479,5 +475,141 @@ qed
 
 lemma dcut_bot: "dcut {} = bot"
   by (rule semi_factor_eqI) (simp add: semi_factor_p_dcut semi_factor_p_bot)
+
+lemma tcut_below: "tcut A\<cdot>t \<sqsubseteq> t"
+  by (simp add: below_tuple_def fun_below_iff tcut_tget)
+
+lemma tcut_mono_set: "A \<subseteq> B \<Longrightarrow> tcut A\<cdot>t \<sqsubseteq> tcut B\<cdot>t"
+  by (auto simp: below_tuple_def fun_below_iff tcut_tget)
+
+text \<open>The support of a tuple: the coordinates it defines.  A key carries its own dimensions.\<close>
+
+definition tsupp :: "('d, 'v::pcpo) tuple \<Rightarrow> 'd set" where
+  "tsupp K = {d. K\<langle>d\<rangle> \<noteq> \<bottom>}"
+
+lemma tsupp_tcut: "tsupp (tcut A\<cdot>K) = tsupp K \<inter> A"
+  by (auto simp: tsupp_def tcut_tget)
+
+lemma tcut_tsupp: "tcut (tsupp K)\<cdot>K = K"
+  by (rule tuple_eqI) (simp add: tcut_tget tsupp_def)
+
+lemma tcut_below_tcut: "tsupp K \<inter> A \<subseteq> B \<Longrightarrow> tcut A\<cdot>K \<sqsubseteq> tcut B\<cdot>K"
+  by (auto simp: below_tuple_def fun_below_iff tcut_tget tsupp_def)
+
+lemma tsupp_mono: "x \<sqsubseteq> y \<Longrightarrow> tsupp x \<subseteq> tsupp y"
+  by (auto simp: tsupp_def below_tuple_def fun_below_iff) (metis bottomI)
+
+lemma adm_finite_bex: "finite A \<Longrightarrow> (\<And>a. a \<in> A \<Longrightarrow> adm (P a)) \<Longrightarrow> adm (\<lambda>x. \<exists>a\<in>A. P a x)"
+  by (induct rule: finite_induct) simp_all
+
+text \<open>Being defined on finitely many dimensions is an open condition.\<close>
+
+lemma adm_not_tsupp: "finite D \<Longrightarrow> adm (\<lambda>t. \<not> D \<subseteq> tsupp t)"
+proof -
+  assume "finite D"
+  then have "adm (\<lambda>t. \<exists>d\<in>D. t\<langle>d\<rangle> \<sqsubseteq> \<bottom>)"
+    by (rule adm_finite_bex) (intro adm_below cont_const, simp add: cont2cont_fun cont_tget)
+  then show ?thesis by (simp add: tsupp_def subset_iff Bex_def)
+qed
+
+text \<open>With chain-finite (e.g.\ flat) values, a cut to finitely many dimensions is compact, and
+  so is a key with finite support.\<close>
+
+lemma compact_tcut:
+  fixes t :: "('d, 'v::{pcpo, chfin}) tuple"
+  assumes "finite A"
+  shows "compact (tcut A\<cdot>t)"
+proof (rule compactI)
+  have "(\<not> tcut A\<cdot>t \<sqsubseteq> u) \<longleftrightarrow> (\<exists>a\<in>A. \<not> t\<langle>a\<rangle> \<sqsubseteq> u\<langle>a\<rangle>)" for u
+    by (auto simp: below_tuple_def fun_below_iff tcut_tget)
+  moreover have "adm (\<lambda>u. \<exists>a\<in>A. \<not> t\<langle>a\<rangle> \<sqsubseteq> u\<langle>a\<rangle>)"
+    using assms by (rule adm_finite_bex) (simp add: cont2cont_fun cont_tget)
+  ultimately show "adm (\<lambda>u. \<not> tcut A\<cdot>t \<sqsubseteq> u)" by simp
+qed
+
+lemma compact_tsupp:
+  fixes K :: "('d, 'v::{pcpo, chfin}) tuple"
+  assumes "finite (tsupp K)"
+  shows "compact K"
+  using compact_tcut[OF assms, of K] by (simp add: tcut_tsupp)
+
+lemma tget_lub: "chain Y \<Longrightarrow> (\<Squnion>i. Y i)\<langle>d\<rangle> = (\<Squnion>i. (Y i)\<langle>d\<rangle>)"
+  by (simp add: lub_tuple Abs_tuple_inverse' lub_fun ch2ch_cont cont_tget)
+
+text \<open>Conversely, a compact key has finite support (whatever the values): otherwise cutting
+  away ever smaller tails of an infinite sequence in its support approximates it by a chain of
+  keys none of which is above it.  So compactness, the finitely observable keys, is what keys
+  should be; for chain-finite values it is exactly finite support.\<close>
+
+lemma compact_finite_tsupp:
+  fixes K :: "('d, 'v::pcpo) tuple"
+  assumes "compact K"
+  shows "finite (tsupp K)"
+proof (rule ccontr)
+  assume "infinite (tsupp K)"
+  then obtain f :: "nat \<Rightarrow> 'd" where f: "inj f" "range f \<subseteq> tsupp K"
+    using infinite_countable_subset by blast
+  define Y where "Y i = tcut (- f ` {i..})\<cdot>K" for i
+  have Y: "chain Y"
+    by (rule chainI) (auto simp: Y_def intro: tcut_mono_set)
+  have "K \<sqsubseteq> (\<Squnion>i. Y i)"
+  proof -
+    have "K\<langle>d\<rangle> \<sqsubseteq> (\<Squnion>i. (Y i)\<langle>d\<rangle>)" for d
+    proof -
+      have ch: "chain (\<lambda>i. (Y i)\<langle>d\<rangle>)"
+        using Y by (simp add: chain_def below_tuple_def fun_below_iff)
+      obtain j where "(Y j)\<langle>d\<rangle> = K\<langle>d\<rangle>"
+      proof (cases "d \<in> range f")
+        case True
+        then obtain j where d: "d = f j" by blast
+        have "(Y (Suc j))\<langle>d\<rangle> = K\<langle>d\<rangle>"
+          using f(1) by (auto simp: Y_def tcut_tget d dest: injD)
+        then show ?thesis by (rule that)
+      next
+        case False
+        then have "(Y 0)\<langle>d\<rangle> = K\<langle>d\<rangle>" by (auto simp: Y_def tcut_tget)
+        then show ?thesis by (rule that)
+      qed
+      then show ?thesis using is_ub_thelub[OF ch, of j] by simp
+    qed
+    then show ?thesis by (simp add: below_tuple_def fun_below_iff tget_lub[OF Y])
+  qed
+  then obtain i where "K \<sqsubseteq> Y i" using assms Y compact_below_lub_iff by blast
+  then have "K\<langle>f i\<rangle> \<sqsubseteq> (Y i)\<langle>f i\<rangle>" by (simp add: below_tuple_def fun_below_iff)
+  moreover have "(Y i)\<langle>f i\<rangle> = \<bottom>" by (simp add: Y_def tcut_tget)
+  moreover have "K\<langle>f i\<rangle> \<noteq> \<bottom>" using f(2) by (auto simp: tsupp_def)
+  ultimately show False by simp
+qed
+
+text \<open>Cutting a compact key leaves it compact.\<close>
+
+lemma compact_tcut_compact:
+  fixes K :: "('d, 'v::pcpo) tuple"
+  assumes "compact K"
+  shows "compact (tcut A\<cdot>K)"
+proof (rule compactI2)
+  fix Y assume Y: "chain Y" and below: "tcut A\<cdot>K \<sqsubseteq> (\<Squnion>i. Y i)"
+  define Z where "Z i = Abs_tuple (\<lambda>d. if d \<in> A then (Y i)\<langle>d\<rangle> else K\<langle>d\<rangle>)" for i
+  have Zd: "(Z i)\<langle>d\<rangle> = (if d \<in> A then (Y i)\<langle>d\<rangle> else K\<langle>d\<rangle>)" for i d
+    by (simp add: Z_def Abs_tuple_inverse')
+  have Z: "chain Z"
+    using Y by (auto intro!: chainI simp: below_tuple_def fun_below_iff Zd chain_def)
+  have "K \<sqsubseteq> (\<Squnion>i. Z i)"
+  proof -
+    have "K\<langle>d\<rangle> \<sqsubseteq> (\<Squnion>i. (Z i)\<langle>d\<rangle>)" for d
+    proof (cases "d \<in> A")
+      case True
+      from below have "(tcut A\<cdot>K)\<langle>d\<rangle> \<sqsubseteq> (\<Squnion>i. Y i)\<langle>d\<rangle>" by (simp add: below_tuple_def fun_below_iff)
+      with True show ?thesis by (simp add: Zd tget_lub[OF Y] tcut_tget)
+    next
+      case False then show ?thesis by (simp add: Zd)
+    qed
+    then show ?thesis by (simp add: below_tuple_def fun_below_iff tget_lub[OF Z])
+  qed
+  then obtain i where "K \<sqsubseteq> Z i" using assms Z compact_below_lub_iff by blast
+  then have "tcut A\<cdot>K \<sqsubseteq> Y i"
+    by (auto simp: below_tuple_def fun_below_iff Zd tcut_tget split: if_splits)
+  then show "\<exists>i. tcut A\<cdot>K \<sqsubseteq> Y i" ..
+qed
 
 end

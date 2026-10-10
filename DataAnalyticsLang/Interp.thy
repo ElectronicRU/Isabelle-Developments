@@ -90,3 +90,6 @@ text \<open>Functions which are "morally an AST"\<close>
 definition syntax_uniform where "syntax_uniform i f g \<equiv> f i = efold i g"
 
 theorem tst: assumes "f i = efold i (f Syntax_interp)" shows True
+  by simp
+
+end

@@ -4,6 +4,16 @@ Status notes and roadmap for `DataAnalyticsLang/Subdomain.thy`. Goal: stable and
 strong subdomains as complete (distributive) lattices, and their identification with
 deflations.
 
+> **Terminology rename (2026-10-11).** "Strong subdomain" was BJO's name (Jung calls it
+> misleading); we now say *semi-factor* (Jung Def 4.2.6 = stable + slide). The notes below
+> predate the rename. Mapping: `strong_closed` → `lub_closed`
+> (`deflation_strong_closed` → `deflation_lub_closed`); locale `strong_subdomain` →
+> `semi_factor_subdomain`; `is_strong*` → `is_semi_factor*` (incl. `_bot/_top/_inf/_tcut`,
+> `is_strong_subdom_of_factor`); `strong_subdomain_join(')` → `semi_factor_subdomain_join(')`;
+> `strong_subdomain_bot` → `semi_factor_subdomain_bot`; `strong_subdomain_sup` →
+> `is_semi_factor_sup`; `finite_strong_Sup` → `finite_semi_factor_Sup`;
+> `directed_strong_sup` → `directed_semi_factor_Sup`; `strong_sup` → `is_semi_factor_Sup`.
+
 ## Sort
 
 The lattice/join constructions below require the underlying domain to be
@@ -206,3 +216,8 @@ lattice's `sup`.
   prototyped in the REPL.
 - Type-var sorts: naming `'a` explicitly gives it `default_sort`; leaving it implicit
   sinks it to the weakest sort that typechecks (usually `cpo`).
+
+## Frame law / Heyting (DONE 2026-10-11)
+- `inf_Sup_stable_subdom`: `inf A (Sup ℬ) = (SUP B∈ℬ. inf A B)` — element-wise via `proj_Sup` (y = lub of 𝗉_B y, each in A ⊓ B) + `strong_closed`.
+- `instance stable_subdom :: complete_heyting_algebra`, `instance semi_factor :: complete_heyting_algebra` (by transfer from the former). Class from AFP `Order_Lattice_Props` (import needs `unbundle no lattice_syntax`, `no_notation ord_class.upset_set (‹⇑›)`, `hide_const (open) ord_class.directed`; `order_antisym` shadowed → `order.antisym`).
+- NEXT: Heyting arrow `a ⇛ b = ⨆{c. c ⊓ a ≤ b}` + Galois lemma + `¬ₕ`, for FOR's kept LOD `F ⊓ ¬ₕ W`.

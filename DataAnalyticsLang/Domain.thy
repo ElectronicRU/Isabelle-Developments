@@ -1,5 +1,5 @@
 theory Domain imports Main Typing
-  "~~/src/HOL/Library/Disjoint_Sets"
+  "HOL-Library.Disjoint_Sets"
   abbrevs ".>" = "\<rightharpoonup>" and "><" = "\<Join>" 
 begin
 
@@ -370,7 +370,7 @@ corollary key_limit_universe_of: "m \<in> universe \<Longrightarrow> key_limit c
   by blast
 
 
-subsection \<open>Facts about table_cols_of as an automorphism of set algebra\<close>
+subsection \<open>Facts about \<^const>\<open>table_cols_of\<close> as an automorphism of set algebra\<close>
 
 lemma table_cols_tables: "table_of ` (table_cols_of cols) = table_of ` cols"
   by blast

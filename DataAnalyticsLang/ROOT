@@ -1,9 +1,17 @@
 session DataAnalyticsLang = "HOLCF" +
   options [document = pdf, document_output = "output"]
-  sessions "HOLCF-extra"
+  sessions "HOLCF-extra" "Order_Lattice_Props"
   theories
     Typing
     Domain
     Interp
+    Subdomain
+    ValsetBase
+    Congruence
+    Slicer
+    Frame
+    LOD
+    LOD_Factor
   document_files
     "root.tex"
+    "root.bib"
