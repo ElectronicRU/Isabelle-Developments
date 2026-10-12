@@ -20,6 +20,43 @@ lemma slist_map_SCons [simp]: "l \<noteq> \<bottom> \<Longrightarrow> slist_map\
 lemma slist_map_bottom_iff [simp]: "slist_map\<cdot>f\<cdot>l = \<bottom> \<longleftrightarrow> l = \<bottom>"
   by (induct l rule: slist.induct) simp_all
 
+lemma "OFCLASS('v::{domain, bounded_complete} slist, bounded_complete_class)"
+  apply (rule bounded_complete_iterateI[OF slist.chain_take slist.lub_take slist.take_def])
+  apply (rule preserves_LAM, intro cont2cont)
+  apply (rule lubs_on_iso)
+   apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
+  apply (intro lubs_on_ssum_map lubs_on_sprod_map lubs_on_ID)
+  apply assumption
+  done
+
+lemma "OFCLASS('v::domain slist, separated_po_class)"
+  apply (rule separated_po_iterateI[OF slist.chain_take slist.lub_take slist.take_def])
+  apply (rule preserves_LAM, intro cont2cont)
+  apply (rule sep_on_iso)
+   apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
+  apply (intro sep_on_ssum_map sep_on_sprod_map sep_on_u_map sep_on_ID)
+  apply assumption
+  done
+
+domain ('v::"domain") lstream = LSCons (lazy 'v) (lazy "'v lstream")
+
+lemma "OFCLASS('v::{domain, bounded_complete} lstream, bounded_complete_class)"
+  apply (rule bounded_complete_iterateI[OF lstream.chain_take lstream.lub_take lstream.take_def])
+  apply (rule preserves_LAM, intro cont2cont)
+  apply (rule lubs_on_iso)
+   apply (rule iso.intro, rule lstream.abs_iso, rule lstream.rep_iso)
+  apply (intro lubs_on_sprod_map lubs_on_u_map lubs_on_ID)
+  apply assumption
+  done
+
+lemma "OFCLASS('v::domain lstream, separated_po_class)"
+  apply (rule separated_po_iterateI[OF lstream.chain_take lstream.lub_take lstream.take_def])
+  apply (rule preserves_LAM, intro cont2cont)
+  apply (rule sep_on_iso)
+   apply (rule iso.intro, rule lstream.abs_iso, rule lstream.rep_iso)
+  apply (intro sep_on_sprod_map sep_on_u_map sep_on_ID)
+  done
+
 subsection \<open>Bounded completeness\<close>
 
 lemma is_lub_pair_below: "a \<sqsubseteq> b \<Longrightarrow> {a, b} <<| b"
