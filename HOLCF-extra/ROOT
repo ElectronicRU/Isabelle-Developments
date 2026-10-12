@@ -9,6 +9,7 @@ session "HOLCF-extra" = HOLCF +
     Bounded_Complete
     Distributive
     Separated
+    Domain_Order
     Directed
     Definitions
     MUB_Closure

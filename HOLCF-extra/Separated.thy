@@ -43,6 +43,30 @@ lemma separated_poI:
   shows "OFCLASS('a, separated_po_class)"
   by intro_classes (simp add: assms)
 
+text \<open>Separation through any chain of maps with lub \<open>ID\<close> (e.g. the \<open>take\<close> functions of a domain):
+  it suffices to separate approximants \<open>t n\<cdot>x\<close> from arbitrary \<open>y\<close>.  A nonbottom \<open>x\<close> has a
+  nonbottom approximant, and a witness below it lies below \<open>x\<close>.\<close>
+
+lemma separated_po_chainI:
+  fixes t :: "nat \<Rightarrow> 'a::pcpo \<rightarrow> 'a"
+  assumes t: "chain t" "(\<Squnion>i. t i) = ID"
+    and sep: "\<And>n x y u. t n\<cdot>x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> t n\<cdot>x \<sqsubseteq> u \<Longrightarrow> y \<sqsubseteq> u \<Longrightarrow>
+      \<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> t n\<cdot>x \<and> l \<sqsubseteq> y"
+  shows "OFCLASS('a, separated_po_class)"
+proof (rule separated_poI)
+  fix x y u :: 'a assume "x \<noteq> \<bottom>" "y \<noteq> \<bottom>" "x \<sqsubseteq> u" "y \<sqsubseteq> u"
+  have chx: "chain (\<lambda>n. t n\<cdot>x)" by (rule ch2ch_Rep_cfunL[OF t(1)])
+  have reach: "(\<Squnion>n. t n\<cdot>x) = x" by (simp add: contlub_cfun_fun[OF t(1), symmetric] t(2))
+  have below: "t n\<cdot>x \<sqsubseteq> x" for n using is_ub_thelub[OF chx, of n] by (simp add: reach)
+  have "\<exists>n. t n\<cdot>x \<noteq> \<bottom>" using \<open>x \<noteq> \<bottom>\<close> lub_eq_bottom_iff[OF chx] by (simp add: reach)
+  then obtain n :: nat where n: "t n\<cdot>x \<noteq> \<bottom>" by (elim exE)
+  have "t n\<cdot>x \<sqsubseteq> u" using below \<open>x \<sqsubseteq> u\<close> by (rule below_trans)
+  from sep[OF n \<open>y \<noteq> \<bottom>\<close> this \<open>y \<sqsubseteq> u\<close>] obtain l :: 'a where l: "l \<noteq> \<bottom>" "l \<sqsubseteq> t n\<cdot>x" "l \<sqsubseteq> y"
+    by (elim exE conjE)
+  from l(2) below have "l \<sqsubseteq> x" by (rule below_trans)
+  with l(1,3) show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> x \<and> l \<sqsubseteq> y" by (intro exI[of _ l]) simp
+qed
+
 subsection \<open>The meet form, in bounded-complete pcpos\<close>
 
 text \<open>A nonbottom meet is the same as a nonbottom common lower bound; through this, the
