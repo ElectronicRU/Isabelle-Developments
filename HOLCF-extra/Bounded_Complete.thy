@@ -714,7 +714,102 @@ qed
 
 end
 
+subsection \<open>Smash products\<close>
 
+text \<open>Componentwise, through @{thm [source] below_sprod}; the only care needed is that the pair
+  of component lubs does not collapse, which holds as soon as one element is nonbottom.\<close>
+
+instance sprod :: (bounded_complete, bounded_complete) bounded_complete
+proof
+  fix A :: "('a \<otimes> 'b) set" and b assume ne: "A \<noteq> {}" and ub: "A <| b"
+  show "\<exists>a. A <<| a"
+  proof (cases "A = {\<bottom>}")
+    case True then show ?thesis by (auto intro: is_lubI is_ubI)
+  next
+    case False
+    with ne obtain x0 where x0: "x0 \<in> A" "x0 \<noteq> \<bottom>" by blast
+    have "(\<lambda>x. sfst\<cdot>x) ` A <| sfst\<cdot>b" "(\<lambda>x. ssnd\<cdot>x) ` A <| ssnd\<cdot>b"
+      using ub by (auto intro!: is_ubI monofun_cfun_arg dest: is_ubD)
+    then obtain L1 L2 where L1: "(\<lambda>x. sfst\<cdot>x) ` A <<| L1" and L2: "(\<lambda>x. ssnd\<cdot>x) ` A <<| L2"
+      by (blast dest: ex_bound_ex_lub)
+    have le: "sfst\<cdot>x \<sqsubseteq> L1" "ssnd\<cdot>x \<sqsubseteq> L2" if "x \<in> A" for x
+      using that is_lubD1[OF L1] is_lubD1[OF L2] by (auto dest: is_ubD)
+    have nb: "L1 \<noteq> \<bottom>" "L2 \<noteq> \<bottom>"
+      using le[OF x0(1)] x0(2) by (auto dest: bottomI)
+    have "A <<| (:L1, L2:)"
+    proof (rule is_lubI)
+      show "A <| (:L1, L2:)"
+        using le nb by (auto intro!: is_ubI simp: below_sprod)
+    next
+      fix u assume u: "A <| u"
+      have "L1 \<sqsubseteq> sfst\<cdot>u" "L2 \<sqsubseteq> ssnd\<cdot>u"
+        using u by (auto intro!: is_lubD2[OF L1] is_lubD2[OF L2] is_ubI monofun_cfun_arg
+          dest: is_ubD)
+      then show "(:L1, L2:) \<sqsubseteq> u" using nb by (simp add: below_sprod)
+    qed
+    then show ?thesis ..
+  qed
+qed
+
+lemma sfst_spair_below: "sfst\<cdot>(:x, y:) \<sqsubseteq> x" and ssnd_spair_below: "ssnd\<cdot>(:x, y:) \<sqsubseteq> y"
+  by (cases "y = \<bottom>"; simp) (cases "x = \<bottom>"; simp)
+
+context
+  fixes x x' :: "'a::bounded_complete" and y y' :: "'b::bounded_complete"
+begin
+
+text \<open>Meets are componentwise without side conditions: a collapsing component makes the whole
+  pair \<open>\<bottom>\<close>, by strictness of @{const spair}.\<close>
+
+lemma spair_meet: "(:x, y:) \<sqinter> (:x', y':) = (:x \<sqinter> x', y \<sqinter> y':)"
+proof (rule below_antisym)
+  let ?m = "(:x, y:) \<sqinter> (:x', y':)"
+  have "sfst\<cdot>?m \<sqsubseteq> x \<sqinter> x'" "ssnd\<cdot>?m \<sqsubseteq> y \<sqinter> y'"
+    by (intro meet_greatest below_trans[OF monofun_cfun_arg[OF meet_below1] sfst_spair_below]
+        below_trans[OF monofun_cfun_arg[OF meet_below2] sfst_spair_below]
+        below_trans[OF monofun_cfun_arg[OF meet_below1] ssnd_spair_below]
+        below_trans[OF monofun_cfun_arg[OF meet_below2] ssnd_spair_below])+
+  then have "(:sfst\<cdot>?m, ssnd\<cdot>?m:) \<sqsubseteq> (:x \<sqinter> x', y \<sqinter> y':)" by (intro monofun_cfun) simp_all
+  then show "?m \<sqsubseteq> (:x \<sqinter> x', y \<sqinter> y':)" by (simp only: spair_sfst_ssnd)
+  show "(:x \<sqinter> x', y \<sqinter> y':) \<sqsubseteq> ?m"
+    by (intro meet_greatest monofun_cfun monofun_cfun_arg meet_below1 meet_below2)
+qed
+
+context
+  assumes nb: "x \<noteq> \<bottom>" "y \<noteq> \<bottom>" "x' \<noteq> \<bottom>" "y' \<noteq> \<bottom>"
+begin
+
+lemma spair_joinable_iff: "(:x, y:) \<Up> (:x', y':) \<longleftrightarrow> x \<Up> x' \<and> y \<Up> y'"
+proof
+  assume "(:x, y:) \<Up> (:x', y':)"
+  then obtain u where "(:x, y:) \<sqsubseteq> u" "(:x', y':) \<sqsubseteq> u" unfolding joinable_def by blast
+  then show "x \<Up> x' \<and> y \<Up> y'" using nb by (auto simp: below_sprod intro: joinableI)
+next
+  assume "x \<Up> x' \<and> y \<Up> y'"
+  then have "(:x, y:) \<sqsubseteq> (:x \<squnion> x', y \<squnion> y':)" "(:x', y':) \<sqsubseteq> (:x \<squnion> x', y \<squnion> y':)"
+    by (auto intro!: monofun_cfun monofun_cfun_arg joinableD)
+  then show "(:x, y:) \<Up> (:x', y':)" by (rule joinableI)
+qed
+
+lemma spair_join:
+  assumes "x \<Up> x'" "y \<Up> y'" shows "(:x, y:) \<squnion> (:x', y':) = (:x \<squnion> x', y \<squnion> y':)"
+proof (rule below_antisym)
+  have j: "(:x, y:) \<Up> (:x', y':)" using assms by (simp add: spair_joinable_iff)
+  show "(:x, y:) \<squnion> (:x', y':) \<sqsubseteq> (:x \<squnion> x', y \<squnion> y':)"
+    using assms by (intro join_belowI monofun_cfun monofun_cfun_arg joinableD)
+  have "x \<sqsubseteq> sfst\<cdot>((:x, y:) \<squnion> (:x', y':))" "x' \<sqsubseteq> sfst\<cdot>((:x, y:) \<squnion> (:x', y':))"
+    "y \<sqsubseteq> ssnd\<cdot>((:x, y:) \<squnion> (:x', y':))" "y' \<sqsubseteq> ssnd\<cdot>((:x, y:) \<squnion> (:x', y':))"
+    using monofun_cfun_arg[OF joinableD(1)[OF j], of sfst] monofun_cfun_arg[OF joinableD(2)[OF j], of sfst]
+      monofun_cfun_arg[OF joinableD(1)[OF j], of ssnd] monofun_cfun_arg[OF joinableD(2)[OF j], of ssnd]
+    using nb by simp_all
+  then have "(:x \<squnion> x', y \<squnion> y':) \<sqsubseteq> (:sfst\<cdot>((:x, y:) \<squnion> (:x', y':)), ssnd\<cdot>((:x, y:) \<squnion> (:x', y':)):)"
+    by (intro monofun_cfun monofun_cfun_arg join_belowI)
+  then show "(:x \<squnion> x', y \<squnion> y':) \<sqsubseteq> (:x, y:) \<squnion> (:x', y':)" by (simp only: spair_sfst_ssnd)
+qed
+
+end
+
+end
 
 subclass (in flat) bounded_complete
 proof

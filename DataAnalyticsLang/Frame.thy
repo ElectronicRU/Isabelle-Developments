@@ -109,7 +109,7 @@ definition frows :: "('d, 'f, 'r) frame \<Rightarrow> 'r set" where
   "frows F = sel_rows (amb F) \<inter> {r. rkey r \<in> sel_rows (ssel (slice F))}"
 
 lemma pin_rkey: "K \<sqsubseteq> rkey r \<longleftrightarrow> K \<sqsubseteq> keyof (tsupp K)\<cdot>r"
-  by (auto simp: rkey_def below_tuple_def fun_below_iff keyof_tget tsupp_def) (metis minimal)
+  by (auto simp: rkey_def below_tuple_def fun_below_iff keyof_tget tsupp_def)
 
 definition grp :: "('d, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'r \<Rightarrow> bool" where
   "grp F x y \<longleftrightarrow> x \<in> frows F \<and> y \<in> frows F \<and> keyof (dims F)\<cdot>x = keyof (dims F)\<cdot>y"
