@@ -18,7 +18,7 @@ theorem lub_below_iff': "A <<| a \<Longrightarrow> a \<sqsubseteq> x \<longleftr
 theorem lub_below_iff_b: "f ` A <<| a \<Longrightarrow> a \<sqsubseteq> x \<longleftrightarrow> (\<forall>y \<in> A. f y \<sqsubseteq> x)"
   using lub_below_iff' by blast
 
-definition join (infixl \<open>\<squnion>\<close>60) where
+definition join (infixl \<open>\<squnion>\<close> 65) where
   "a \<squnion> b \<equiv> lub {a, b}"
 
 lemma join_sym: "a \<squnion> b = b \<squnion> a"
@@ -68,7 +68,7 @@ lemma is_glb_below: "is_glb S a \<Longrightarrow> x \<in> S \<Longrightarrow> a 
 lemma is_glb_greatest: "is_glb S a \<Longrightarrow> (\<forall>x \<in> S. b \<sqsubseteq> x) \<Longrightarrow> b \<sqsubseteq> a"
   unfolding is_glb_def by auto
 
-definition meet :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" (infixl \<open>\<sqinter>\<close> 60)
+definition meet :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" (infixl \<open>\<sqinter>\<close> 70)
   where "a \<sqinter> b = glb {a, b}"
 
 lemma meet_idem: "a \<sqinter> a = a"
