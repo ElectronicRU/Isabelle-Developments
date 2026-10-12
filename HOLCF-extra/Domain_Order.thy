@@ -142,7 +142,8 @@ definition lubs_on :: "('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool" where
   "lubs_on f \<longleftrightarrow> (\<forall>a b c. f\<cdot>a \<sqsubseteq> c \<longrightarrow> f\<cdot>b \<sqsubseteq> c \<longrightarrow> (\<exists>z. {f\<cdot>a, f\<cdot>b} <<| z))"
 
 definition sep_on :: "('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool" where
-  "sep_on f \<longleftrightarrow> (\<forall>x y u. f\<cdot>x \<noteq> \<bottom> \<longrightarrow> y \<noteq> \<bottom> \<longrightarrow> f\<cdot>x \<sqsubseteq> u \<longrightarrow> y \<sqsubseteq> u \<longrightarrow> (\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> f\<cdot>x \<and> l \<sqsubseteq> y))"
+  "sep_on f \<longleftrightarrow> (\<forall>x y u. f\<cdot>x \<noteq> \<bottom> \<longrightarrow> f\<cdot>y \<noteq> \<bottom> \<longrightarrow> f\<cdot>x \<sqsubseteq> u \<longrightarrow> f\<cdot>y \<sqsubseteq> u \<longrightarrow>
+    (\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> f\<cdot>x \<and> l \<sqsubseteq> f\<cdot>y))"
 
 definition distrib_on :: "('a::bounded_complete \<rightarrow> 'a) \<Rightarrow> bool" where
   "distrib_on f \<longleftrightarrow> (\<forall>c a b. a \<Up> b \<longrightarrow> f\<cdot>c \<sqinter> (a \<squnion> b) = f\<cdot>c \<sqinter> a \<squnion> f\<cdot>c \<sqinter> b)"
@@ -153,23 +154,19 @@ lemma bounded_complete_takeI:
   shows "OFCLASS('a, bounded_complete_class)"
   using assms(3) unfolding lubs_on_def by (intro bounded_complete_chainI[OF assms(1,2)]) blast
 
-lemma separated_po_takeI:
-  fixes t :: "nat \<Rightarrow> 'a::pcpo \<rightarrow> 'a"
-  assumes "chain t" "(\<Squnion>i. t i) = ID" "\<And>n. sep_on (t n)"
-  shows "OFCLASS('a, separated_po_class)"
-  using assms(3) unfolding sep_on_def by (intro separated_po_chainI[OF assms(1,2)]) blast
-
 lemma distributive_cpo_takeI:
   fixes t :: "nat \<Rightarrow> 'a::{bifinite, bounded_complete} \<rightarrow> 'a"
   assumes "chain t" "(\<Squnion>i. t i) = ID" "\<And>n. distrib_on (t n)"
   shows "OFCLASS('a, distributive_cpo_class)"
   using assms(3) unfolding distrib_on_def by (intro distributive_cpo_chainI[OF assms(1,2)]) blast
 
-subsection \<open>Take functionals\<close>
 
-text \<open>The domain package defines \<open>take \<equiv> \<lambda>n. iterate n\<cdot>F\<cdot>\<bottom>\<close> for a functional \<open>F\<close>
-  built from the rep-type combinators. A predicate on the take functions then follows
-  by induction from \<open>P \<bottom>\<close> and preservation of \<open>P\<close> by \<open>F\<close>; only the latter needs proof search.\<close>
+subsection \<open>Map functionals\<close>
+
+text \<open>The domain package defines \<open>T_map \<equiv> \<Lambda> v. \<mu> f. abs oo F v f oo rep\<close>, with \<open>F\<close> built from
+  the rep-type combinators. A predicate preserved by \<open>F\<close> and holding at \<open>\<bottom>\<close> holds for the map
+  by fixed-point induction, if admissible; at \<open>v = ID\<close> (\<open>T_map\<cdot>ID = ID\<close>) this yields the
+  instance. Only the preservation step needs proof search.\<close>
 
 definition preserves :: "(('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool) \<Rightarrow> (('a \<rightarrow> 'a) \<rightarrow> ('a \<rightarrow> 'a)) \<Rightarrow> bool" where
   "preserves P F \<longleftrightarrow> (\<forall>f. P f \<longrightarrow> P (F\<cdot>f))"
@@ -180,8 +177,8 @@ lemma preservesI: "(\<And>f. P f \<Longrightarrow> P (F\<cdot>f)) \<Longrightarr
 lemma preserves_LAM: "cont G \<Longrightarrow> (\<And>f. P f \<Longrightarrow> P (G f)) \<Longrightarrow> preserves P (\<Lambda> f. G f)"
   by (simp add: preserves_def)
 
-lemma iterate_preserves: "preserves P F \<Longrightarrow> P \<bottom> \<Longrightarrow> P (iterate n\<cdot>F\<cdot>\<bottom>)"
-  by (induct n) (simp_all add: preserves_def)
+lemma fix_preserves: "adm P \<Longrightarrow> P \<bottom> \<Longrightarrow> preserves P F \<Longrightarrow> P (fix\<cdot>F)"
+  by (erule fix_ind) (simp_all add: preserves_def)
 
 subsection \<open>Lubs of pairs through the combinators\<close>
 
@@ -398,39 +395,37 @@ proof (rule lubs_onI)
   then show "\<exists>z. {(abs oo f oo rep)\<cdot>a, (abs oo f oo rep)\<cdot>b} <<| z" by auto
 qed
 
-lemma bounded_complete_iterateI:
-  fixes t :: "nat \<Rightarrow> 'a::{dcpo, pcpo} \<rightarrow> 'a"
-  assumes "chain t" "(\<Squnion>i. t i) = ID" and t: "t \<equiv> (\<lambda>n. iterate n\<cdot>F\<cdot>\<bottom>)"
-    and F: "preserves lubs_on F"
-  shows "OFCLASS('a, bounded_complete_class)"
-proof (rule bounded_complete_takeI)
-  show "chain t" "(\<Squnion>i. t i) = ID" by fact+
-  show "lubs_on (t n)" for n unfolding t by (rule iterate_preserves[OF F lubs_on_bottom])
-qed
+lemma bounded_complete_lubs_onI:
+  "lubs_on (ID :: 'a::dcpo \<rightarrow> 'a) \<Longrightarrow> OFCLASS('a, bounded_complete_class)"
+  by (rule bounded_complete_takeI[of "\<lambda>n. ID"]) simp_all
 
 subsection \<open>Separation through the combinators\<close>
 
 lemma sep_onI:
-  "(\<And>x y u. f\<cdot>x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> f\<cdot>x \<sqsubseteq> u \<Longrightarrow> y \<sqsubseteq> u \<Longrightarrow> \<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> f\<cdot>x \<and> l \<sqsubseteq> y) \<Longrightarrow> sep_on f"
+  "(\<And>x y u. f\<cdot>x \<noteq> \<bottom> \<Longrightarrow> f\<cdot>y \<noteq> \<bottom> \<Longrightarrow> f\<cdot>x \<sqsubseteq> u \<Longrightarrow> f\<cdot>y \<sqsubseteq> u \<Longrightarrow> \<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> f\<cdot>x \<and> l \<sqsubseteq> f\<cdot>y)
+    \<Longrightarrow> sep_on f"
   by (simp add: sep_on_def)
 
 lemma sep_onE:
-  assumes "sep_on f" "f\<cdot>x \<noteq> \<bottom>" "y \<noteq> \<bottom>" "f\<cdot>x \<sqsubseteq> u" "y \<sqsubseteq> u"
-  obtains l where "l \<noteq> \<bottom>" "l \<sqsubseteq> f\<cdot>x" "l \<sqsubseteq> y"
+  assumes "sep_on f" "f\<cdot>x \<noteq> \<bottom>" "f\<cdot>y \<noteq> \<bottom>" "f\<cdot>x \<sqsubseteq> u" "f\<cdot>y \<sqsubseteq> u"
+  obtains l where "l \<noteq> \<bottom>" "l \<sqsubseteq> f\<cdot>x" "l \<sqsubseteq> f\<cdot>y"
   using assms unfolding sep_on_def by blast
+
+lemma sep_on_class: "sep_on (f :: 'a::{pcpo, separated_po} \<rightarrow> 'a)"
+  by (rule sep_onI) (rule separated_pcpo)
+
+lemma sep_on_ID: "sep_on (ID :: 'a::{pcpo, separated_po} \<rightarrow> 'a)"
+  by (rule sep_on_class)
 
 lemma sep_on_bottom: "sep_on \<bottom>"
   by (rule sep_onI) simp
 
-lemma sep_on_ID: "sep_on (ID :: 'a::{pcpo, separated_po} \<rightarrow> 'a)"
-  by (rule sep_onI) (simp add: separated_pcpo)
-
 lemma sep_on_u_map: "sep_on (u_map\<cdot>(f :: 'a::pcpo \<rightarrow> 'a))"
 proof (rule sep_onI)
-  fix x y u assume "u_map\<cdot>f\<cdot>x \<noteq> \<bottom>" "y \<noteq> \<bottom>" "u_map\<cdot>f\<cdot>x \<sqsubseteq> u" "y \<sqsubseteq> u"
+  fix x y u assume "u_map\<cdot>f\<cdot>x \<noteq> \<bottom>" "u_map\<cdot>f\<cdot>y \<noteq> \<bottom>" "u_map\<cdot>f\<cdot>x \<sqsubseteq> u" "u_map\<cdot>f\<cdot>y \<sqsubseteq> u"
   then obtain x' y' where "x = up\<cdot>x'" "y = up\<cdot>y'" by (cases x; cases y) auto
-  then have "up\<cdot>\<bottom> \<noteq> \<bottom> \<and> up\<cdot>\<bottom> \<sqsubseteq> u_map\<cdot>f\<cdot>x \<and> up\<cdot>\<bottom> \<sqsubseteq> y" by simp
-  then show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> u_map\<cdot>f\<cdot>x \<and> l \<sqsubseteq> y" ..
+  then have "up\<cdot>\<bottom> \<noteq> \<bottom> \<and> up\<cdot>\<bottom> \<sqsubseteq> u_map\<cdot>f\<cdot>x \<and> up\<cdot>\<bottom> \<sqsubseteq> u_map\<cdot>f\<cdot>y" by simp
+  then show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> u_map\<cdot>f\<cdot>x \<and> l \<sqsubseteq> u_map\<cdot>f\<cdot>y" ..
 qed
 
 lemma sep_on_ssum_map:
@@ -438,25 +433,27 @@ lemma sep_on_ssum_map:
   shows "sep_on (ssum_map\<cdot>f\<cdot>g)"
 proof (rule sep_onI)
   fix x y u
-  assume A: "ssum_map\<cdot>f\<cdot>g\<cdot>x \<noteq> \<bottom>" and y: "y \<noteq> \<bottom>"
-    and xu: "ssum_map\<cdot>f\<cdot>g\<cdot>x \<sqsubseteq> u" and yu: "y \<sqsubseteq> u"
-  show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> ssum_map\<cdot>f\<cdot>g\<cdot>x \<and> l \<sqsubseteq> y"
+  assume A: "ssum_map\<cdot>f\<cdot>g\<cdot>x \<noteq> \<bottom>" and B: "ssum_map\<cdot>f\<cdot>g\<cdot>y \<noteq> \<bottom>"
+    and xu: "ssum_map\<cdot>f\<cdot>g\<cdot>x \<sqsubseteq> u" and yu: "ssum_map\<cdot>f\<cdot>g\<cdot>y \<sqsubseteq> u"
+  show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> ssum_map\<cdot>f\<cdot>g\<cdot>x \<and> l \<sqsubseteq> ssum_map\<cdot>f\<cdot>g\<cdot>y"
   proof (cases x)
     case bottom with A show ?thesis by simp
   next
     case (sinl x')
     with A have fx: "f\<cdot>x' \<noteq> \<bottom>" by simp
     with sinl xu obtain u' where u: "u = sinl\<cdot>u'" "f\<cdot>x' \<sqsubseteq> u'" by (cases u) auto
-    with y yu obtain y' where y': "y = sinl\<cdot>y'" "y' \<noteq> \<bottom>" "y' \<sqsubseteq> u'" by (cases y) auto
-    from f fx \<open>y' \<noteq> \<bottom>\<close> \<open>f\<cdot>x' \<sqsubseteq> u'\<close> \<open>y' \<sqsubseteq> u'\<close> obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> f\<cdot>x'" "l \<sqsubseteq> y'"
+    with B yu obtain y' where y': "y = sinl\<cdot>y'" "y' \<noteq> \<bottom>" "f\<cdot>y' \<noteq> \<bottom>" "f\<cdot>y' \<sqsubseteq> u'"
+      by (cases y) auto
+    from f fx \<open>f\<cdot>y' \<noteq> \<bottom>\<close> \<open>f\<cdot>x' \<sqsubseteq> u'\<close> \<open>f\<cdot>y' \<sqsubseteq> u'\<close> obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> f\<cdot>x'" "l \<sqsubseteq> f\<cdot>y'"
       by (rule sep_onE)
     with sinl y' show ?thesis by (intro exI[of _ "sinl\<cdot>l"]) simp
   next
     case (sinr x')
     with A have gx: "g\<cdot>x' \<noteq> \<bottom>" by simp
     with sinr xu obtain u' where u: "u = sinr\<cdot>u'" "g\<cdot>x' \<sqsubseteq> u'" by (cases u) auto
-    with y yu obtain y' where y': "y = sinr\<cdot>y'" "y' \<noteq> \<bottom>" "y' \<sqsubseteq> u'" by (cases y) auto
-    from g gx \<open>y' \<noteq> \<bottom>\<close> \<open>g\<cdot>x' \<sqsubseteq> u'\<close> \<open>y' \<sqsubseteq> u'\<close> obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> g\<cdot>x'" "l \<sqsubseteq> y'"
+    with B yu obtain y' where y': "y = sinr\<cdot>y'" "y' \<noteq> \<bottom>" "g\<cdot>y' \<noteq> \<bottom>" "g\<cdot>y' \<sqsubseteq> u'"
+      by (cases y) auto
+    from g gx \<open>g\<cdot>y' \<noteq> \<bottom>\<close> \<open>g\<cdot>x' \<sqsubseteq> u'\<close> \<open>g\<cdot>y' \<sqsubseteq> u'\<close> obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> g\<cdot>x'" "l \<sqsubseteq> g\<cdot>y'"
       by (rule sep_onE)
     with sinr y' show ?thesis by (intro exI[of _ "sinr\<cdot>l"]) simp
   qed
@@ -467,21 +464,20 @@ lemma sep_on_sprod_map:
   shows "sep_on (sprod_map\<cdot>f\<cdot>g)"
 proof (rule sep_onI)
   fix x y u
-  assume A: "sprod_map\<cdot>f\<cdot>g\<cdot>x \<noteq> \<bottom>" and y: "y \<noteq> \<bottom>"
-    and xu: "sprod_map\<cdot>f\<cdot>g\<cdot>x \<sqsubseteq> u" and yu: "y \<sqsubseteq> u"
+  assume A: "sprod_map\<cdot>f\<cdot>g\<cdot>x \<noteq> \<bottom>" and B: "sprod_map\<cdot>f\<cdot>g\<cdot>y \<noteq> \<bottom>"
+    and xu: "sprod_map\<cdot>f\<cdot>g\<cdot>x \<sqsubseteq> u" and yu: "sprod_map\<cdot>f\<cdot>g\<cdot>y \<sqsubseteq> u"
   obtain x1 x2 where x: "x = (:x1, x2:)" "x1 \<noteq> \<bottom>" "x2 \<noteq> \<bottom>" using A by (cases x) auto
-  obtain y1 y2 where y': "y = (:y1, y2:)" "y1 \<noteq> \<bottom>" "y2 \<noteq> \<bottom>" using y by (cases y) auto
+  obtain y1 y2 where y: "y = (:y1, y2:)" "y1 \<noteq> \<bottom>" "y2 \<noteq> \<bottom>" using B by (cases y) auto
   from A x have fx: "f\<cdot>x1 \<noteq> \<bottom>" "g\<cdot>x2 \<noteq> \<bottom>" by simp_all
-  from xu x fx have "f\<cdot>x1 \<sqsubseteq> sfst\<cdot>u" "g\<cdot>x2 \<sqsubseteq> ssnd\<cdot>u" by (simp_all add: below_sprod)
-  moreover from yu y' have "y1 \<sqsubseteq> sfst\<cdot>u" "y2 \<sqsubseteq> ssnd\<cdot>u" by (simp_all add: below_sprod)
-  ultimately have "f\<cdot>x1 \<sqsubseteq> sfst\<cdot>u" "y1 \<sqsubseteq> sfst\<cdot>u" "g\<cdot>x2 \<sqsubseteq> ssnd\<cdot>u" "y2 \<sqsubseteq> ssnd\<cdot>u" by simp_all
-  from f fx(1) \<open>y1 \<noteq> \<bottom>\<close> this(1,2) obtain l1 where "l1 \<noteq> \<bottom>" "l1 \<sqsubseteq> f\<cdot>x1" "l1 \<sqsubseteq> y1"
+  from B y have fy: "f\<cdot>y1 \<noteq> \<bottom>" "g\<cdot>y2 \<noteq> \<bottom>" by simp_all
+  from xu x fx have xu': "f\<cdot>x1 \<sqsubseteq> sfst\<cdot>u" "g\<cdot>x2 \<sqsubseteq> ssnd\<cdot>u" by (simp_all add: below_sprod)
+  from yu y fy have yu': "f\<cdot>y1 \<sqsubseteq> sfst\<cdot>u" "g\<cdot>y2 \<sqsubseteq> ssnd\<cdot>u" by (simp_all add: below_sprod)
+  from f fx(1) fy(1) xu'(1) yu'(1) obtain l1 where "l1 \<noteq> \<bottom>" "l1 \<sqsubseteq> f\<cdot>x1" "l1 \<sqsubseteq> f\<cdot>y1"
     by (rule sep_onE)
-  moreover from g fx(2) \<open>y2 \<noteq> \<bottom>\<close> \<open>g\<cdot>x2 \<sqsubseteq> ssnd\<cdot>u\<close> \<open>y2 \<sqsubseteq> ssnd\<cdot>u\<close>
-  obtain l2 where "l2 \<noteq> \<bottom>" "l2 \<sqsubseteq> g\<cdot>x2" "l2 \<sqsubseteq> y2"
+  moreover from g fx(2) fy(2) xu'(2) yu'(2) obtain l2 where "l2 \<noteq> \<bottom>" "l2 \<sqsubseteq> g\<cdot>x2" "l2 \<sqsubseteq> g\<cdot>y2"
     by (rule sep_onE)
-  ultimately show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> sprod_map\<cdot>f\<cdot>g\<cdot>x \<and> l \<sqsubseteq> y"
-    using x y' fx by (intro exI[of _ "(:l1, l2:)"]) (simp add: below_sprod)
+  ultimately show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> sprod_map\<cdot>f\<cdot>g\<cdot>x \<and> l \<sqsubseteq> sprod_map\<cdot>f\<cdot>g\<cdot>y"
+    using x y fx fy by (intro exI[of _ "(:l1, l2:)"]) (simp add: below_sprod)
 qed
 
 lemma sep_on_iso:
@@ -491,22 +487,183 @@ lemma sep_on_iso:
 proof (rule sep_onI)
   interpret iso abs rep by (fact iso)
   fix x y u
-  assume "(abs oo f oo rep)\<cdot>x \<noteq> \<bottom>" "y \<noteq> \<bottom>" "(abs oo f oo rep)\<cdot>x \<sqsubseteq> u" "y \<sqsubseteq> u"
-  then have "f\<cdot>(rep\<cdot>x) \<noteq> \<bottom>" "rep\<cdot>y \<noteq> \<bottom>" "f\<cdot>(rep\<cdot>x) \<sqsubseteq> rep\<cdot>u" "rep\<cdot>y \<sqsubseteq> rep\<cdot>u"
-    by (simp_all add: abs_below[symmetric] abs_bottom_iff rep_bottom_iff)
-  then obtain l where l: "l \<noteq> \<bottom>" "l \<sqsubseteq> f\<cdot>(rep\<cdot>x)" "l \<sqsubseteq> rep\<cdot>y" by (elim sep_onE[OF f])
-  then show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> (abs oo f oo rep)\<cdot>x \<and> l \<sqsubseteq> y"
+  assume "(abs oo f oo rep)\<cdot>x \<noteq> \<bottom>" "(abs oo f oo rep)\<cdot>y \<noteq> \<bottom>"
+    "(abs oo f oo rep)\<cdot>x \<sqsubseteq> u" "(abs oo f oo rep)\<cdot>y \<sqsubseteq> u"
+  then have "f\<cdot>(rep\<cdot>x) \<noteq> \<bottom>" "f\<cdot>(rep\<cdot>y) \<noteq> \<bottom>" "f\<cdot>(rep\<cdot>x) \<sqsubseteq> rep\<cdot>u" "f\<cdot>(rep\<cdot>y) \<sqsubseteq> rep\<cdot>u"
+    by (simp_all add: abs_below[symmetric] abs_bottom_iff)
+  with f obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> f\<cdot>(rep\<cdot>x)" "l \<sqsubseteq> f\<cdot>(rep\<cdot>y)" by (elim sep_onE)
+  then show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> (abs oo f oo rep)\<cdot>x \<and> l \<sqsubseteq> (abs oo f oo rep)\<cdot>y"
     by (intro exI[of _ "abs\<cdot>l"]) (simp add: abs_below[symmetric] abs_bottom_iff)
 qed
 
-lemma separated_po_iterateI:
-  fixes t :: "nat \<Rightarrow> 'a::pcpo \<rightarrow> 'a"
-  assumes "chain t" "(\<Squnion>i. t i) = ID" and t: "t \<equiv> (\<lambda>n. iterate n\<cdot>F\<cdot>\<bottom>)"
-    and F: "preserves sep_on F"
+subsection \<open>Image-determined predicates\<close>
+
+text \<open>The predicates only look at the image of a map, and only get weaker on smaller images.\<close>
+
+definition image_antitone :: "(('a \<rightarrow> 'a) \<Rightarrow> bool) \<Rightarrow> bool" where
+  "image_antitone P \<longleftrightarrow> (\<forall>f g. range (Rep_cfun g) \<subseteq> range (Rep_cfun f) \<longrightarrow> P f \<longrightarrow> P g)"
+
+lemma image_antitoneI:
+  "(\<And>f g. range (Rep_cfun g) \<subseteq> range (Rep_cfun f) \<Longrightarrow> P f \<Longrightarrow> P g) \<Longrightarrow> image_antitone P"
+  by (simp add: image_antitone_def)
+
+lemma image_antitoneD:
+  "image_antitone P \<Longrightarrow> range (Rep_cfun g) \<subseteq> range (Rep_cfun f) \<Longrightarrow> P f \<Longrightarrow> P g"
+  by (simp add: image_antitone_def)
+
+lemma image_antitone_oo: "image_antitone P \<Longrightarrow> P f \<Longrightarrow> P (f oo g)"
+  by (erule image_antitoneD) auto
+
+lemma image_antitone_ID: "image_antitone P \<Longrightarrow> P ID \<Longrightarrow> P g"
+  by (erule image_antitoneD) auto
+
+lemma image_antitone_lubs_on: "image_antitone lubs_on"
+proof (rule image_antitoneI)
+  fix f g :: "'a \<rightarrow> 'a"
+  assume sub: "range (Rep_cfun g) \<subseteq> range (Rep_cfun f)" and f: "lubs_on f"
+  show "lubs_on g"
+  proof (rule lubs_onI)
+    fix a b c assume "g\<cdot>a \<sqsubseteq> c" "g\<cdot>b \<sqsubseteq> c"
+    moreover from sub obtain a' b' where "g\<cdot>a = f\<cdot>a'" "g\<cdot>b = f\<cdot>b'" by blast
+    ultimately show "\<exists>z. {g\<cdot>a, g\<cdot>b} <<| z" using lubs_onD[OF f] by simp
+  qed
+qed
+
+lemma image_antitone_sep_on: "image_antitone sep_on"
+proof (rule image_antitoneI)
+  fix f g :: "'a \<rightarrow> 'a"
+  assume sub: "range (Rep_cfun g) \<subseteq> range (Rep_cfun f)" and f: "sep_on f"
+  show "sep_on g"
+  proof (rule sep_onI)
+    fix x y u assume "g\<cdot>x \<noteq> \<bottom>" "g\<cdot>y \<noteq> \<bottom>" "g\<cdot>x \<sqsubseteq> u" "g\<cdot>y \<sqsubseteq> u"
+    moreover from sub obtain x' y' where xy: "g\<cdot>x = f\<cdot>x'" "g\<cdot>y = f\<cdot>y'" by blast
+    ultimately have "f\<cdot>x' \<noteq> \<bottom>" "f\<cdot>y' \<noteq> \<bottom>" "f\<cdot>x' \<sqsubseteq> u" "f\<cdot>y' \<sqsubseteq> u" by simp_all
+    with f obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> f\<cdot>x'" "l \<sqsubseteq> f\<cdot>y'" by (elim sep_onE)
+    with xy show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> g\<cdot>x \<and> l \<sqsubseteq> g\<cdot>y" by auto
+  qed
+qed
+
+lemmas lubs_on_oo = image_antitone_oo[OF image_antitone_lubs_on]
+lemmas sep_on_oo = image_antitone_oo[OF image_antitone_sep_on]
+lemmas lubs_on_from_ID = image_antitone_ID[OF image_antitone_lubs_on]
+lemmas sep_on_from_ID = image_antitone_ID[OF image_antitone_sep_on]
+
+subsection \<open>Admissibility\<close>
+
+text \<open>The predicates only constrain the image of a map, and the image of a chain's lub is
+  approximated by the images of its members; so they are admissible.\<close>
+
+lemma adm_lubs_on: "adm (lubs_on :: ('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool)"
+proof (rule admI)
+  fix Y :: "nat \<Rightarrow> 'a \<rightarrow> 'a" assume Y: "chain Y" and P: "\<forall>i. lubs_on (Y i)"
+  have chx: "chain (\<lambda>n. Y n\<cdot>x)" for x by (rule ch2ch_Rep_cfunL[OF Y])
+  have reach: "(\<Squnion>n. Y n\<cdot>x) = (\<Squnion>i. Y i)\<cdot>x" for x by (rule contlub_cfun_fun[OF Y, symmetric])
+  have below: "Y n\<cdot>x \<sqsubseteq> (\<Squnion>i. Y i)\<cdot>x" for n x
+    using is_ub_thelub[OF chx, of n x] by (simp only: reach)
+  show "lubs_on (\<Squnion>i. Y i)"
+  proof (rule lubs_onI)
+    fix a b c assume ac: "(\<Squnion>i. Y i)\<cdot>a \<sqsubseteq> c" and bc: "(\<Squnion>i. Y i)\<cdot>b \<sqsubseteq> c"
+    define L where "L n = lub {Y n\<cdot>a, Y n\<cdot>b}" for n
+    have L: "{Y n\<cdot>a, Y n\<cdot>b} <<| L n" for n
+    proof -
+      have "Y n\<cdot>a \<sqsubseteq> c" "Y n\<cdot>b \<sqsubseteq> c"
+        using below_trans[OF below[of n a] ac] below_trans[OF below[of n b] bc] .
+      from lubs_onD[OF P[rule_format] this] obtain z where "{Y n\<cdot>a, Y n\<cdot>b} <<| z" by (elim exE)
+      then show ?thesis unfolding L_def by (rule is_lub_lub)
+    qed
+    have chL: "chain L"
+    proof (rule chainI)
+      fix n
+      have "Y n\<cdot>a \<sqsubseteq> L (Suc n)" "Y n\<cdot>b \<sqsubseteq> L (Suc n)"
+        using chainE[OF chx] is_lubD1[OF L, THEN is_ubD] by (blast intro: below_trans)+
+      then show "L n \<sqsubseteq> L (Suc n)" by (blast intro: is_lubD2[OF L] is_ubI)
+    qed
+    have "{(\<Squnion>i. Y i)\<cdot>a, (\<Squnion>i. Y i)\<cdot>b} <<| (\<Squnion>n. L n)"
+    proof (rule is_lubI)
+      have "(\<Squnion>n. Y n\<cdot>a) \<sqsubseteq> (\<Squnion>n. L n)" "(\<Squnion>n. Y n\<cdot>b) \<sqsubseteq> (\<Squnion>n. L n)"
+        using is_lubD1[OF L, THEN is_ubD] by (blast intro: lub_mono chx chL)+
+      then show "{(\<Squnion>i. Y i)\<cdot>a, (\<Squnion>i. Y i)\<cdot>b} <| (\<Squnion>n. L n)" by (simp add: reach is_ub_def)
+    next
+      fix u assume "{(\<Squnion>i. Y i)\<cdot>a, (\<Squnion>i. Y i)\<cdot>b} <| u"
+      then have "(\<Squnion>i. Y i)\<cdot>a \<sqsubseteq> u" "(\<Squnion>i. Y i)\<cdot>b \<sqsubseteq> u" by (auto dest: is_ubD)
+      then have "L n \<sqsubseteq> u" for n
+        using below[of n a] below[of n b] by (blast intro: is_lubD2[OF L] is_ubI below_trans)
+      then show "(\<Squnion>n. L n) \<sqsubseteq> u" by (rule lub_below[OF chL])
+    qed
+    then show "\<exists>z. {(\<Squnion>i. Y i)\<cdot>a, (\<Squnion>i. Y i)\<cdot>b} <<| z" ..
+  qed
+qed
+
+lemma adm_sep_on: "adm (sep_on :: ('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool)"
+proof (rule admI)
+  fix Y :: "nat \<Rightarrow> 'a \<rightarrow> 'a" assume Y: "chain Y" and P: "\<forall>i. sep_on (Y i)"
+  have chx: "chain (\<lambda>n. Y n\<cdot>x)" for x by (rule ch2ch_Rep_cfunL[OF Y])
+  have reach: "(\<Squnion>n. Y n\<cdot>x) = (\<Squnion>i. Y i)\<cdot>x" for x by (rule contlub_cfun_fun[OF Y, symmetric])
+  have below: "Y n\<cdot>x \<sqsubseteq> (\<Squnion>i. Y i)\<cdot>x" for n x
+    using is_ub_thelub[OF chx, of n x] by (simp only: reach)
+  show "sep_on (\<Squnion>i. Y i)"
+  proof (rule sep_onI)
+    fix x y u assume nx: "(\<Squnion>i. Y i)\<cdot>x \<noteq> \<bottom>" and ny: "(\<Squnion>i. Y i)\<cdot>y \<noteq> \<bottom>"
+      and xu: "(\<Squnion>i. Y i)\<cdot>x \<sqsubseteq> u" and yu: "(\<Squnion>i. Y i)\<cdot>y \<sqsubseteq> u"
+    from nx obtain n where n: "Y n\<cdot>x \<noteq> \<bottom>"
+      by (auto simp: reach[symmetric] lub_eq_bottom_iff[OF chx])
+    from ny obtain m where m: "Y m\<cdot>y \<noteq> \<bottom>"
+      by (auto simp: reach[symmetric] lub_eq_bottom_iff[OF chx])
+    define k where "k = max n m"
+    have "Y n\<cdot>x \<sqsubseteq> Y k\<cdot>x" "Y m\<cdot>y \<sqsubseteq> Y k\<cdot>y"
+      unfolding k_def by (simp_all add: chain_mono[OF chx])
+    with n m have kx: "Y k\<cdot>x \<noteq> \<bottom>" and ky: "Y k\<cdot>y \<noteq> \<bottom>" by auto
+    have "Y k\<cdot>x \<sqsubseteq> u" "Y k\<cdot>y \<sqsubseteq> u"
+      using below_trans[OF below xu] below_trans[OF below yu] .
+    with P[rule_format, of k] kx ky obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> Y k\<cdot>x" "l \<sqsubseteq> Y k\<cdot>y"
+      by (elim sep_onE)
+    then show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> (\<Squnion>i. Y i)\<cdot>x \<and> l \<sqsubseteq> (\<Squnion>i. Y i)\<cdot>y"
+      using below_trans[OF _ below[of k x]] below_trans[OF _ below[of k y]] by blast
+  qed
+qed
+
+lemma separated_po_sep_onI:
+  assumes "sep_on (ID :: 'a::pcpo \<rightarrow> 'a)"
   shows "OFCLASS('a, separated_po_class)"
-proof (rule separated_po_takeI)
-  show "chain t" "(\<Squnion>i. t i) = ID" by fact+
-  show "sep_on (t n)" for n unfolding t by (rule iterate_preserves[OF F sep_on_bottom])
+proof (rule separated_poI)
+  fix x y u :: 'a
+  assume "x \<noteq> \<bottom>" "y \<noteq> \<bottom>" "x \<sqsubseteq> u" "y \<sqsubseteq> u"
+  then have "ID\<cdot>x \<noteq> \<bottom>" "ID\<cdot>y \<noteq> \<bottom>" "ID\<cdot>x \<sqsubseteq> u" "ID\<cdot>y \<sqsubseteq> u" by simp_all
+  with assms obtain l where "l \<noteq> \<bottom>" "l \<sqsubseteq> ID\<cdot>x" "l \<sqsubseteq> ID\<cdot>y" by (elim sep_onE)
+  then show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> x \<and> l \<sqsubseteq> y" by auto
+qed
+
+lemma separated_po_takeI:
+  fixes t :: "nat \<Rightarrow> 'a::pcpo \<rightarrow> 'a"
+  assumes t: "chain t" "(\<Squnion>i. t i) = ID" and P: "\<And>n. sep_on (t n)"
+  shows "OFCLASS('a, separated_po_class)"
+proof (rule separated_po_sep_onI)
+  have "sep_on (\<Squnion>i. t i)" by (rule admD[OF adm_sep_on t(1) P])
+  then show "sep_on (ID :: 'a \<rightarrow> 'a)" by (simp only: t(2))
+qed
+
+
+lemma adm_distrib_on: "adm (distrib_on :: ('a::{bifinite, bounded_complete} \<rightarrow> 'a) \<Rightarrow> bool)"
+proof (rule admI)
+  fix Y :: "nat \<Rightarrow> 'a \<rightarrow> 'a" assume Y: "chain Y" and P: "\<forall>i. distrib_on (Y i)"
+  show "distrib_on (\<Squnion>i. Y i)"
+    unfolding distrib_on_def
+  proof (intro allI impI)
+    fix c a b :: 'a assume "a \<Up> b"
+    have ch: "chain (\<lambda>n. Y n\<cdot>c)" by (rule ch2ch_Rep_cfunL[OF Y])
+    have reach: "(\<Squnion>n. Y n\<cdot>c) = (\<Squnion>i. Y i)\<cdot>c" by (rule contlub_cfun_fun[OF Y, symmetric])
+    have lim: "(\<Squnion>i. Y i)\<cdot>c \<sqinter> y = (\<Squnion>n. Y n\<cdot>c \<sqinter> y)" and chy: "chain (\<lambda>n. Y n\<cdot>c \<sqinter> y)" for y
+      using cont2contlubE[OF cont_meet_arg ch, of y] ch2ch_cont[OF cont_meet_arg ch, of y]
+      by (simp_all add: reach)
+    have law: "Y n\<cdot>c \<sqinter> (a \<squnion> b) = Y n\<cdot>c \<sqinter> a \<squnion> Y n\<cdot>c \<sqinter> b" for n
+      using P \<open>a \<Up> b\<close> unfolding distrib_on_def by blast
+    have j: "Y n\<cdot>c \<sqinter> a \<Up> Y n\<cdot>c \<sqinter> b" for n by (rule joinableI[OF meet_below1 meet_below1])
+    have "(\<Squnion>i. Y i)\<cdot>c \<sqinter> (a \<squnion> b) = (\<Squnion>n. Y n\<cdot>c \<sqinter> (a \<squnion> b))" by (rule lim)
+    also have "\<dots> = (\<Squnion>n. Y n\<cdot>c \<sqinter> a \<squnion> Y n\<cdot>c \<sqinter> b)" by (simp only: law)
+    also have "\<dots> = (\<Squnion>n. Y n\<cdot>c \<sqinter> a) \<squnion> (\<Squnion>n. Y n\<cdot>c \<sqinter> b)" by (rule lub_join_chains(3)[OF chy chy j])
+    also have "\<dots> = (\<Squnion>i. Y i)\<cdot>c \<sqinter> a \<squnion> (\<Squnion>i. Y i)\<cdot>c \<sqinter> b" by (simp only: lim[symmetric])
+    finally show "(\<Squnion>i. Y i)\<cdot>c \<sqinter> (a \<squnion> b) = (\<Squnion>i. Y i)\<cdot>c \<sqinter> a \<squnion> (\<Squnion>i. Y i)\<cdot>c \<sqinter> b" .
+  qed
 qed
 
 end

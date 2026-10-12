@@ -20,17 +20,23 @@ lemma slist_map_SCons [simp]: "l \<noteq> \<bottom> \<Longrightarrow> slist_map\
 lemma slist_map_bottom_iff [simp]: "slist_map\<cdot>f\<cdot>l = \<bottom> \<longleftrightarrow> l = \<bottom>"
   by (induct l rule: slist.induct) simp_all
 
-lemma "OFCLASS('v::{domain, bounded_complete} slist, bounded_complete_class)"
-  apply (rule bounded_complete_iterateI[OF slist.chain_take slist.lub_take slist.take_def])
+subsection \<open>Generic derivation: map rules by fixed-point induction\<close>
+
+lemma lubs_on_slist_map: "lubs_on v \<Longrightarrow> lubs_on (slist_map\<cdot>v)"
+  unfolding slist_map_def
+  apply (subst beta_cfun, simp)
+  apply (rule fix_preserves[OF adm_lubs_on lubs_on_bottom])
   apply (rule preserves_LAM, intro cont2cont)
   apply (rule lubs_on_iso)
    apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
-  apply (intro lubs_on_ssum_map lubs_on_sprod_map lubs_on_ID)
-  apply assumption
+  apply (intro lubs_on_ssum_map lubs_on_sprod_map lubs_on_u_map lubs_on_ID)
+   apply assumption+
   done
 
-lemma "OFCLASS('v::domain slist, separated_po_class)"
-  apply (rule separated_po_iterateI[OF slist.chain_take slist.lub_take slist.take_def])
+lemma sep_on_slist_map: "sep_on (slist_map\<cdot>v)"
+  unfolding slist_map_def
+  apply (subst beta_cfun, simp)
+  apply (rule fix_preserves[OF adm_sep_on sep_on_bottom])
   apply (rule preserves_LAM, intro cont2cont)
   apply (rule sep_on_iso)
    apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
@@ -38,24 +44,42 @@ lemma "OFCLASS('v::domain slist, separated_po_class)"
   apply assumption
   done
 
+lemma "OFCLASS('v::{domain, bounded_complete} slist, bounded_complete_class)"
+  by (rule bounded_complete_lubs_onI, subst slist_map_ID[symmetric])
+    (rule lubs_on_slist_map[OF lubs_on_ID])
+
+lemma "OFCLASS('v::domain slist, separated_po_class)"
+  by (rule separated_po_sep_onI, subst slist_map_ID[symmetric]) (rule sep_on_slist_map)
+
 domain ('v::"domain") lstream = LSCons (lazy 'v) (lazy "'v lstream")
 
-lemma "OFCLASS('v::{domain, bounded_complete} lstream, bounded_complete_class)"
-  apply (rule bounded_complete_iterateI[OF lstream.chain_take lstream.lub_take lstream.take_def])
+lemma lubs_on_lstream_map: "lubs_on v \<Longrightarrow> lubs_on (lstream_map\<cdot>v)"
+  unfolding lstream_map_def
+  apply (subst beta_cfun, simp)
+  apply (rule fix_preserves[OF adm_lubs_on lubs_on_bottom])
   apply (rule preserves_LAM, intro cont2cont)
   apply (rule lubs_on_iso)
    apply (rule iso.intro, rule lstream.abs_iso, rule lstream.rep_iso)
-  apply (intro lubs_on_sprod_map lubs_on_u_map lubs_on_ID)
-  apply assumption
+  apply (intro lubs_on_sprod_map lubs_on_u_map)
+   apply assumption+
   done
 
-lemma "OFCLASS('v::domain lstream, separated_po_class)"
-  apply (rule separated_po_iterateI[OF lstream.chain_take lstream.lub_take lstream.take_def])
+lemma sep_on_lstream_map: "sep_on (lstream_map\<cdot>v)"
+  unfolding lstream_map_def
+  apply (subst beta_cfun, simp)
+  apply (rule fix_preserves[OF adm_sep_on sep_on_bottom])
   apply (rule preserves_LAM, intro cont2cont)
   apply (rule sep_on_iso)
    apply (rule iso.intro, rule lstream.abs_iso, rule lstream.rep_iso)
-  apply (intro sep_on_sprod_map sep_on_u_map sep_on_ID)
+  apply (intro sep_on_sprod_map sep_on_u_map)
   done
+
+lemma "OFCLASS('v::{domain, bounded_complete} lstream, bounded_complete_class)"
+  by (rule bounded_complete_lubs_onI, subst lstream_map_ID[symmetric])
+    (rule lubs_on_lstream_map[OF lubs_on_ID])
+
+lemma "OFCLASS('v::domain lstream, separated_po_class)"
+  by (rule separated_po_sep_onI, subst lstream_map_ID[symmetric]) (rule sep_on_lstream_map)
 
 subsection \<open>Bounded completeness\<close>
 
