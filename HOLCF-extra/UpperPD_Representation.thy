@@ -1,4 +1,4 @@
-theory UpperPD_Representation imports HOLCF Koenigs Bounded_Complete Directed begin
+theory UpperPD_Representation imports HOLCF Koenigs Distributive Directed begin
 
 lemma koenig_construction_aux:
   fixes x Y f

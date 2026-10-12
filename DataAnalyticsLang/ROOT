@@ -12,6 +12,7 @@ session DataAnalyticsLang = "HOLCF" +
     Frame
     LOD
     LOD_Factor
+    Domain_Transfer
   document_files
     "root.tex"
     "root.bib"

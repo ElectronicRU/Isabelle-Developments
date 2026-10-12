@@ -1,4 +1,4 @@
-theory ValsetBase imports HOLCF "HOLCF-extra.Bounded_Complete" Subdomain
+theory ValsetBase imports HOLCF "HOLCF-extra.Distributive" Subdomain
 begin
 default_sort type
 class two = assumes exTwo: "\<exists>x y :: 'a. x \<noteq> y"

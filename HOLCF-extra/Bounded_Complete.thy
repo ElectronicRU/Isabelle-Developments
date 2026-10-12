@@ -185,33 +185,6 @@ qed (auto intro: joinable_mono1 joinable_mono2 joinableD[OF assms] joinableI)
 
 end
 
-class distributive_cpo = bounded_complete +
-  assumes meet_join_distrib: "a \<Up> b \<Longrightarrow> c \<sqinter> (a \<squnion> b) = (c \<sqinter> a) \<squnion> (c \<sqinter> b)"
-begin
-
-lemma meet_join_distrib2: "a \<Up> b \<Longrightarrow> (a \<squnion> b) \<sqinter> c = (a \<sqinter> c) \<squnion> (b \<sqinter> c)"
-  by (simp add: meet_join_distrib meet_sym)
-
-lemma join_meet_distrib: "a \<squnion> (b \<sqinter> c) = (a \<squnion> b) \<sqinter> (a \<squnion> c)" if "a \<Up> b" "a \<Up> c"
-proof -
-  have d1: "(a \<squnion> b) \<sqinter> c = (a \<sqinter> c) \<squnion> (b \<sqinter> c)"
-    by (auto intro: meet_join_distrib2 \<open>a \<Up> b\<close>)
-  have "a \<squnion> (b \<sqinter> c) = (a \<squnion> (a \<sqinter> c)) \<squnion> (b \<sqinter> c)"
-    by (simp add: join_absorb_meet2)
-  also have "... = a \<squnion> ((a \<sqinter> c) \<squnion> (b \<sqinter> c))"
-    by (rule join_assoc, simp_all add: that d1[symmetric])
-  also have "... = a \<squnion> ((a \<squnion> b)\<sqinter> c)"
-    by (simp add: d1)
-  also have "... = ((a \<squnion> b) \<sqinter> a) \<squnion> ((a \<squnion> b) \<sqinter> c)"
-    by (simp add: that)
-  also have "... = (a \<squnion> b) \<sqinter> (a \<squnion> c)"
-    by (simp add: that meet_join_distrib meet_sym)
-  finally show ?thesis .
-qed
-
-end
-
-class scott_domain = "domain" + distributive_cpo
 
 lemma bounded_complete_finite_joinI:
   assumes "\<And>a b c::'a::dcpo. \<lbrakk> a \<sqsubseteq> c; b \<sqsubseteq> c \<rbrakk> \<Longrightarrow> \<exists>z. {a, b} <<| z"
@@ -517,17 +490,6 @@ proof (rule below_antisym)
     by (cases "up\<cdot>x \<sqinter> up\<cdot>y") (simp_all add: meet_greatest)
 qed
 
-instance u :: (distributive_cpo) distributive_cpo
-proof
-  fix a b c :: "'a u" assume ab: "a \<Up> b"
-  show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
-  proof (cases a; cases b; cases c)
-    fix a' b' c' assume *: "a = up\<cdot>a'" "b = up\<cdot>b'" "c = up\<cdot>c'"
-    with ab have a'b': "a' \<Up> b'" by simp
-    have "c' \<sqinter> a' \<Up> c' \<sqinter> b'" by (rule joinableI[OF meet_below1 meet_below1])
-    with * a'b' show ?thesis by (simp add: up_join meet_join_distrib)
-  qed simp_all
-qed
 
 subsection \<open>Strict sums\<close>
 
@@ -707,15 +669,6 @@ qed
 
 end
 
-instance ssum :: (distributive_cpo, distributive_cpo) distributive_cpo
-proof
-  fix a b c :: "'a \<oplus> 'b" assume ab: "a \<Up> b"
-  have ml: "x \<sqinter> x' \<Up> x \<sqinter> x''" for x x' x'' :: 'a by (rule joinableI[OF meet_below1 meet_below1])
-  have mr: "y \<sqinter> y' \<Up> y \<sqinter> y''" for y y' y'' :: 'b by (rule joinableI[OF meet_below1 meet_below1])
-  show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
-    using ab by (cases a; cases b; cases c)
-      (simp_all add: sinl_join sinr_join meet_join_distrib ml mr)
-qed
 
 subsection \<open>Cartesian products\<close>
 
@@ -761,14 +714,6 @@ qed
 
 end
 
-instance prod :: (distributive_cpo, distributive_cpo) distributive_cpo
-proof
-  fix a b c :: "'a \<times> 'b" assume ab: "a \<Up> b"
-  then have c: "fst a \<Up> fst b" "snd a \<Up> snd b" by (simp_all add: prod_joinable_iff)
-  have "c \<sqinter> a \<Up> c \<sqinter> b" by (rule joinableI[OF meet_below1 meet_below1])
-  with ab c show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
-    by (simp add: prod_meet prod_join meet_join_distrib)
-qed
 
 
 subclass (in flat) bounded_complete
@@ -783,17 +728,6 @@ proof
     by (cases) (auto intro: is_lubI is_ubI dest: is_ubD)
 qed
 
-text \<open>Two joinable elements of a flat domain are comparable, so distributivity is a case split.\<close>
-
-instance flat \<subseteq> distributive_cpo
-proof
-  fix a b c :: 'a assume ab: "a \<Up> b"
-  have mb: "x \<sqinter> \<bottom> = \<bottom>" for x :: 'a by (simp add: meet_sym meet_absorbI)
-  from joinableD[OF ab] have "a = \<bottom> \<or> b = \<bottom> \<or> a = b"
-    by (metis ax_flat)
-  then show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
-    by (elim disjE) (simp_all add: mb join_bottom)
-qed
 
 instantiation "fun" :: (type, bounded_complete) bounded_complete
 begin
@@ -873,24 +807,6 @@ next
     by (rule meet_greatest; rule fun_belowI) (simp_all add: meet_below1 meet_below2)
 qed
 
-instance "fun" :: (type, distributive_cpo) distributive_cpo
-proof
-  fix a b c :: "'a \<Rightarrow> 'b"
-  assume ab: "a \<Up> b"
-  have ptw: "a x \<Up> b x" for x
-  proof -
-    from ab obtain z where "a \<sqsubseteq> z" "b \<sqsubseteq> z" unfolding joinable_def by blast
-    thus "a x \<Up> b x" by (meson fun_belowD joinableI)
-  qed
-  have cab: "(c \<sqinter> a) \<Up> (c \<sqinter> b)" by (rule joinableI[OF meet_below1 meet_below1])
-  have "c \<sqinter> (a \<squnion> b) = (\<lambda>x. c x \<sqinter> (a x \<squnion> b x))"
-    using ab by (simp add: fun_meet fun_join)
-  also have "... = (\<lambda>x. (c x \<sqinter> a x) \<squnion> (c x \<sqinter> b x))"
-    using ptw by (simp add: meet_join_distrib)
-  also have "... = (c \<sqinter> a) \<squnion> (c \<sqinter> b)"
-    using cab by (simp add: fun_meet fun_join)
-  finally show "c \<sqinter> (a \<squnion> b) = (c \<sqinter> a) \<squnion> (c \<sqinter> b)" .
-qed
 
 instantiation cfun :: (cpo, bounded_complete) bounded_complete
 begin

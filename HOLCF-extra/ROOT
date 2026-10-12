@@ -7,6 +7,7 @@ session "HOLCF-extra" = HOLCF +
     Top
     FiniteCF
     Bounded_Complete
+    Distributive
     Directed
     Definitions
     MUB_Closure

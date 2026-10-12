@@ -1,5 +1,5 @@
 theory Subdomain 
-  imports HOLCF "HOLCF-extra.Directed" "HOLCF-extra.Bounded_Complete"
+  imports HOLCF "HOLCF-extra.Directed" "HOLCF-extra.Distributive"
     "Order_Lattice_Props.Order_Lattice_Props"
   abbrevs ",," = "\<downharpoonright>"
 begin
@@ -388,42 +388,7 @@ proof
 qed
 
 
-subsection \<open>Continuity of binary meet\<close>
-
-text \<open>In a bifinite bounded-complete domain binary meet is continuous: this is the
-  \<open>approximants\<close> observation — a compact below @{term \<open>(\<Squnion>i. X i) \<sqinter> y\<close>} already lies
-  below some @{term \<open>X i \<sqinter> y\<close>}.\<close>
-
-lemma approximants_meet: "approximants ((x::'a) \<sqinter> y) = approximants x \<inter> approximants y"
-  unfolding approximants_def by (auto simp add: meet_below_iff)
-
-lemma cont_meet_arg: "cont (\<lambda>(x::'a). x \<sqinter> y)"
-proof -
-  have mono: "monofun (\<lambda>x. x \<sqinter> y)"
-  proof (rule monofunI)
-    fix a b :: 'a assume "a \<sqsubseteq> b"
-    have "a \<sqinter> y \<sqsubseteq> b" using meet_below1[of a y] \<open>a \<sqsubseteq> b\<close> by (rule below_trans)
-    moreover have "a \<sqinter> y \<sqsubseteq> y" by (rule meet_below2)
-    ultimately show "a \<sqinter> y \<sqsubseteq> b \<sqinter> y" by (rule meet_greatest)
-  qed
-  show ?thesis
-  proof (rule contI2[OF mono])
-    fix X :: "nat \<Rightarrow> 'a" assume X: "chain X"
-    assume chXy: "chain (\<lambda>i. X i \<sqinter> y)"
-    show "(\<Squnion>i. X i) \<sqinter> y \<sqsubseteq> (\<Squnion>i. X i \<sqinter> y)"
-      by (rule compact_basis.belowI)
-       (simp add:
-         compact_basis.rep_lub X chXy approximants_meet)
-  qed
-qed
-
-lemma cont_meet_arg2: "cont (\<lambda>y::'a. x \<sqinter> y)"
-  using cont_meet_arg[of x] by (simp add: meet_sym)
-
-lemma cont2cont_meet [simp, cont2cont]:
-  fixes f g :: "'b::cpo \<Rightarrow> 'a"
-  assumes contf: "cont f" and contg: "cont g" shows "cont (\<lambda>x. f x \<sqinter> g x)"
-  by (rule cont_apply [OF contg cont_meet_arg2 cont_compose [OF cont_meet_arg contf]])
+text \<open>Continuity of binary meet (@{thm [source] cont_meet_arg}) is in \<open>Distributive\<close>.\<close>
 
 
 section \<open>Stable subdomains as a lattice of sets\<close>

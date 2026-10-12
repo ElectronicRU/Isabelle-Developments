@@ -1,5 +1,5 @@
 theory LowerPD_Representation
-  imports HOLCF HOLCF.LowerPD Bounded_Complete
+  imports HOLCF HOLCF.LowerPD Distributive
 
 begin
 
