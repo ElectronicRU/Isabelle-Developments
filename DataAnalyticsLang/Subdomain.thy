@@ -1213,9 +1213,9 @@ proof (rule is_semi_factorI)
   with yA have step1: "\<p>\<^bsub>b\<^esub>\<cdot>x \<Up> y" by (rule A.slide_rule)
   with yB have memB: "(\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y \<in> set_of_subdom b"
     by (auto intro: subdom.join_closed)
-  from step1 have "\<p>\<^bsub>b\<^esub>\<cdot>x \<sqsubseteq> (\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y" by auto
+  from step1 have "\<p>\<^bsub>b\<^esub>\<cdot>x \<sqsubseteq> (\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y" by (rule joinableD(1))
   with memB have step2: "x \<Up> (\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y" by (rule B.slide_rule)
-  then have "x \<sqsubseteq> x \<squnion> ((\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y)" by auto
+  then have "x \<sqsubseteq> x \<squnion> ((\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y)" by (rule joinableD(1))
   moreover from step1 step2 have "y \<sqsubseteq> x \<squnion> ((\<p>\<^bsub>b\<^esub>\<cdot>x) \<squnion> y)"
     by (blast dest: joinableD(2) below_trans)
   ultimately show "x \<Up> y" by (rule joinableI)

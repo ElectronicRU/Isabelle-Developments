@@ -102,7 +102,7 @@ lemma joinableI: "a \<sqsubseteq> c \<Longrightarrow> b \<sqsubseteq> c \<Longri
   unfolding joinable_def
   by fast
 
-lemma joinableD[simp]: "a \<Up> b \<Longrightarrow> a \<sqsubseteq> a \<squnion> b" "a \<Up> b \<Longrightarrow> b \<sqsubseteq> a \<squnion> b"
+lemma joinableD: "a \<Up> b \<Longrightarrow> a \<sqsubseteq> a \<squnion> b" "a \<Up> b \<Longrightarrow> b \<sqsubseteq> a \<squnion> b"
   using joinable_lub
   by (auto dest: is_lubD1 is_ubD)
 
@@ -130,8 +130,8 @@ lemma semilattice_meet: "class.semilattice_inf meet below below_strict"
 
 lemma join_mono1: "c \<squnion> b \<sqsubseteq> a \<squnion> b" if "a \<Up> b" "c \<sqsubseteq> a"
 proof -
-  from that have "c \<sqsubseteq> a \<squnion> b" by (auto intro: below_trans)
-  also from that have "b \<sqsubseteq> a \<squnion> b" by auto
+  from that have "c \<sqsubseteq> a \<squnion> b" by (blast intro: below_trans joinableD(1))
+  also from that have "b \<sqsubseteq> a \<squnion> b" by (blast intro: joinableD(2))
   finally(join_belowI) show ?thesis.
 qed
 
