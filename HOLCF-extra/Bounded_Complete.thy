@@ -185,6 +185,8 @@ qed (auto intro: joinable_mono1 joinable_mono2 joinableD[OF assms] joinableI)
 
 end
 
+lemmas bounded_complete_locale_eqs [class_locale_eqs] =
+  bounded_complete_class.joinable_dict[symmetric]
 
 lemma bounded_complete_finite_joinI:
   assumes "\<And>a b c::'a::dcpo. \<lbrakk> a \<sqsubseteq> c; b \<sqsubseteq> c \<rbrakk> \<Longrightarrow> \<exists>z. {a, b} <<| z"

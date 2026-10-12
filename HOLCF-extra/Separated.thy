@@ -152,5 +152,133 @@ proof (rule separated_poI)
     using nb le by (cases x; cases y; cases u) (auto simp: spair_below intro: S)
 qed
 
+section \<open>Distributivity of smash products\<close>
+
+text \<open>Separation of both components keeps \<open>\<otimes>\<close> distributive: joinable nonbottom pairs meet a third
+  pair to \<open>\<bottom>\<close> together, so either both sides collapse or everything is componentwise.\<close>
+
+instance sprod :: ("{separated_po, distributive_cpo}", "{separated_po, distributive_cpo}")
+  distributive_cpo
+proof
+  fix a b c :: "'a \<otimes> 'b" assume "a \<Up> b"
+  show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> c \<sqinter> b"
+  proof (cases "a = \<bottom> \<or> b = \<bottom> \<or> c = \<bottom>")
+    case True then show ?thesis by (elim disjE) simp_all
+  next
+    case False
+    then obtain a1 a2 b1 b2 c1 c2 where
+      ab: "a = (:a1, a2:)" "b = (:b1, b2:)" "c = (:c1, c2:)" and
+      nb: "a1 \<noteq> \<bottom>" "a2 \<noteq> \<bottom>" "b1 \<noteq> \<bottom>" "b2 \<noteq> \<bottom>" "c1 \<noteq> \<bottom>" "c2 \<noteq> \<bottom>"
+      by (cases a; cases b; cases c) auto
+    from \<open>a \<Up> b\<close> have j: "a1 \<Up> b1" "a2 \<Up> b2" by (simp_all add: ab nb spair_joinable_iff)
+    have cong: "c1 \<sqinter> a1 = \<bottom> \<longleftrightarrow> c1 \<sqinter> b1 = \<bottom>" "c2 \<sqinter> a2 = \<bottom> \<longleftrightarrow> c2 \<sqinter> b2 = \<bottom>"
+      using separated_meet_bottom_cong[OF j(1) nb(1,3)] separated_meet_bottom_cong[OF j(2) nb(2,4)]
+        separated_meet_bottom_cong[OF joinable_sym[THEN iffD1, OF j(1)] nb(3,1)]
+        separated_meet_bottom_cong[OF joinable_sym[THEN iffD1, OF j(2)] nb(4,2)]
+      by blast+
+    have mj: "x \<sqinter> y \<Up> x \<sqinter> z" for x y z :: "'c::bounded_complete"
+      by (rule joinableI[OF meet_below1 meet_below1])
+    have lhs: "c \<sqinter> (a \<squnion> b) = (:c1 \<sqinter> a1 \<squnion> c1 \<sqinter> b1, c2 \<sqinter> a2 \<squnion> c2 \<sqinter> b2:)"
+      by (simp only: ab spair_join[OF nb(1,2,3,4) j] spair_meet meet_join_distrib[OF j(1)]
+        meet_join_distrib[OF j(2)])
+    have rhs: "c \<sqinter> a \<squnion> c \<sqinter> b = (:c1 \<sqinter> a1, c2 \<sqinter> a2:) \<squnion> (:c1 \<sqinter> b1, c2 \<sqinter> b2:)"
+      by (simp only: ab spair_meet)
+    show ?thesis
+    proof (cases "c1 \<sqinter> a1 = \<bottom> \<or> c2 \<sqinter> a2 = \<bottom>")
+      case True
+      with cong show ?thesis unfolding lhs rhs by auto
+    next
+      case False
+      with cong have "c1 \<sqinter> a1 \<noteq> \<bottom>" "c2 \<sqinter> a2 \<noteq> \<bottom>" "c1 \<sqinter> b1 \<noteq> \<bottom>" "c2 \<sqinter> b2 \<noteq> \<bottom>" by simp_all
+      then show ?thesis unfolding lhs rhs by (simp add: spair_join mj)
+    qed
+  qed
+qed
+
+text \<open>If one component is flat, the other needs no separation: joinable nonbottom elements of a
+  flat type are equal, so that component contributes no proper joins.  These cannot be
+  instances (they would conflict with the arity above), so they are stated as the class law.\<close>
+
+lemma sprod_flat_left_distrib:
+  fixes a b c :: "'a::flat \<otimes> 'b::distributive_cpo"
+  assumes "a \<Up> b" shows "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> c \<sqinter> b"
+proof (cases "a = \<bottom> \<or> b = \<bottom> \<or> c = \<bottom>")
+  case True then show ?thesis by (elim disjE) simp_all
+next
+  case False
+  then obtain a1 a2 b1 b2 c1 c2 where
+    ab: "a = (:a1, a2:)" "b = (:b1, b2:)" "c = (:c1, c2:)" and
+    nb: "a1 \<noteq> \<bottom>" "a2 \<noteq> \<bottom>" "b1 \<noteq> \<bottom>" "b2 \<noteq> \<bottom>" "c1 \<noteq> \<bottom>" "c2 \<noteq> \<bottom>"
+    by (cases a; cases b; cases c) auto
+  from \<open>a \<Up> b\<close> have j: "a1 \<Up> b1" "a2 \<Up> b2" by (simp_all add: ab nb spair_joinable_iff)
+  from j(1) nb(1,3) have "a1 = b1" by (blast elim: flat_joinableE)
+  with ab(2) have b: "b = (:a1, b2:)" by simp
+  have mj: "x \<sqinter> y \<Up> x \<sqinter> z" for x y z :: "'c::bounded_complete"
+    by (rule joinableI[OF meet_below1 meet_below1])
+  have lhs: "c \<sqinter> (a \<squnion> b) = (:c1 \<sqinter> a1, c2 \<sqinter> a2 \<squnion> c2 \<sqinter> b2:)"
+    by (simp only: ab(1,3) b spair_join[OF nb(1,2,1,4) joinable_refl j(2)] spair_meet join_idem
+      meet_join_distrib[OF j(2)])
+  have rhs: "c \<sqinter> a \<squnion> c \<sqinter> b = (:c1 \<sqinter> a1, c2 \<sqinter> a2:) \<squnion> (:c1 \<sqinter> a1, c2 \<sqinter> b2:)"
+    by (simp only: ab(1,3) b spair_meet)
+  show ?thesis
+  proof (cases "c1 \<sqinter> a1 = \<bottom> \<or> c2 \<sqinter> a2 = \<bottom> \<or> c2 \<sqinter> b2 = \<bottom>")
+    case True then show ?thesis unfolding lhs rhs by (elim disjE) simp_all
+  next    case False then show ?thesis unfolding lhs rhs by (simp add: spair_join mj)
+  qed
+qed
+
+global_interpretation sprod_flat_left: distributive_cpo
+  "below :: ('a::flat \<otimes> 'b::distributive_cpo) \<Rightarrow> _ \<Rightarrow> bool"
+  rewrites "po.is_ub (\<sqsubseteq>) = ((<|) :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.is_lub (\<sqsubseteq>) = ((<<|) :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.lub (\<sqsubseteq>) = (lub :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.is_glb (\<sqsubseteq>) = (is_glb :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.glb (\<sqsubseteq>) = (glb :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.meet (\<sqsubseteq>) = ((\<sqinter>) :: 'a \<otimes> 'b \<Rightarrow> _)"
+    and "po.join (\<sqsubseteq>) = ((\<squnion>) :: 'a \<otimes> 'b \<Rightarrow> _)"
+    and "bounded_complete.joinable (\<sqsubseteq>) = ((\<Up>) :: 'a \<otimes> 'b \<Rightarrow> _)"
+  by unfold_locales (simp_all only: class_locale_eqs sprod_flat_left_distrib)
+
+lemma sprod_flat_right_distrib:
+  fixes a b c :: "'a::distributive_cpo \<otimes> 'b::flat"
+  assumes "a \<Up> b" shows "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> c \<sqinter> b"
+proof (cases "a = \<bottom> \<or> b = \<bottom> \<or> c = \<bottom>")
+  case True then show ?thesis by (elim disjE) simp_all
+next
+  case False
+  then obtain a1 a2 b1 b2 c1 c2 where
+    ab: "a = (:a1, a2:)" "b = (:b1, b2:)" "c = (:c1, c2:)" and
+    nb: "a1 \<noteq> \<bottom>" "a2 \<noteq> \<bottom>" "b1 \<noteq> \<bottom>" "b2 \<noteq> \<bottom>" "c1 \<noteq> \<bottom>" "c2 \<noteq> \<bottom>"
+    by (cases a; cases b; cases c) auto
+  from \<open>a \<Up> b\<close> have j: "a1 \<Up> b1" "a2 \<Up> b2" by (simp_all add: ab nb spair_joinable_iff)
+  from j(2) nb(2,4) have "a2 = b2" by (blast elim: flat_joinableE)
+  with ab(2) have b: "b = (:b1, a2:)" by simp
+  have mj: "x \<sqinter> y \<Up> x \<sqinter> z" for x y z :: "'c::bounded_complete"
+    by (rule joinableI[OF meet_below1 meet_below1])
+  have lhs: "c \<sqinter> (a \<squnion> b) = (:c1 \<sqinter> a1 \<squnion> c1 \<sqinter> b1, c2 \<sqinter> a2:)"
+    by (simp only: ab(1,3) b spair_join[OF nb(1,2,3,2) j(1) joinable_refl] spair_meet join_idem
+      meet_join_distrib[OF j(1)])
+  have rhs: "c \<sqinter> a \<squnion> c \<sqinter> b = (:c1 \<sqinter> a1, c2 \<sqinter> a2:) \<squnion> (:c1 \<sqinter> b1, c2 \<sqinter> a2:)"
+    by (simp only: ab(1,3) b spair_meet)
+  show ?thesis
+  proof (cases "c2 \<sqinter> a2 = \<bottom> \<or> c1 \<sqinter> a1 = \<bottom> \<or> c1 \<sqinter> b1 = \<bottom>")
+    case True then show ?thesis unfolding lhs rhs by (elim disjE) simp_all
+  next
+    case False then show ?thesis unfolding lhs rhs by (simp add: spair_join mj)
+  qed
+qed
+
+global_interpretation sprod_flat_right: distributive_cpo
+  "below :: ('a::distributive_cpo \<otimes> 'b::flat) \<Rightarrow> _ \<Rightarrow> bool"
+  rewrites "po.is_ub (\<sqsubseteq>) = ((<|) :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.is_lub (\<sqsubseteq>) = ((<<|) :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.lub (\<sqsubseteq>) = (lub :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.is_glb (\<sqsubseteq>) = (is_glb :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.glb (\<sqsubseteq>) = (glb :: ('a \<otimes> 'b) set \<Rightarrow> _)"
+    and "po.meet (\<sqsubseteq>) = ((\<sqinter>) :: 'a \<otimes> 'b \<Rightarrow> _)"
+    and "po.join (\<sqsubseteq>) = ((\<squnion>) :: 'a \<otimes> 'b \<Rightarrow> _)"
+    and "bounded_complete.joinable (\<sqsubseteq>) = ((\<Up>) :: 'a \<otimes> 'b \<Rightarrow> _)"
+  by unfold_locales (simp_all only: class_locale_eqs sprod_flat_right_distrib)
+
 end
 

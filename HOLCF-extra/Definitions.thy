@@ -100,6 +100,19 @@ lemma meet_absorb2: "a \<sqsubseteq> b \<Longrightarrow> b \<sqinter> a = a"
 
 end
 
+text \<open>A constant defined in a class context exists twice: at locale level (\<open>po.meet (\<sqsubseteq>)\<close>) and
+  at class level (\<open>(\<sqinter>)\<close>), the latter introduced by a kernel definition stored as
+  \<open>po_class.meet_dict: (\<sqinter>) \<equiv> po.meet (\<sqsubseteq>)\<close>.  Collected here (turned around) for use as
+  \<open>rewrites\<close> when interpreting our class locales at concrete types, whose obligations and
+  facts otherwise come out in locale vocabulary.\<close>
+
+named_theorems class_locale_eqs \<open>locale-level vs class-level copies of class-context constants\<close>
+
+lemmas po_locale_eqs [class_locale_eqs] =
+  po_class.is_ub_dict[symmetric] po_class.is_lub_dict[symmetric] po_class.lub_dict[symmetric]
+  po_class.is_glb_dict[symmetric] po_class.glb_dict[symmetric]
+  po_class.meet_dict[symmetric] po_class.join_dict[symmetric]
+
 text \<open>In a pcpo, @{const is_bot} is just \<open>x = \<bottom>\<close>.  Deliberately \<open>[simp]\<close> only, not \<open>[iff]\<close>: as a
   classical rule it is tried by @{method blast}, which ignores sort constraints during search and
   so applies this \<open>pcpo\<close>-only equation at merely \<open>po\<close> types, blowing up on goals as simple as an
