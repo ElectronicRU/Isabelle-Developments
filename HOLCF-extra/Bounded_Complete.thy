@@ -309,94 +309,72 @@ next
   qed
 qed
 
-lemma bounded_complete_compact_to_general_aux:
-  assumes compactI: "\<And>a b c::'a::bifinite. \<lbrakk> compact a; compact b; a \<sqsubseteq> c; b \<sqsubseteq> c \<rbrakk> \<Longrightarrow> \<exists>z. {a, b} <<| z"
-    and c: "(a::'a) \<sqsubseteq> c" "b \<sqsubseteq> c"
+
+text \<open>Bounded completeness through any chain of maps with lub \<open>ID\<close> (e.g. the \<open>take\<close> functions of
+  a domain, or an approximation chain): it suffices that pairs of approximants have lubs
+  under any common bound.\<close>
+
+lemma chain_bounded_lub:
+  fixes t :: "nat \<Rightarrow> 'a::cpo \<rightarrow> 'a"
+  assumes t: "chain t" "(\<Squnion>i. t i) = ID"
+    and lubs: "\<And>n a b c. t n\<cdot>a \<sqsubseteq> c \<Longrightarrow> t n\<cdot>b \<sqsubseteq> c \<Longrightarrow> \<exists>z. {t n\<cdot>a, t n\<cdot>b} <<| z"
+    and "(a::'a) \<sqsubseteq> c" "b \<sqsubseteq> c"
   shows "\<exists>z. {a, b} <<| z"
 proof -
-  obtain A where A: "chain A" "\<forall>i. compact (A i)" "a = (\<Squnion>i. A i)"
-    by (rule obtain_compact_chain)
-  obtain B where B: "chain B" "\<forall>j. compact (B j)" "b = (\<Squnion>j. B j)"
-    by (rule obtain_compact_chain)
-  from A B c lub_below_iff have "A i \<sqsubseteq> c" "B i \<sqsubseteq> c" for i
-    by blast+
-  with A(2) B(2) compactI obtain Z where "{A i, B j} <<| Z i j" for i j
-    by meson
-  with A have "{a, B j} <<| (\<Squnion>i. Z i j)" for j
-    by (blast intro: bin_join_chain1)
-  then have "{B j, a} <<| (\<Squnion>i. Z i j)" for j
-    by (simp add: bin_join_ex_symm)
-  with B have "{b, a} <<| (\<Squnion>j. (\<Squnion>i. Z i j))"
-    by (blast intro: bin_join_chain1)
-  then show "\<exists>z. {a, b} <<| z"
-    by (auto simp add: bin_join_ex_symm)
+  have reach: "(\<Squnion>n. t n\<cdot>x) = x" for x
+    by (simp add: contlub_cfun_fun[OF t(1), symmetric] t(2))
+  have chx: "chain (\<lambda>n. t n\<cdot>x)" for x by (rule ch2ch_Rep_cfunL[OF t(1)])
+  have below: "t n\<cdot>x \<sqsubseteq> x" for n x
+    using is_ub_thelub[OF chx, of n x] by (simp add: reach)
+  define L where "L n = lub {t n\<cdot>a, t n\<cdot>b}" for n
+  have L: "{t n\<cdot>a, t n\<cdot>b} <<| L n" for n
+  proof -
+    have "t n\<cdot>a \<sqsubseteq> c" "t n\<cdot>b \<sqsubseteq> c"
+      using below \<open>a \<sqsubseteq> c\<close> \<open>b \<sqsubseteq> c\<close> by (blast intro: below_trans)+
+    from lubs[OF this] obtain z where "{t n\<cdot>a, t n\<cdot>b} <<| z" by (elim exE)
+    then show ?thesis unfolding L_def by (rule is_lub_lub)
+  qed
+  have chL: "chain L"
+  proof (rule chainI)
+    fix n
+    have "t n\<cdot>a \<sqsubseteq> L (Suc n)" "t n\<cdot>b \<sqsubseteq> L (Suc n)"
+      using chainE[OF chx] is_lubD1[OF L, THEN is_ubD]
+      by (blast intro: below_trans)+
+    then show "L n \<sqsubseteq> L (Suc n)" by (blast intro: is_lubD2[OF L] is_ubI)
+  qed
+  have "{a, b} <<| (\<Squnion>n. L n)"
+  proof (rule is_lubI)
+    have "(\<Squnion>n. t n\<cdot>a) \<sqsubseteq> (\<Squnion>n. L n)" "(\<Squnion>n. t n\<cdot>b) \<sqsubseteq> (\<Squnion>n. L n)"
+      using is_lubD1[OF L, THEN is_ubD] by (blast intro: lub_mono chx chL)+
+    then show "{a, b} <| (\<Squnion>n. L n)" by (simp add: reach is_ub_def)
+  next
+    fix u assume "{a, b} <| u"
+    then have "a \<sqsubseteq> u" "b \<sqsubseteq> u" by (auto dest: is_ubD)
+    then have "L n \<sqsubseteq> u" for n
+      using below by (blast intro: is_lubD2[OF L] is_ubI below_trans)
+    then show "(\<Squnion>n. L n) \<sqsubseteq> u" by (rule lub_below[OF chL])
+  qed
+  then show ?thesis ..
 qed
+
+lemma bounded_complete_chainI:
+  fixes t :: "nat \<Rightarrow> 'a::dcpo \<rightarrow> 'a"
+  assumes "chain t" "(\<Squnion>i. t i) = ID"
+    and "\<And>n a b c. t n\<cdot>a \<sqsubseteq> c \<Longrightarrow> t n\<cdot>b \<sqsubseteq> c \<Longrightarrow> \<exists>z. {t n\<cdot>a, t n\<cdot>b} <<| z"
+  shows "OFCLASS('a, bounded_complete_class)"
+  by (rule bounded_complete_finite_joinI) (rule chain_bounded_lub[OF assms])
+
+text \<open>The compact version is the approximation-chain instance.\<close>
 
 lemma bounded_complete_finite_compact_joinI:
   assumes "\<And>a b c::'a::bifinite. \<lbrakk> compact a; compact b; a \<sqsubseteq> c; b \<sqsubseteq> c \<rbrakk> \<Longrightarrow> \<exists>z. {a, b} <<| z"
   shows "OFCLASS('a, bounded_complete_class)"
-proof
-  have "a \<sqsubseteq> c \<Longrightarrow> b \<sqsubseteq> c \<Longrightarrow> \<exists>z. {a, b} <<| z" for a b c :: 'a
-    by (rule bounded_complete_compact_to_general_aux[OF assms])
-  then have joinI: "a \<sqsubseteq> c \<Longrightarrow> b \<sqsubseteq> c \<Longrightarrow> {a, b} <<| a \<squnion> b" for a b c :: 'a
-    unfolding join_def using is_lub_lub by blast
-  have finite_is_lub: "B <| z \<Longrightarrow> \<exists>b. B <<| b" if "finite B"
-    for z and B :: "'a set"
-    using that(1)
-  proof (induction B rule: finite_induct)
-    case empty
-    then show ?case by (blast intro: lub_empty)
-  next
-    case (insert x F)
-    from insert.prems have prev: "F <| z" and x: "x \<sqsubseteq> z" by simp_all
-    from insert.IH[OF prev] obtain w where w: "F <<| w" ..
-    from w prev have "w \<sqsubseteq> z" by (rule is_lubD2)
-    with x have pairlub: "{x, w} <<| x \<squnion> w" by (rule joinI)
-    from is_lubD1[OF this] have belows: "x \<sqsubseteq> x \<squnion> w" "w \<sqsubseteq> x \<squnion> w" 
-      by simp_all
-    have "(insert x F) <<| x \<squnion> w"
-    proof (rule is_lubI)
-      show "insert x F <| x \<squnion> w" unfolding is_ub_insert
-        using is_lubD1 pairlub w is_ub_upward belows by blast
-    next
-      fix u assume "insert x F <| u"
-      then have "F <| u" and "x \<sqsubseteq> u" by simp_all
-      with is_lubD2[OF w] have "{x, w} <| u" by fastforce
-      with is_lubD2[OF pairlub] show "x \<squnion> w \<sqsubseteq> u" .
-    qed
-    then show ?case ..
-  qed
+proof (rule bounded_complete_finite_joinI)
+  fix a b c :: 'a assume "a \<sqsubseteq> c" "b \<sqsubseteq> c"
   from bifinite obtain approx :: "nat \<Rightarrow> 'a \<rightarrow> 'a" where "approx_chain approx" ..
   then interpret approx_chain approx .
-
-  fix F and z :: 'a assume *: "F <| z"
-
-  define cF where "cF \<equiv> \<lambda>i. (\<lambda>x. approx i\<cdot>x) ` F"
-  have bound: "cF i <| x" if "F <| x" for i x
-  proof (rule is_ubI)
-    fix y assume "y \<in> cF i"
-    from this[unfolded cF_def] obtain y0
-      where 1: "y = approx i\<cdot>y0"
-        and 2: "y0 \<in> F"
-      by blast
-    from approx_below 1 have "y \<sqsubseteq> y0" by simp
-    also have "y0 \<sqsubseteq> x" using is_ubD[OF that 2] .
-    finally show "y \<sqsubseteq> x" .
-  qed
-
-  have cF_finite: "finite (cF i)" for i
-    unfolding cF_def
-    apply (rule finite_subset)
-     apply (rule image_mono)
-     apply (rule subset_UNIV)
-    apply (fact finite_range_approx)
-    .
-
-  from * have cF_bounded: "cF i <| z" for i by (rule bound)
-  from cF_finite cF_bounded have cF_lub: "cF i <<| lub (cF i)" for i
-    using finite_is_lub is_lub_lub by blast
-  with approx_lub_family cF_def
-  show "\<exists>w. F <<| w" by blast
+  show "\<exists>z. {a, b} <<| z"
+    by (rule chain_bounded_lub[OF chain_approx lub_approx _ \<open>a \<sqsubseteq> c\<close> \<open>b \<sqsubseteq> c\<close>], rule assms) simp_all
 qed
 
 lemma bounded_complete_finite_compact_joinI':

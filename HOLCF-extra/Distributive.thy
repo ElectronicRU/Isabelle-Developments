@@ -176,47 +176,90 @@ proof -
   qed
 qed
 
-text \<open>So distributivity of a bifinite bounded-complete domain need only be checked on compacts.\<close>
+text \<open>Distributivity through any chain of maps with lub \<open>ID\<close> (e.g. the \<open>take\<close> functions of a
+  domain, or an approximation chain): it suffices to meet with approximants \<open>t n\<cdot>c\<close>, against
+  arbitrary joinable \<open>a\<close>, \<open>b\<close>; the limit is taken in \<open>c\<close> only, by continuity of meet.\<close>
+
+lemma chain_distrib:
+  fixes t :: "nat \<Rightarrow> 'a::{bifinite, bounded_complete} \<rightarrow> 'a" and a b c :: 'a
+  assumes t: "chain t" "(\<Squnion>i. t i) = ID"
+    and law: "\<And>n a b. a \<Up> b \<Longrightarrow> t n\<cdot>c \<sqinter> (a \<squnion> b) = t n\<cdot>c \<sqinter> a \<squnion> t n\<cdot>c \<sqinter> b"
+    and "a \<Up> b"
+  shows "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> c \<sqinter> b"
+proof -
+  have ch: "chain (\<lambda>n. t n\<cdot>c)" by (rule ch2ch_Rep_cfunL[OF t(1)])
+  have reach: "(\<Squnion>n. t n\<cdot>c) = c" by (simp add: contlub_cfun_fun[OF t(1), symmetric] t(2))
+  have lim: "c \<sqinter> y = (\<Squnion>n. t n\<cdot>c \<sqinter> y)" and chy: "chain (\<lambda>n. t n\<cdot>c \<sqinter> y)" for y
+    using cont2contlubE[OF cont_meet_arg ch, of y] ch2ch_cont[OF cont_meet_arg ch, of y]
+    by (simp_all add: reach)
+  have j: "t n\<cdot>c \<sqinter> a \<Up> t n\<cdot>c \<sqinter> b" for n by (rule joinableI[OF meet_below1 meet_below1])
+  have "c \<sqinter> (a \<squnion> b) = (\<Squnion>n. t n\<cdot>c \<sqinter> (a \<squnion> b))" by (rule lim)
+  also have "\<dots> = (\<Squnion>n. t n\<cdot>c \<sqinter> a \<squnion> t n\<cdot>c \<sqinter> b)" by (simp only: law[OF \<open>a \<Up> b\<close>])
+  also have "\<dots> = (\<Squnion>n. t n\<cdot>c \<sqinter> a) \<squnion> (\<Squnion>n. t n\<cdot>c \<sqinter> b)" by (rule lub_join_chains(3)[OF chy chy j])
+  also have "\<dots> = c \<sqinter> a \<squnion> c \<sqinter> b" by (simp only: lim[symmetric])
+  finally show ?thesis .
+qed
+
+lemma distributive_cpo_chainI:
+  fixes t :: "nat \<Rightarrow> 'a::{bifinite, bounded_complete} \<rightarrow> 'a"
+  assumes t: "chain t" "(\<Squnion>i. t i) = ID"
+    and law: "\<And>n a b c. a \<Up> b \<Longrightarrow> t n\<cdot>c \<sqinter> (a \<squnion> b) = t n\<cdot>c \<sqinter> a \<squnion> t n\<cdot>c \<sqinter> b"
+  shows "OFCLASS('a, distributive_cpo_class)"
+  by intro_classes (rule chain_distrib[OF t law])
+
+text \<open>For a fixed \<open>c\<close>, the law against compact joinable pairs extends to all joinable pairs
+  (approximating \<open>a\<close> and \<open>b\<close>; meet is continuous in its second argument).\<close>
+
+lemma compact_meet_distrib:
+  fixes a b c :: "'a::{bifinite, bounded_complete}"
+  assumes law: "\<And>a b. compact a \<Longrightarrow> compact b \<Longrightarrow> a \<Up> b \<Longrightarrow> c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> c \<sqinter> b"
+    and "a \<Up> b"
+  shows "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> c \<sqinter> b"
+proof -
+  from bifinite obtain approx :: "nat \<Rightarrow> 'a \<rightarrow> 'a" where "approx_chain approx" ..
+  then interpret approx_chain approx .
+  have reach: "(\<Squnion>i. approx i\<cdot>x) = x" for x
+    by (simp add: contlub_cfun_fun[OF chain_approx, symmetric])
+  have ch: "chain (\<lambda>i. approx i\<cdot>x)" for x by (rule ch2ch_Rep_cfunL[OF chain_approx])
+  have lim: "c \<sqinter> (\<Squnion>i. X i) = (\<Squnion>i. c \<sqinter> X i)" and chX: "chain (\<lambda>i. c \<sqinter> X i)" if "chain X" for X
+    using cont2contlubE[OF cont_meet_arg2 that] ch2ch_cont[OF cont_meet_arg2 that] by simp_all
+  define A where "A = (\<lambda>i. approx i\<cdot>a)"
+  define B where "B = (\<lambda>i. approx i\<cdot>b)"
+  have chs: "chain A" "chain B" unfolding A_def B_def by (rule ch)+
+  have AB: "A i \<Up> B i" for i
+  proof -
+    have "approx i\<cdot>a \<sqsubseteq> approx i\<cdot>(a \<squnion> b)" "approx i\<cdot>b \<sqsubseteq> approx i\<cdot>(a \<squnion> b)"
+      by (rule monofun_cfun_arg[OF joinableD(1)[OF \<open>a \<Up> b\<close>]],
+          rule monofun_cfun_arg[OF joinableD(2)[OF \<open>a \<Up> b\<close>]])
+    then show ?thesis unfolding A_def B_def by (rule joinableI)
+  qed
+  have j: "c \<sqinter> A i \<Up> c \<sqinter> B i" for i by (rule joinableI[OF meet_below1 meet_below1])
+  have "c \<sqinter> (a \<squnion> b) = c \<sqinter> ((\<Squnion>i. A i) \<squnion> (\<Squnion>i. B i))" by (simp only: A_def B_def reach)
+  also have "\<dots> = c \<sqinter> (\<Squnion>i. A i \<squnion> B i)" by (simp only: lub_join_chains(3)[OF chs AB])
+  also have "\<dots> = (\<Squnion>i. c \<sqinter> (A i \<squnion> B i))" by (rule lim[OF lub_join_chains(1)[OF chs AB]])
+  also have "\<dots> = (\<Squnion>i. c \<sqinter> A i \<squnion> c \<sqinter> B i)"
+    using AB by (simp add: law A_def B_def)
+  also have "\<dots> = (\<Squnion>i. c \<sqinter> A i) \<squnion> (\<Squnion>i. c \<sqinter> B i)"
+    by (rule lub_join_chains(3)[OF chX[OF chs(1)] chX[OF chs(2)] j])
+  also have "\<dots> = c \<sqinter> a \<squnion> c \<sqinter> b"
+    by (simp only: lim[OF chs(1), symmetric] lim[OF chs(2), symmetric]) (simp only: A_def B_def reach)
+  finally show ?thesis .
+qed
+
+text \<open>So distributivity of a bifinite bounded-complete domain need only be checked on compacts:
+  the approximation-chain instance of @{text chain_distrib}.\<close>
 
 lemma distributive_cpo_compactI:
   assumes "\<And>a b c::'a::{bifinite, bounded_complete}. compact a \<Longrightarrow> compact b \<Longrightarrow> compact c \<Longrightarrow>
     a \<Up> b \<Longrightarrow> c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)"
   shows "OFCLASS('a, distributive_cpo_class)"
 proof intro_classes
-  fix a b c :: 'a assume ab: "a \<Up> b"
-  obtain approx :: "nat \<Rightarrow> 'a \<rightarrow> 'a" where "approx_chain approx" using bifinite by blast
+  fix a b c :: 'a assume "a \<Up> b"
+  from bifinite obtain approx :: "nat \<Rightarrow> 'a \<rightarrow> 'a" where "approx_chain approx" ..
   then interpret approx_chain approx .
-  have lub: "(\<Squnion>i. approx i\<cdot>x) = x" for x
-    by (simp add: contlub_cfun_fun[OF chain_approx, symmetric])
-  have ch: "chain (\<lambda>i. approx i\<cdot>x)" for x by (rule ch2ch_Rep_cfunL[OF chain_approx])
-  have mch: "chain X \<Longrightarrow> chain Y \<Longrightarrow> chain (\<lambda>i. X i \<sqinter> Y i)" for X Y :: "nat \<Rightarrow> 'a"
-    by (rule chainI, rule meet_greatest)
-      (blast intro: below_trans[OF meet_below1 chainE] below_trans[OF meet_below2 chainE])+
-  define A where "A = (\<lambda>i. approx i\<cdot>a)"
-  define B where "B = (\<lambda>i. approx i\<cdot>b)"
-  define C where "C = (\<lambda>i. approx i\<cdot>c)"
-  have chs: "chain A" "chain B" "chain C" unfolding A_def B_def C_def by (rule ch)+
-  have AB: "A i \<Up> B i" for i
-  proof -
-    have "approx i\<cdot>a \<sqsubseteq> approx i\<cdot>(a \<squnion> b)" "approx i\<cdot>b \<sqsubseteq> approx i\<cdot>(a \<squnion> b)"
-      by (rule monofun_cfun_arg[OF joinableD(1)[OF ab]],
-          rule monofun_cfun_arg[OF joinableD(2)[OF ab]])
-    then show ?thesis unfolding A_def B_def by (rule joinableI)
-  qed
-  have CAB: "C i \<sqinter> A i \<Up> C i \<sqinter> B i" for i by (rule joinableI[OF meet_below1 meet_below1])
-  have ca: "(\<Squnion>i. C i \<sqinter> A i) = c \<sqinter> a" and cb: "(\<Squnion>i. C i \<sqinter> B i) = c \<sqinter> b"
-    using meet_lub_chains[OF chs(3,1)] meet_lub_chains[OF chs(3,2)]
-    by (simp_all add: A_def B_def C_def lub)
-  have "c \<sqinter> (a \<squnion> b) = (\<Squnion>i. C i) \<sqinter> ((\<Squnion>i. A i) \<squnion> (\<Squnion>i. B i))" by (simp add: A_def B_def C_def lub)
-  also have "\<dots> = (\<Squnion>i. C i) \<sqinter> (\<Squnion>i. A i \<squnion> B i)" by (simp add: lub_join_chains(3)[OF chs(1,2) AB])
-  also have "\<dots> = (\<Squnion>i. C i \<sqinter> (A i \<squnion> B i))"
-    by (rule meet_lub_chains[OF chs(3) lub_join_chains(1)[OF chs(1,2) AB]])
-  also have "\<dots> = (\<Squnion>i. (C i \<sqinter> A i) \<squnion> (C i \<sqinter> B i))"
-    using AB by (simp add: A_def B_def C_def assms)
-  also have "\<dots> = (\<Squnion>i. C i \<sqinter> A i) \<squnion> (\<Squnion>i. C i \<sqinter> B i)"
-    by (rule lub_join_chains(3)[OF mch[OF chs(3,1)] mch[OF chs(3,2)] CAB])
-  also have "\<dots> = c \<sqinter> a \<squnion> (c \<sqinter> b)" by (simp only: ca cb)
-  finally show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> (c \<sqinter> b)" .
+  show "c \<sqinter> (a \<squnion> b) = c \<sqinter> a \<squnion> c \<sqinter> b"
+    by (rule chain_distrib[OF chain_approx lub_approx _ \<open>a \<Up> b\<close>], rule compact_meet_distrib,
+      rule assms) simp_all
 qed
 
 end
