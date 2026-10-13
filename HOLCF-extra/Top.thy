@@ -194,8 +194,8 @@ qed
 
 lemma down_strict: "down\<cdot>\<bottom> = \<bottom>" by (simp add: down_beta top_bot)
 
-lemma down_below_of[simp]: "down\<cdot>x \<sqsubseteq> down\<cdot>y \<Longrightarrow> x \<sqsubseteq> y" by (simp add: down_beta below_Of)
-lemma down_below_iff[iff]: "down\<cdot>x \<sqsubseteq> down\<cdot>y \<longleftrightarrow> x \<sqsubseteq> y" by (rule iffI) (auto intro: monofun_cfun_arg)
+lemma down_below_of: "down\<cdot>x \<sqsubseteq> down\<cdot>y \<Longrightarrow> x \<sqsubseteq> y" by (simp add: down_beta below_Of)
+lemma down_below_iff[iff]: "down\<cdot>x \<sqsubseteq> down\<cdot>y \<longleftrightarrow> x \<sqsubseteq> y" by (rule iffI) (auto intro: monofun_cfun_arg down_below_of)
 
 lemma down_ne_Top[simp]: "down\<cdot>x \<noteq> Top" "Top \<noteq> down\<cdot>x" by (simp_all add: down_beta)
 

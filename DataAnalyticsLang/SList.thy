@@ -22,64 +22,123 @@ lemma slist_map_bottom_iff [simp]: "slist_map\<cdot>f\<cdot>l = \<bottom> \<long
 
 subsection \<open>Generic derivation: map rules by fixed-point induction\<close>
 
-lemma lubs_on_slist_map: "lubs_on v \<Longrightarrow> lubs_on (slist_map\<cdot>v)"
+lemma bounded_complete_defl_slist_map:
+  "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (slist_map\<cdot>v)"
   unfolding slist_map_def
   apply (subst beta_cfun, simp)
-  apply (rule fix_preserves[OF adm_lubs_on lubs_on_bottom])
+  apply (rule fix_preserves[OF adm_bounded_complete_defl bounded_complete_defl_bottom])
   apply (rule preserves_LAM, intro cont2cont)
-  apply (rule lubs_on_iso)
+  apply (rule bounded_complete_defl_iso)
    apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
-  apply (intro lubs_on_ssum_map lubs_on_sprod_map lubs_on_u_map lubs_on_ID)
+  apply (intro bounded_complete_defl_ssum_map bounded_complete_defl_sprod_map
+      bounded_complete_defl_u_map bounded_complete_defl_ID)
    apply assumption+
   done
 
-lemma sep_on_slist_map: "sep_on (slist_map\<cdot>v)"
+lemma separated_defl_slist_map: "deflation v \<Longrightarrow> separated_defl (slist_map\<cdot>v)"
   unfolding slist_map_def
   apply (subst beta_cfun, simp)
-  apply (rule fix_preserves[OF adm_sep_on sep_on_bottom])
+  apply (rule fix_preserves[OF adm_separated_defl separated_defl_bottom])
   apply (rule preserves_LAM, intro cont2cont)
-  apply (rule sep_on_iso)
+  apply (rule separated_defl_iso)
    apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
-  apply (intro sep_on_ssum_map sep_on_sprod_map sep_on_u_map sep_on_ID)
-  apply assumption
+  apply (intro separated_defl_ssum_map separated_defl_sprod_map separated_defl_u_map
+      separated_defl_ID)
+   apply assumption+
+  done
+
+lemma downclosed_defl_slist_map: "downclosed_defl v \<Longrightarrow> downclosed_defl (slist_map\<cdot>v)"
+  unfolding slist_map_def
+  apply (subst beta_cfun, simp)
+  apply (rule fix_preserves[OF adm_downclosed_defl downclosed_defl_bottom])
+  apply (rule preserves_LAM, intro cont2cont)
+  apply (rule downclosed_defl_iso)
+   apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
+  apply (intro downclosed_defl_ssum_map downclosed_defl_sprod_map downclosed_defl_u_map
+      downclosed_defl_ID)
+   apply assumption+
   done
 
 lemma "OFCLASS('v::{domain, bounded_complete} slist, bounded_complete_class)"
-  by (rule bounded_complete_lubs_onI, subst slist_map_ID[symmetric])
-    (rule lubs_on_slist_map[OF lubs_on_ID])
+  by (rule bounded_complete_class_deflI, subst slist_map_ID[symmetric])
+    (rule bounded_complete_defl_slist_map[OF bounded_complete_defl_ID])
 
 lemma "OFCLASS('v::domain slist, separated_po_class)"
-  by (rule separated_po_sep_onI, subst slist_map_ID[symmetric]) (rule sep_on_slist_map)
+  by (rule separated_po_class_deflI, subst slist_map_ID[symmetric])
+    (rule separated_defl_slist_map[OF deflation_ID])
 
-domain ('v::"domain") lstream = LSCons (lazy 'v) (lazy "'v lstream")
-
-lemma lubs_on_lstream_map: "lubs_on v \<Longrightarrow> lubs_on (lstream_map\<cdot>v)"
-  unfolding lstream_map_def
+lemma separating_defl_slist_map: "deflation v \<Longrightarrow> separating_defl (slist_map\<cdot>v)"
+  unfolding slist_map_def
   apply (subst beta_cfun, simp)
-  apply (rule fix_preserves[OF adm_lubs_on lubs_on_bottom])
+  apply (rule fix_preserves[OF adm_separating_defl separating_defl_bottom])
   apply (rule preserves_LAM, intro cont2cont)
-  apply (rule lubs_on_iso)
-   apply (rule iso.intro, rule lstream.abs_iso, rule lstream.rep_iso)
-  apply (intro lubs_on_sprod_map lubs_on_u_map)
+  apply (rule separating_defl_iso)
+   apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
+  apply (intro separating_defl_ssum_map separating_defl_sprod_map separating_defl_u_map
+      separating_defl_flat deflation_ID)
    apply assumption+
   done
 
-lemma sep_on_lstream_map: "sep_on (lstream_map\<cdot>v)"
+text \<open>Recursion passes through \<open>\<otimes>\<close>, whose rule needs the recursive occurrence separated.  The
+  iterates lie below the fixed point, so separation (antitone, proved above) transfers to them
+  and need not be carried through the induction.\<close>
+
+lemma distributive_defl_slist_map:
+  assumes v: "distributive_defl v" shows "distributive_defl (slist_map\<cdot>v)"
+proof -
+  have dv: "deflation v"
+    by (rule bounded_complete_defl.axioms(1)[OF distributive_defl.axioms(1)[OF v]])
+  have sep: "separating_defl (slist_map\<cdot>v)" by (rule separating_defl_slist_map[OF dv])
+  show ?thesis
+    unfolding slist_map_def
+    apply (subst beta_cfun, simp)
+    apply (rule fix_preserves_below[where P=distributive_defl])
+       apply (intro cont2cont)
+      apply (rule adm_distributive_defl)
+     apply (rule distributive_defl_bottom)
+    apply (rule distributive_defl_iso)
+     apply (rule iso.intro, rule slist.abs_iso, rule slist.rep_iso)
+    apply (intro distributive_defl_ssum_map distributive_defl_sprod_map distributive_defl_u_map
+        distributive_defl_ID separating_defl_u_map[OF dv] v)
+     apply assumption
+    apply (rule separating_defl_below[OF sep[unfolded slist_map_def, simplified]])
+     apply (erule bounded_complete_defl.axioms(1)[OF distributive_defl.axioms(1)])
+    apply assumption
+    done
+qed
+
+domain ('v::"domain") lstream = LSCons (lazy 'v) (lazy "'v lstream")
+
+lemma bounded_complete_defl_lstream_map:
+  "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (lstream_map\<cdot>v)"
   unfolding lstream_map_def
   apply (subst beta_cfun, simp)
-  apply (rule fix_preserves[OF adm_sep_on sep_on_bottom])
+  apply (rule fix_preserves[OF adm_bounded_complete_defl bounded_complete_defl_bottom])
   apply (rule preserves_LAM, intro cont2cont)
-  apply (rule sep_on_iso)
+  apply (rule bounded_complete_defl_iso)
    apply (rule iso.intro, rule lstream.abs_iso, rule lstream.rep_iso)
-  apply (intro sep_on_sprod_map sep_on_u_map)
+  apply (intro bounded_complete_defl_sprod_map bounded_complete_defl_u_map)
+   apply assumption+
+  done
+
+lemma separated_defl_lstream_map: "deflation v \<Longrightarrow> separated_defl (lstream_map\<cdot>v)"
+  unfolding lstream_map_def
+  apply (subst beta_cfun, simp)
+  apply (rule fix_preserves[OF adm_separated_defl separated_defl_bottom])
+  apply (rule preserves_LAM, intro cont2cont)
+  apply (rule separated_defl_iso)
+   apply (rule iso.intro, rule lstream.abs_iso, rule lstream.rep_iso)
+  apply (intro separated_defl_sprod_map separated_defl_u_map)
+   apply (assumption | erule separated_defl.axioms(1))+
   done
 
 lemma "OFCLASS('v::{domain, bounded_complete} lstream, bounded_complete_class)"
-  by (rule bounded_complete_lubs_onI, subst lstream_map_ID[symmetric])
-    (rule lubs_on_lstream_map[OF lubs_on_ID])
+  by (rule bounded_complete_class_deflI, subst lstream_map_ID[symmetric])
+    (rule bounded_complete_defl_lstream_map[OF bounded_complete_defl_ID])
 
 lemma "OFCLASS('v::domain lstream, separated_po_class)"
-  by (rule separated_po_sep_onI, subst lstream_map_ID[symmetric]) (rule sep_on_lstream_map)
+  by (rule separated_po_class_deflI, subst lstream_map_ID[symmetric])
+    (rule separated_defl_lstream_map[OF deflation_ID])
 
 subsection \<open>Bounded completeness\<close>
 
@@ -296,6 +355,13 @@ next
     qed
   qed
 qed
+
+text \<open>The generic derivation (@{thm [source] distributive_defl_slist_map}) gives the same
+  instance at the same parameter sort.\<close>
+
+lemma "OFCLASS('v::{domain, distributive_cpo} slist, distributive_cpo_class)"
+  by (rule distributive_cpo_class_deflI, subst slist_map_ID[symmetric])
+    (rule distributive_defl_slist_map[OF distributive_defl_ID])
 
 instance slist :: ("{domain, distributive_cpo}") distributive_cpo
   by intro_classes (rule slist_distrib)

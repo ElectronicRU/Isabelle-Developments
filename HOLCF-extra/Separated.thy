@@ -154,7 +154,19 @@ proof (rule separated_poI)
     then show ?thesis by (intro exI[of _ "sinr\<cdot>l"]) simp
   qed
   show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> x \<and> l \<sqsubseteq> y"
-    using nb le by (cases x; cases y; cases u) (auto intro: L R)
+  proof (cases x)
+    case bottom with nb show ?thesis by simp
+  next
+    case (sinl a)
+    from le(1) sinl obtain c where u: "u = sinl\<cdot>c" and ac: "a \<sqsubseteq> c" by (cases u) auto
+    from le(2) nb(2) u obtain b where y: "y = sinl\<cdot>b" "b \<noteq> \<bottom>" and bc: "b \<sqsubseteq> c" by (cases y) auto
+    from L[OF sinl(2) y(2) ac bc] show ?thesis by (simp only: sinl(1) y(1))
+  next
+    case (sinr a)
+    from le(1) sinr obtain c where u: "u = sinr\<cdot>c" and ac: "a \<sqsubseteq> c" by (cases u) auto
+    from le(2) nb(2) u obtain b where y: "y = sinr\<cdot>b" "b \<noteq> \<bottom>" and bc: "b \<sqsubseteq> c" by (cases y) auto
+    from R[OF sinr(2) y(2) ac bc] show ?thesis by (simp only: sinr(1) y(1))
+  qed
 qed
 
 text \<open>Componentwise: the pair of the two components' witnesses.\<close>
@@ -170,10 +182,17 @@ proof (rule separated_poI)
     obtain la :: 'a where "la \<noteq> \<bottom>" "la \<sqsubseteq> a" "la \<sqsubseteq> a'" by (elim exE conjE)
     moreover from separated_pcpo[OF \<open>b \<noteq> \<bottom>\<close> \<open>b' \<noteq> \<bottom>\<close> \<open>b \<sqsubseteq> d\<close> \<open>b' \<sqsubseteq> d\<close>]
     obtain lb :: 'b where "lb \<noteq> \<bottom>" "lb \<sqsubseteq> b" "lb \<sqsubseteq> b'" by (elim exE conjE)
-    ultimately show ?thesis using that by (intro exI[of _ "(:la, lb:)"]) (simp add: spair_below)
+    ultimately show ?thesis using that
+      by (intro exI[of _ "(:la, lb:)"] conjI) (simp_all only: spair_below spair_bottom_iff simp_thms)
   qed
-  show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> x \<and> l \<sqsubseteq> y"
-    using nb le by (cases x; cases y; cases u) (auto simp: spair_below intro: S)
+  obtain x1 x2 where x: "x = (:x1, x2:)" "x1 \<noteq> \<bottom>" "x2 \<noteq> \<bottom>" using nb(1) by (cases x) auto
+  obtain y1 y2 where y: "y = (:y1, y2:)" "y1 \<noteq> \<bottom>" "y2 \<noteq> \<bottom>" using nb(2) by (cases y) auto
+  obtain u1 u2 where u: "u = (:u1, u2:)" using le(1) x by (cases u) auto
+  have "x1 \<sqsubseteq> u1" "x2 \<sqsubseteq> u2" "y1 \<sqsubseteq> u1" "y2 \<sqsubseteq> u2"
+    using le(1)[unfolded x(1) u] le(2)[unfolded y(1) u]
+    by (simp_all only: spair_below x(2,3) y(2,3) simp_thms)
+  from S[OF x(2,3) y(2,3) this(1,3,2,4)] show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> x \<and> l \<sqsubseteq> y"
+    by (simp only: x(1) y(1))
 qed
 
 section \<open>Distributivity of smash products\<close>
