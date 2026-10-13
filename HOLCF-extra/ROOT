@@ -1,5 +1,6 @@
 session "HOLCF-extra" = HOLCF +
   options [document = pdf, document_output = "output"]
+  sessions "HOL-Eisbach"
 (*theories [document = false]
     A
     B *)
@@ -10,6 +11,7 @@ session "HOLCF-extra" = HOLCF +
     Distributive
     Separated
     Domain_Order
+    Domain_Order_Derive
     Directed
     Definitions
     MUB_Closure
@@ -20,3 +22,10 @@ session "HOLCF-extra" = HOLCF +
     Cpo_Topology
   document_files
     "root.tex"
+
+session "HOLCF-extra-Examples" in Examples = "HOLCF-extra" +
+  description ‹Use cases of the order-instance derivation (Domain_Order_Derive).›
+  options [document = false]
+  theories
+    SList
+    Derive_Examples

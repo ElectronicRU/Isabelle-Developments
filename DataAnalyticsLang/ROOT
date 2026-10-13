@@ -13,7 +13,6 @@ session DataAnalyticsLang = "HOLCF" +
     LOD
     LOD_Factor
     Domain_Transfer
-    SList
   document_files
     "root.tex"
     "root.bib"
