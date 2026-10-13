@@ -9,7 +9,7 @@ session "HOLCF-extra" = HOLCF +
     FiniteCF
     Bounded_Complete
     Distributive
-    Separated
+    Filter_Sum
     Domain_Order
     Domain_Order_Derive
     Directed

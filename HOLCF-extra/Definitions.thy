@@ -178,4 +178,54 @@ proof -
   with adm[THEN admD, OF X(1)] X(3) show "P x" by presburger
 qed
 
+subsection \<open>Step functions\<close>
+
+text \<open>The step function \<open>stepfn c y\<close> is \<open>y\<close> above \<open>c\<close> and \<open>\<bottom>\<close> elsewhere; it is continuous when
+  \<open>c\<close> is compact.  It lies below @{term f} exactly when \<open>y \<sqsubseteq> f\<cdot>c\<close>.\<close>
+
+definition "stepfn c y \<equiv> (\<Lambda> x. if c \<sqsubseteq> x then y else \<bottom>)"
+
+lemma monofun_stepfn: "monofun (\<lambda>x::'a::cpo. if c \<sqsubseteq> x then y else \<bottom>)" (is "monofun ?f")
+proof (rule monofunI)
+  fix x1 x2 ::'a assume "x1 \<sqsubseteq> x2"
+  show "?f x1 \<sqsubseteq> ?f x2"
+    apply (cases "c \<sqsubseteq> x1")
+    using \<open>x1 \<sqsubseteq> x2\<close> below_trans[of c x1 x2] apply fastforce
+    by simp
+qed
+
+lemma cont_stepfn: "cont (\<lambda>x::'a::cpo. if c \<sqsubseteq> x then y else \<bottom>)" (is "cont ?f") if "compact c"
+proof (rule contI2)
+  show "monofun ?f" by (rule monofun_stepfn)
+  fix Y :: "nat \<Rightarrow> 'a" assume "chain Y" and chain_F: "chain (\<lambda>i. ?f (Y i))"
+  show "?f (\<Squnion>i. Y i) \<sqsubseteq> (\<Squnion>i. ?f (Y i))"
+  proof (cases "c \<sqsubseteq> (\<Squnion>i. Y i)")
+    case True
+    with \<open>compact c\<close> \<open>chain Y\<close> have "\<exists>i. c \<sqsubseteq> Y i" by (rule compactD2)
+    then obtain i where i: "c \<sqsubseteq> Y i" ..
+    from i \<open>chain Y\<close>[THEN chain_mono] have Y_mono: "i \<le> j \<Longrightarrow> c \<sqsubseteq> Y j" for j
+      by (rule below_trans)
+    from i have 1: "?f (Y i) = y" by simp
+    with Y_mono have "i \<le> j \<Longrightarrow> ?f (Y i) = ?f (Y j)" for j by simp
+    then have max: "max_in_chain i (\<lambda>i. ?f (Y i))" by (rule max_in_chainI)
+    from maxinch_is_thelub[OF chain_F] this 1 have 1: "(\<Squnion>i. ?f (Y i)) = y"
+      by presburger
+    from True have 2: "?f (\<Squnion>i. Y i) = y" by simp
+    show ?thesis unfolding 1 2 by (rule below_refl)
+  next
+    case False
+    then have 1: "?f (\<Squnion>i. Y i) = \<bottom>" by simp
+    show ?thesis unfolding 1 by (rule minimal)
+  qed
+qed
+
+lemma stepfn_beta: "stepfn c y\<cdot>x = (if c \<sqsubseteq> x then y else \<bottom>)" if "compact c"
+  unfolding stepfn_def
+  by (rule beta_cfun) (rule cont_stepfn[OF that])
+
+lemma stepfn_below_iff: assumes "compact c" shows "stepfn c y \<sqsubseteq> f \<longleftrightarrow> y \<sqsubseteq> f\<cdot>c"
+  unfolding cfun_below_iff stepfn_beta[OF assms]
+  apply (simp only: minimal split: if_splits)
+  by simp (blast intro: monofun_cfun_arg[of c _ f] below_trans[of y "f\<cdot>c"])
+
 end

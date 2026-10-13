@@ -456,5 +456,33 @@ lemma chain_complete_iff_dcomplete:
 end
 
 
+text \<open>A compact element below the lub of a directed set is below a member; the approximants of
+  the lub are the union of the approximants.\<close>
+
+lemma compact_directedD:
+  fixes x :: "'a::bifinite"
+  assumes D: "directed D" "D \<noteq> {}" and x: "compact x"
+  shows "x \<sqsubseteq> lub D \<longleftrightarrow> (\<exists>y \<in> D. x \<sqsubseteq> y)"
+proof (safe)
+  assume "x \<sqsubseteq> lub D"
+  from obtain_directed_chain[OF D]
+  obtain C where "chain C" "\<forall>i. C i \<in> D" "(\<Squnion>i. C i) = lub D" .
+  with x \<open>x \<sqsubseteq> lub D\<close> have "\<exists>i. x \<sqsubseteq> C i"
+    by (auto intro: compactD2[of x C])
+  with \<open>\<forall>i. C i \<in> D\<close> show "\<exists>y \<in> D. x \<sqsubseteq> y" by fast
+next
+  fix y assume "y \<in> D"
+  with directed_lub[OF D(1)] is_lubD1 is_ubD have "y \<sqsubseteq> lub D" by blast
+  moreover assume "x \<sqsubseteq> y"
+  ultimately show "x \<sqsubseteq> lub D" by (rule below_trans[rotated])
+qed
+
+lemma directed_approximants:
+  fixes D :: "('a::bifinite) set"
+  assumes "directed D" "D \<noteq> {}"
+  shows "approximants (lub D) = (\<Union>x \<in> D. approximants x)"
+  unfolding approximants_def
+  using compact_directedD[OF assms] by auto
+
 
 end

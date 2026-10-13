@@ -77,7 +77,7 @@ end
 notation
   tget (\<open>(\<open>notation=\<open>infix tget\<close>\<close>_\<langle>_\<rangle>)\<close> [999, 0] 999)
 
-definition tupd :: "'a \<Rightarrow> ('a, 'b::domain) tuple \<rightarrow> 'b \<rightarrow> ('a, 'b) tuple" where
+definition tupd :: "'a \<Rightarrow> ('a, 'b::pcpo) tuple \<rightarrow> 'b \<rightarrow> ('a, 'b) tuple" where
 "tupd a \<equiv> \<Lambda> t b. Abs_tuple ((tget t)(a := b))"
 
 lemma tupd_beta: "tupd a\<cdot>t\<cdot>b = Abs_tuple ((tget t)(a := b))"
@@ -335,80 +335,265 @@ lemmas tattr_dims_simps =
   tattr_dims_slice
   tattr_dims_apply
 
+subsection \<open>Componentwise reasoning on tuples\<close>
+
+lemma tuple_below_iff: "x \<sqsubseteq> y \<longleftrightarrow> (\<forall>d. x\<langle>d\<rangle> \<sqsubseteq> y\<langle>d\<rangle>)"
+  by (simp add: below_tuple_def fun_below_iff)
+
+lemma tuple_eq_iff: "x = y \<longleftrightarrow> (\<forall>d. x\<langle>d\<rangle> = y\<langle>d\<rangle>)"
+  by (auto simp: po_eq_conv tuple_below_iff)
+
+lemma tuple_joinableI:
+  fixes x y :: "('d, 'v::bounded_complete) tuple"
+  assumes "\<And>d. x\<langle>d\<rangle> \<Up> y\<langle>d\<rangle>"
+  shows "x \<Up> y"
+proof (rule joinableI)
+  let ?z = "Abs_tuple (\<lambda>d. x\<langle>d\<rangle> \<squnion> y\<langle>d\<rangle>) :: ('d, 'v) tuple"
+  show "x \<sqsubseteq> ?z" "y \<sqsubseteq> ?z"
+    using joinableD[OF assms] by (simp_all add: tuple_below_iff Abs_tuple_inverse')
+qed
+
+text \<open>The single-key record \<open>tupd d\<cdot>\<bottom>\<cdot>x\<close>.\<close>
+
+lemma tupd_bot_tget: "(tupd d\<cdot>\<bottom>\<cdot>x)\<langle>e\<rangle> = (if e = d then x else \<bottom>)"
+  by (simp add: tupd_fupd tget_strict)
+
+text \<open>The componentwise map of a family of functions.\<close>
+
+definition tmap :: "('d \<Rightarrow> 'v::pcpo \<rightarrow> 'v) \<Rightarrow> ('d, 'v) tuple \<rightarrow> ('d, 'v) tuple" where
+  "tmap f = (\<Lambda> t. Abs_tuple (\<lambda>d. f d\<cdot>(t\<langle>d\<rangle>)))"
+
+lemma tmap_tget [simp]: "(tmap f\<cdot>t)\<langle>d\<rangle> = f d\<cdot>(t\<langle>d\<rangle>)"
+  unfolding tmap_def
+  by (subst beta_cfun)
+    (simp_all add: cont_Abs_tuple cont2cont_lambda cont2cont_fun cont_tget Abs_tuple_inverse')
+
+text \<open>The component at \<open>d\<close> of a function on tuples, read off the single-key records.\<close>
+
+definition tcomp :: "'d \<Rightarrow> (('d, 'v::pcpo) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> 'v \<rightarrow> 'v" where
+  "tcomp d p = (\<Lambda> t. t\<langle>d\<rangle>) oo p oo tupd d\<cdot>\<bottom>"
+
+lemma tcomp_beta: "tcomp d p\<cdot>x = (p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x))\<langle>d\<rangle>"
+  by (simp add: tcomp_def)
+
+lemma tcomp_tmap [simp]: "tcomp d (tmap f) = f d"
+  by (rule cfun_eqI) (simp add: tcomp_beta tupd_bot_tget)
+
+subsection \<open>Semi-factors of the tuple domain\<close>
+
+text \<open>Records are ordered pointwise and their keys are independent, so a semi-factor of the
+  tuples acts on each key separately: it is the componentwise map of its components, and these
+  are semi-factors.  Hence the semi-factors of the tuples are the families of semi-factors.\<close>
+
+lemma semi_factor_defl_tmap:
+  fixes f :: "'d::countable \<Rightarrow> 'v::{bifinite, distributive_cpo} \<rightarrow> 'v"
+  assumes f: "\<And>d. semi_factor_defl (f d)"
+  shows "semi_factor_defl (tmap f)"
+proof (rule semi_factor_deflI)
+  have sf: "stable_defl (f d)" for d by (rule semi_factor_defl.axioms(1)[OF f])
+  note df = stable_defl.deflation[OF sf]
+  show "stable_defl (tmap f)"
+  proof standard
+    fix t show "tmap f\<cdot>(tmap f\<cdot>t) = tmap f\<cdot>t" by (simp add: tuple_eq_iff deflation.idem[OF df])
+  next
+    fix t show "tmap f\<cdot>t \<sqsubseteq> t" by (simp add: tuple_below_iff deflation.below[OF df])
+  next
+    fix x y :: "('d, 'v) tuple" assume "tmap f\<cdot>y = y" "x \<sqsubseteq> y"
+    then show "tmap f\<cdot>x = x"
+      by (auto simp: tuple_eq_iff tuple_below_iff intro: stable_defl.downclosed[OF sf])
+  qed
+  fix x y :: "('d, 'v) tuple" assume y: "tmap f\<cdot>y = y" and le: "tmap f\<cdot>x \<sqsubseteq> y"
+  show "x \<Up> y"
+  proof (rule tuple_joinableI)
+    fix d
+    from y have "(tmap f\<cdot>y)\<langle>d\<rangle> = y\<langle>d\<rangle>" by simp
+    then have "f d\<cdot>(y\<langle>d\<rangle>) = y\<langle>d\<rangle>" by simp
+    moreover from le have "f d\<cdot>(x\<langle>d\<rangle>) \<sqsubseteq> y\<langle>d\<rangle>" by (simp add: tuple_below_iff)
+    ultimately show "x\<langle>d\<rangle> \<Up> y\<langle>d\<rangle>" by (rule semi_factor_defl.slide[OF f])
+  qed
+qed
+
+lemma deflation_tupd:
+  fixes p :: "('d, 'v::pcpo) tuple \<rightarrow> ('d, 'v) tuple"
+  assumes p: "deflation p"
+  shows "p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x) = tupd d\<cdot>\<bottom>\<cdot>(tcomp d p\<cdot>x)"
+proof (rule tuple_eqI)
+  fix e
+  have "(p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x))\<langle>e\<rangle> \<sqsubseteq> (tupd d\<cdot>\<bottom>\<cdot>x)\<langle>e\<rangle>"
+    using deflation.below[OF p] by (simp add: tuple_below_iff)
+  then show "(p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x))\<langle>e\<rangle> = (tupd d\<cdot>\<bottom>\<cdot>(tcomp d p\<cdot>x))\<langle>e\<rangle>"
+    by (cases "e = d") (simp_all add: tupd_bot_tget tcomp_beta)
+qed
+
+lemma stable_defl_tget:
+  fixes p :: "('d::countable, 'v::{bifinite, distributive_cpo}) tuple \<rightarrow> ('d, 'v) tuple"
+  assumes p: "stable_defl p"
+  shows "(p\<cdot>t)\<langle>d\<rangle> = tcomp d p\<cdot>(t\<langle>d\<rangle>)"
+proof (rule below_antisym)
+  interpret P: stable_defl p by (rule p)
+  let ?s = "tupd d\<cdot>\<bottom>\<cdot>(t\<langle>d\<rangle>)" and ?u = "tupd d\<cdot>\<bottom>\<cdot>((p\<cdot>t)\<langle>d\<rangle>)"
+  have "?u \<sqsubseteq> p\<cdot>t" by (simp add: tuple_below_iff tupd_bot_tget)
+  then have "p\<cdot>?u = ?u" by (rule P.lower_fixed)
+  moreover have "?u \<sqsubseteq> ?s" using P.below[of t] by (simp add: tuple_below_iff tupd_bot_tget)
+  ultimately have "?u \<sqsubseteq> p\<cdot>?s" by (rule P.below_image)
+  then have "?u\<langle>d\<rangle> \<sqsubseteq> (p\<cdot>?s)\<langle>d\<rangle>" by (simp add: tuple_below_iff)
+  then show "(p\<cdot>t)\<langle>d\<rangle> \<sqsubseteq> tcomp d p\<cdot>(t\<langle>d\<rangle>)" by (simp add: tupd_bot_tget tcomp_beta)
+  have "?s \<sqsubseteq> t" by (simp add: tuple_below_iff tupd_bot_tget)
+  then have "p\<cdot>?s \<sqsubseteq> p\<cdot>t" by (rule monofun_cfun_arg)
+  then have "(p\<cdot>?s)\<langle>d\<rangle> \<sqsubseteq> (p\<cdot>t)\<langle>d\<rangle>" by (simp add: tuple_below_iff)
+  then show "tcomp d p\<cdot>(t\<langle>d\<rangle>) \<sqsubseteq> (p\<cdot>t)\<langle>d\<rangle>" by (simp add: tcomp_beta)
+qed
+
+lemma tmap_tcomp:
+  fixes p :: "('d::countable, 'v::{bifinite, distributive_cpo}) tuple \<rightarrow> ('d, 'v) tuple"
+  assumes "stable_defl p" shows "tmap (\<lambda>d. tcomp d p) = p"
+  by (rule cfun_eqI) (simp add: tuple_eq_iff stable_defl_tget[OF assms])
+
+lemma semi_factor_defl_tcomp:
+  fixes p :: "('d::countable, 'v::{bifinite, distributive_cpo}) tuple \<rightarrow> ('d, 'v) tuple"
+  assumes p: "semi_factor_defl p"
+  shows "semi_factor_defl (tcomp d p)"
+proof (rule semi_factor_deflI)
+  interpret P: semi_factor_defl p by (rule p)
+  note single = deflation_tupd[OF P.deflation]
+  show "stable_defl (tcomp d p)"
+  proof standard
+    fix x
+    have "tcomp d p\<cdot>(tcomp d p\<cdot>x) = (p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>(tcomp d p\<cdot>x)))\<langle>d\<rangle>" by (rule tcomp_beta)
+    also have "\<dots> = (p\<cdot>(p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x)))\<langle>d\<rangle>" by (simp only: single)
+    also have "\<dots> = tcomp d p\<cdot>x" by (simp add: P.idem tcomp_beta)
+    finally show "tcomp d p\<cdot>(tcomp d p\<cdot>x) = tcomp d p\<cdot>x" .
+  next
+    fix x
+    have "(p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x))\<langle>d\<rangle> \<sqsubseteq> (tupd d\<cdot>\<bottom>\<cdot>x)\<langle>d\<rangle>" using P.below by (simp add: tuple_below_iff)
+    then show "tcomp d p\<cdot>x \<sqsubseteq> x" by (simp add: tcomp_beta tupd_bot_tget)
+  next
+    fix x y assume y: "tcomp d p\<cdot>y = y" and xy: "x \<sqsubseteq> y"
+    have "p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>y) = tupd d\<cdot>\<bottom>\<cdot>y" by (simp add: single y)
+    moreover have "tupd d\<cdot>\<bottom>\<cdot>x \<sqsubseteq> tupd d\<cdot>\<bottom>\<cdot>y" using xy by (rule monofun_cfun_arg)
+    ultimately have "p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x) = tupd d\<cdot>\<bottom>\<cdot>x" by (rule P.downclosed)
+    then show "tcomp d p\<cdot>x = x" by (simp add: tcomp_beta tupd_bot_tget)
+  qed
+  fix x y assume y: "tcomp d p\<cdot>y = y" and le: "tcomp d p\<cdot>x \<sqsubseteq> y"
+  have fy: "p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>y) = tupd d\<cdot>\<bottom>\<cdot>y" by (simp add: single y)
+  have "p\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x) \<sqsubseteq> tupd d\<cdot>\<bottom>\<cdot>y" unfolding single using le by (rule monofun_cfun_arg)
+  with fy have j: "tupd d\<cdot>\<bottom>\<cdot>x \<Up> tupd d\<cdot>\<bottom>\<cdot>y" by (rule P.slide)
+  have "(tupd d\<cdot>\<bottom>\<cdot>x)\<langle>d\<rangle> \<sqsubseteq> (tupd d\<cdot>\<bottom>\<cdot>x \<squnion> tupd d\<cdot>\<bottom>\<cdot>y)\<langle>d\<rangle>"
+    "(tupd d\<cdot>\<bottom>\<cdot>y)\<langle>d\<rangle> \<sqsubseteq> (tupd d\<cdot>\<bottom>\<cdot>x \<squnion> tupd d\<cdot>\<bottom>\<cdot>y)\<langle>d\<rangle>"
+    using joinableD[OF j] by (simp_all add: tuple_below_iff)
+  then show "x \<Up> y" by (simp add: tupd_bot_tget) (rule joinableI)
+qed
+
+text \<open>The isomorphism between families of semi-factors and semi-factors of the tuples.\<close>
+
+definition semi_factor_of_family ::
+  "('d::countable \<Rightarrow> 'v::{bifinite, distributive_cpo} semi_factor) \<Rightarrow> ('d, 'v) tuple semi_factor"
+  where "semi_factor_of_family F = semi_factor_of_defl (tmap (\<lambda>d. semi_factor_p (F d)))"
+
+definition family_of_semi_factor ::
+  "('d::countable, 'v::{bifinite, distributive_cpo}) tuple semi_factor \<Rightarrow> 'd \<Rightarrow> 'v semi_factor"
+  where "family_of_semi_factor G d = semi_factor_of_defl (tcomp d (semi_factor_p G))"
+
+lemma semi_factor_p_of_family:
+  "semi_factor_p (semi_factor_of_family F) = tmap (\<lambda>d. semi_factor_p (F d))"
+  unfolding semi_factor_of_family_def
+  by (rule semi_factor_p_of_defl, rule semi_factor_defl_tmap, rule semi_factor_defl_semi_factor_p)
+
+lemma semi_factor_p_family_of:
+  "semi_factor_p (family_of_semi_factor G d) = tcomp d (semi_factor_p G)"
+  unfolding family_of_semi_factor_def
+  by (rule semi_factor_p_of_defl, rule semi_factor_defl_tcomp, rule semi_factor_defl_semi_factor_p)
+
+lemma family_of_semi_factor_of_family [simp]: "family_of_semi_factor (semi_factor_of_family F) = F"
+  by (rule ext) (simp add: semi_factor_p_inject[symmetric] semi_factor_p_family_of
+      semi_factor_p_of_family)
+
+lemma semi_factor_of_family_of_semi_factor [simp]:
+  "semi_factor_of_family (family_of_semi_factor G) = G"
+  using semi_factor_defl.axioms(1)[OF semi_factor_defl_semi_factor_p[of G]]
+  by (simp add: semi_factor_p_inject[symmetric] semi_factor_p_of_family semi_factor_p_family_of
+      tmap_tcomp)
+
+lemma semi_factor_le_iff: "F \<le> G \<longleftrightarrow> semi_factor_p F \<sqsubseteq> semi_factor_p G"
+  by (simp add: less_eq_semi_factor.rep_eq semi_factor_p.rep_eq p_below_iff_le)
+
+lemma tmap_below_iff: "tmap f \<sqsubseteq> tmap g \<longleftrightarrow> (\<forall>d. f d \<sqsubseteq> g d)"
+proof
+  assume fg: "tmap f \<sqsubseteq> tmap g"
+  show "\<forall>d. f d \<sqsubseteq> g d"
+  proof (intro allI cfun_belowI)
+    fix d x
+    have "(tmap f\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x))\<langle>d\<rangle> \<sqsubseteq> (tmap g\<cdot>(tupd d\<cdot>\<bottom>\<cdot>x))\<langle>d\<rangle>"
+      using monofun_cfun_fun[OF fg] by (simp add: tuple_below_iff)
+    then show "f d\<cdot>x \<sqsubseteq> g d\<cdot>x" by (simp add: tupd_bot_tget)
+  qed
+qed (auto intro!: cfun_belowI simp: tuple_below_iff monofun_cfun_fun)
+
+lemma semi_factor_of_family_le_iff:
+  "semi_factor_of_family F \<le> semi_factor_of_family F' \<longleftrightarrow> F \<le> F'"
+  by (simp add: semi_factor_le_iff semi_factor_p_of_family tmap_below_iff le_fun_def)
+
+lemma family_of_semi_factor_le_iff: "family_of_semi_factor G \<le> F \<longleftrightarrow> G \<le> semi_factor_of_family F"
+  by (metis semi_factor_of_family_le_iff semi_factor_of_family_of_semi_factor)
+
+lemma le_family_of_semi_factor_iff: "F \<le> family_of_semi_factor G \<longleftrightarrow> semi_factor_of_family F \<le> G"
+  by (metis semi_factor_of_family_le_iff semi_factor_of_family_of_semi_factor)
+
+text \<open>Being an order isomorphism, it is a complete-lattice isomorphism.\<close>
+
+lemma semi_factor_of_family_Inf:
+  "semi_factor_of_family (Inf A) = Inf (semi_factor_of_family ` A)"
+proof (rule antisym)
+  show "semi_factor_of_family (Inf A) \<le> Inf (semi_factor_of_family ` A)"
+    by (rule Inf_greatest) (auto simp: semi_factor_of_family_le_iff intro: Inf_lower)
+  show "Inf (semi_factor_of_family ` A) \<le> semi_factor_of_family (Inf A)"
+    by (simp add: family_of_semi_factor_le_iff[symmetric])
+      (rule Inf_greatest, simp add: family_of_semi_factor_le_iff Inf_lower)
+qed
+
+lemma semi_factor_of_family_Sup:
+  "semi_factor_of_family (Sup A) = Sup (semi_factor_of_family ` A)"
+proof (rule antisym)
+  show "semi_factor_of_family (Sup A) \<le> Sup (semi_factor_of_family ` A)"
+    by (simp add: le_family_of_semi_factor_iff[symmetric])
+      (rule Sup_least, simp add: le_family_of_semi_factor_iff Sup_upper)
+  show "Sup (semi_factor_of_family ` A) \<le> semi_factor_of_family (Sup A)"
+    by (rule Sup_least) (auto simp: semi_factor_of_family_le_iff intro: Sup_upper)
+qed
+
+lemma semi_factor_of_family_inf: "semi_factor_of_family (inf F G) = inf (semi_factor_of_family F) (semi_factor_of_family G)"
+  using semi_factor_of_family_Inf[of "{F, G}"] by simp
+
+lemma semi_factor_of_family_sup: "semi_factor_of_family (sup F G) = sup (semi_factor_of_family F) (semi_factor_of_family G)"
+  using semi_factor_of_family_Sup[of "{F, G}"] by simp
+
+lemma semi_factor_of_family_top: "semi_factor_of_family top = top"
+  using semi_factor_of_family_Inf[of "{}"] by simp
+
+lemma semi_factor_of_family_bot: "semi_factor_of_family bot = bot"
+  using semi_factor_of_family_Sup[of "{}"] by simp
+
+lemma semi_factor_of_family_proj [simp]: "(t \<downharpoonright> semi_factor_of_family F)\<langle>d\<rangle> = t\<langle>d\<rangle> \<downharpoonright> F d"
+  by (simp add: semi_factor_p_of_family)
+
 subsection \<open>Dimension sets as semi-factors of the tuple domain\<close>
 
-lemma stable_subdomain_tcut:
-  "stable_subdomain {t :: ('a::countable, 'b::scott_domain) tuple. tcut A\<cdot>t = t}"
-proof (rule deflation_stable_subdomainI[OF tcut_deflation])
-  fix x y :: "('a, 'b) tuple"
-  assume y: "tcut A\<cdot>y = y" and xy: "x \<sqsubseteq> y"
-  show "tcut A\<cdot>x = x"
-  proof (rule tuple_eqI)
-    fix a show "(tcut A\<cdot>x)\<langle>a\<rangle> = x\<langle>a\<rangle>"
-    proof (cases "a \<in> A")
-      case True thus ?thesis by simp
-    next
-      case False
-      hence "y\<langle>a\<rangle> = \<bottom>" using y by (metis tcut_nomem)
-      moreover from xy have "x\<langle>a\<rangle> \<sqsubseteq> y\<langle>a\<rangle>" by (metis below_tuple_def fun_belowD)
-      ultimately have "x\<langle>a\<rangle> = \<bottom>" by simp
-      with False show ?thesis by simp
-    qed
-  qed
-qed
+lemma semi_factor_p_bot: "semi_factor_p bot = \<bottom>"
+  by (rule cfun_eqI)
+     (simp add: semi_factor_p.rep_eq bot_semi_factor.rep_eq p_bot_stable_subdom)
 
-lemma set_of_subdom_tcut:
-  "set_of_subdom (subdom_of_set {t. tcut A\<cdot>t = t} :: ('a::countable, 'b::scott_domain) tuple stable_subdom)
-     = {t. tcut A\<cdot>t = t}"
-  by (simp add: subdom_of_set_inverse stable_subdomain_tcut)
+lemma semi_factor_p_top: "semi_factor_p top = ID"
+  by (simp add: semi_factor_p.rep_eq top_semi_factor.rep_eq p_top_stable_subdom)
 
-lemma p_subdom_tcut:
-  "stable_subdom_p (subdom_of_set {t. tcut A\<cdot>t = t})
-     = (tcut A :: ('a::countable, 'b::scott_domain) tuple \<rightarrow> ('a,'b) tuple)"
-  by (simp add: stable_subdom_p.rep_eq set_of_subdom_tcut
-        stable_subdomain_deflation[OF tcut_deflation stable_subdomain_tcut, symmetric])
-
-lemma is_semi_factor_tcut:
-  "is_semi_factor (subdom_of_set {t. tcut A\<cdot>t = t} :: ('a::countable, 'b::scott_domain) tuple stable_subdom)"
-proof (rule is_semi_factorI)
-  fix x y :: "('a, 'b) tuple"
-  assume "y \<in> set_of_subdom (subdom_of_set {t. tcut A\<cdot>t = t})"
-  hence yfix: "tcut A\<cdot>y = y" by (simp add: set_of_subdom_tcut)
-  assume "stable_subdom_p (subdom_of_set {t. tcut A\<cdot>t = t})\<cdot>x \<sqsubseteq> y"
-  hence le: "tcut A\<cdot>x \<sqsubseteq> y" by (simp add: p_subdom_tcut)
-  let ?z = "Abs_tuple (\<lambda>a. if a \<in> A then y\<langle>a\<rangle> else x\<langle>a\<rangle>)"
-  have xz: "x \<sqsubseteq> ?z" unfolding below_tuple_def Abs_tuple_inverse' fun_below_iff
-  proof
-    fix a show "x\<langle>a\<rangle> \<sqsubseteq> (if a \<in> A then y\<langle>a\<rangle> else x\<langle>a\<rangle>)"
-    proof (cases "a \<in> A")
-      case True
-      have "(tcut A\<cdot>x)\<langle>a\<rangle> \<sqsubseteq> y\<langle>a\<rangle>" using le by (metis below_tuple_def fun_belowD)
-      thus ?thesis using True by simp
-    next
-      case False thus ?thesis by simp
-    qed
-  qed
-  have yz: "y \<sqsubseteq> ?z" unfolding below_tuple_def Abs_tuple_inverse' fun_below_iff
-  proof
-    fix a show "y\<langle>a\<rangle> \<sqsubseteq> (if a \<in> A then y\<langle>a\<rangle> else x\<langle>a\<rangle>)"
-    proof (cases "a \<in> A")
-      case True thus ?thesis by simp
-    next
-      case False
-      hence "y\<langle>a\<rangle> = \<bottom>" using yfix by (metis tcut_nomem)
-      thus ?thesis using False by simp
-    qed
-  qed
-  from xz yz show "x \<Up> y" by (rule joinableI)
-qed
+text \<open>The coordinate cut is the family that is \<open>top\<close> on the dimensions and \<open>bot\<close> elsewhere.\<close>
 
 definition dcut :: "'a::countable set \<Rightarrow> ('a, 'b::scott_domain) tuple semi_factor" where
-  "dcut A = factor_of_subdom (subdom_of_set {t. tcut A\<cdot>t = t})"
+  "dcut A = semi_factor_of_family (\<lambda>d. if d \<in> A then top else bot)"
 
 lemma semi_factor_p_dcut:
   "semi_factor_p (dcut A) = (tcut A :: ('a::countable, 'b::scott_domain) tuple \<rightarrow> ('a,'b) tuple)"
-  unfolding dcut_def semi_factor_p.rep_eq
-  by (simp add: factor_of_subdom_inverse is_semi_factor_tcut p_subdom_tcut)
+  by (rule cfun_eqI, rule tuple_eqI)
+    (simp add: dcut_def semi_factor_p_of_family tcut_tget semi_factor_p_top semi_factor_p_bot)
 
 text \<open>Projecting a tuple onto the dimensions of an LOD is exactly the coordinate cut.\<close>
 lemma dcut_proj: "x \<downharpoonright> dcut A = tcut A\<cdot>x"
@@ -417,26 +602,15 @@ lemma dcut_proj: "x \<downharpoonright> dcut A = tcut A\<cdot>x"
 text \<open>A semi-factor is determined by its projection.\<close>
 lemma semi_factor_eqI:
   assumes "semi_factor_p F = semi_factor_p G" shows "F = G"
-proof -
-  from assms have "stable_subdom_p (subdom_of_factor F) = stable_subdom_p (subdom_of_factor G)"
-    by (simp add: semi_factor_p.rep_eq)
-  hence "subdom_of_factor F = subdom_of_factor G" by (rule stable_subdom_proj_eqI)
-  thus "F = G" by (simp add: subdom_of_factor_inject)
-qed
+  using assms by (simp add: semi_factor_p_inject)
 
 lemma tcut_compose: "tcut B\<cdot>(tcut A\<cdot>t) = tcut (A \<inter> B)\<cdot>t"
   by (rule tuple_eqI) (simp add: tcut_tget)
 
-text \<open>@{const dcut} is a lattice homomorphism: intersection of dimension sets is the
-  semi-factor meet.\<close>
+text \<open>@{const dcut} is a lattice homomorphism, as the indicator families are.\<close>
 lemma dcut_inf: "dcut (A \<inter> B) = inf (dcut A) (dcut B)"
-proof (rule semi_factor_eqI, rule cfun_eqI)
-  fix x
-  have "x \<downharpoonright> dcut (A \<inter> B) = tcut B\<cdot>(tcut A\<cdot>x)" by (simp add: dcut_proj tcut_compose)
-  also have "... = x \<downharpoonright> dcut A \<downharpoonright> dcut B" by (simp add: dcut_proj)
-  also have "... = x \<downharpoonright> inf (dcut A) (dcut B)" by (rule semi_factor_proj_comp)
-  finally show "semi_factor_p (dcut (A \<inter> B))\<cdot>x = semi_factor_p (inf (dcut A) (dcut B))\<cdot>x" .
-qed
+  unfolding dcut_def semi_factor_of_family_inf[symmetric]
+  by (rule arg_cong[where f = semi_factor_of_family]) (simp add: fun_eq_iff)
 
 lemma tcut_joinable: "tcut A\<cdot>t \<Up> tcut B\<cdot>t"
 proof (rule joinableI)
@@ -458,23 +632,15 @@ lemma semi_factor_p_sup:
   "semi_factor_p (sup F G)\<cdot>x = semi_factor_p F\<cdot>x \<squnion> semi_factor_p G\<cdot>x"
   by (simp add: semi_factor_p.rep_eq sup_semi_factor.rep_eq p_sup_join)
 
-lemma semi_factor_p_bot: "semi_factor_p bot = \<bottom>"
-  by (rule cfun_eqI)
-     (simp add: semi_factor_p.rep_eq bot_semi_factor.rep_eq stable_subdom_p.rep_eq
-                bot_stable_subdom.rep_eq p_bot)
-
 lemma dcut_sup: "dcut (A \<union> B) = sup (dcut A) (dcut B)"
-proof (rule semi_factor_eqI, rule cfun_eqI)
-  fix x
-  have "semi_factor_p (dcut (A \<union> B))\<cdot>x = tcut A\<cdot>x \<squnion> tcut B\<cdot>x"
-    by (simp add: semi_factor_p_dcut tcut_join)
-  also have "... = semi_factor_p (sup (dcut A) (dcut B))\<cdot>x"
-    by (simp add: semi_factor_p_sup semi_factor_p_dcut)
-  finally show "semi_factor_p (dcut (A \<union> B))\<cdot>x = semi_factor_p (sup (dcut A) (dcut B))\<cdot>x" .
-qed
+  unfolding dcut_def semi_factor_of_family_sup[symmetric]
+  by (rule arg_cong[where f = semi_factor_of_family]) (simp add: fun_eq_iff)
 
 lemma dcut_bot: "dcut {} = bot"
-  by (rule semi_factor_eqI) (simp add: semi_factor_p_dcut semi_factor_p_bot)
+  by (simp add: dcut_def semi_factor_of_family_bot[unfolded bot_fun_def])
+
+lemma dcut_top: "dcut UNIV = top"
+  by (simp add: dcut_def semi_factor_of_family_top[unfolded top_fun_def])
 
 lemma tcut_below: "tcut A\<cdot>t \<sqsubseteq> t"
   by (simp add: below_tuple_def fun_below_iff tcut_tget)
@@ -610,6 +776,45 @@ proof (rule compactI2)
   then have "tcut A\<cdot>K \<sqsubseteq> Y i"
     by (auto simp: below_tuple_def fun_below_iff Zd tcut_tget split: if_splits)
   then show "\<exists>i. tcut A\<cdot>K \<sqsubseteq> Y i" ..
+qed
+
+subsection \<open>Compact tuples\<close>
+
+
+text \<open>A tuple is compact exactly when it has finite support and compact components.  A component
+  of a compact tuple is compact: a chain approximating the component, placed into the tuple,
+  approximates the whole tuple.\<close>
+
+lemma compact_tget:
+  fixes K :: "('d, 'v::pcpo) tuple"
+  assumes "compact K" shows "compact (K\<langle>d\<rangle>)"
+proof (rule compactI2)
+  fix Y :: "nat \<Rightarrow> 'v" assume Y: "chain Y" and le: "K\<langle>d\<rangle> \<sqsubseteq> (\<Squnion>i. Y i)"
+  define Z where "Z i = Abs_tuple ((tget K)(d := Y i))" for i
+  have Zd: "(Z i)\<langle>e\<rangle> = (if e = d then Y i else K\<langle>e\<rangle>)" for i e
+    by (simp add: Z_def Abs_tuple_inverse')
+  have Z: "chain Z"
+    using Y by (simp add: chain_def tuple_below_iff Zd)
+  have "K \<sqsubseteq> (\<Squnion>i. Z i)"
+    using le by (simp add: tuple_below_iff tget_lub[OF Z] Zd Y)
+  then obtain i where "K \<sqsubseteq> Z i" using compactD2[OF assms Z] by blast
+  then have "K\<langle>d\<rangle> \<sqsubseteq> (Z i)\<langle>d\<rangle>" by (simp add: tuple_below_iff)
+  then show "\<exists>i. K\<langle>d\<rangle> \<sqsubseteq> Y i" by (auto simp: Zd)
+qed
+
+lemma compact_tupleI:
+  fixes K :: "('d, 'v::pcpo) tuple"
+  assumes "finite (tsupp K)" and "\<And>d. compact (K\<langle>d\<rangle>)"
+  shows "compact K"
+proof (rule compactI)
+  have "(\<not> K \<sqsubseteq> u) \<longleftrightarrow> (\<exists>d\<in>tsupp K. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)" for u
+    by (auto simp: tuple_below_iff tsupp_def)
+  moreover have "adm (\<lambda>u. \<exists>d\<in>tsupp K. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)"
+    using assms(1) proof (rule adm_finite_bex)
+    show "adm (\<lambda>u. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)" for d
+      by (rule adm_compact_not_below[OF assms(2)]) (simp add: cont2cont_fun cont_tget)
+  qed
+  ultimately show "adm (\<lambda>u. \<not> K \<sqsubseteq> u)" by simp
 qed
 
 end

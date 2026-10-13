@@ -1,5 +1,5 @@
 theory LOD_Factor
-  imports LOD
+  imports LOD "HOLCF-extra.Filter_Sum" "HOLCF-extra.Domain_Order_Derive" Subdomain
 begin
 
 section \<open>Finitary semi-factors as levels of detail\<close>
@@ -9,83 +9,703 @@ text \<open>A semi-factor is \<^emph>\<open>finitary\<close> when all its elemen
   compact one.  Finitary semi-factors are closed under meets (intersection), joins (pointwise
   joins of compacts) and contain the bottom semi-factor.\<close>
 
-lemma compact_join:
-  fixes x y :: "'a::bounded_complete"
-  assumes x: "compact x" and y: "compact y" and xy: "x \<Up> y"
-  shows "compact (x \<squnion> y)"
-proof (rule compactI2)
-  fix Y :: "nat \<Rightarrow> 'a" assume Y: "chain Y" and le: "x \<squnion> y \<sqsubseteq> (\<Squnion>i. Y i)"
-  from le joinableD[OF xy] have "x \<sqsubseteq> (\<Squnion>i. Y i)" "y \<sqsubseteq> (\<Squnion>i. Y i)"
-    by (blast intro: below_trans)+
-  then obtain i j where "x \<sqsubseteq> Y i" "y \<sqsubseteq> Y j"
-    using compactD2[OF x Y] compactD2[OF y Y] by blast
-  then have "x \<sqsubseteq> Y (max i j)" "y \<sqsubseteq> Y (max i j)"
-    using chain_mono[OF Y] by (blast intro: below_trans max.cobounded1 max.cobounded2)+
-  then show "\<exists>i. x \<squnion> y \<sqsubseteq> Y i" by (blast intro: join_belowI)
-qed
 
 default_sort "{bifinite, distributive_cpo}"
 
-definition finitary :: "'a semi_factor \<Rightarrow> bool" where
-  "finitary F \<longleftrightarrow> (\<forall>x \<in> set_of_factor F. compact x)"
-
-lemma finitary_bot: "finitary bot"
-  unfolding finitary_def by (auto dest!: semi_factor.p_fixed[where A=bot] simp: semi_factor_p_bot)
-
-lemma finitary_inf: "finitary F \<Longrightarrow> finitary (inf F G)"
-  unfolding finitary_def
-proof (intro ballI)
-  fix x assume F: "\<forall>x \<in> set_of_factor F. compact x" and x: "x \<in> set_of_factor (inf F G)"
-  have "x \<downharpoonright> F = x \<downharpoonright> inf F G \<downharpoonright> F" by (simp only: semi_factor.p_fixed[OF x])
-  also have "\<dots> = x \<downharpoonright> inf F G" by (simp only: semi_factor_proj_comp inf.absorb1[OF inf.cobounded1])
-  also have "\<dots> = x" by (rule semi_factor.p_fixed[OF x])
-  finally show "compact x" using F semi_factor.p_fixed_iff by blast
-qed
-
-lemma finitary_sup: "finitary F \<Longrightarrow> finitary G \<Longrightarrow> finitary (sup F G)"
-  unfolding finitary_def
-proof (intro ballI)
-  fix x assume F: "\<forall>x \<in> set_of_factor F. compact x" and G: "\<forall>x \<in> set_of_factor G. compact x"
-    and x: "x \<in> set_of_factor (sup F G)"
-  have "x = x \<downharpoonright> F \<squnion> x \<downharpoonright> G"
-    using semi_factor.p_fixed[OF x] by (simp add: semi_factor_p_sup)
-  moreover have "x \<downharpoonright> F \<Up> x \<downharpoonright> G"
-    by (rule joinableI) (rule semi_factor.proj_below[unfolded semi_factor.p_beta[symmetric]])+
-  ultimately show "compact x"
-    using F G semi_factor.p_in_S by (metis compact_join)
-qed
-
 text \<open>A domain is \<^emph>\<open>locally finitely detailed\<close> when every compact element lives at some finite
   level of detail, i.e.\ lies in a finitary semi-factor: every finite piece of information has a
-  finite, self-contained home.  This is the semi-factor analogue of property I of dI-domains
-  (for stable subdomains the least home of a compact \<open>k\<close> is \<open>\<down>k\<close>, and a distributive lattice of
+  finite, self-contained level.  This is the semi-factor analogue of property I of dI-domains
+  (for stable subdomains the least one containing a compact \<open>k\<close> is \<open>\<down>k\<close>, and a distributive lattice of
   finite height is finite), and strictly stronger.  (Compare also Libkin's requirement that the
   compact elements -- the storable objects -- form an ideal.)\<close>
 
 default_sort type
 
-class locally_finitely_detailed = bifinite + distributive_cpo +
-  assumes compact_home_set: "compact k \<Longrightarrow> \<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> k \<in> S"
+definition finitary :: "('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool" where
+  "finitary d \<longleftrightarrow> (\<forall>x. compact (d\<cdot>x))"
 
-lemma compact_home:
-  fixes k :: "'a::locally_finitely_detailed"
-  assumes "compact k"
-  obtains F :: "'a semi_factor" where "finitary F" "k \<in> set_of_factor F"
-proof -
-  from compact_home_set[OF assms] obtain S
-    where S: "semi_factor_subdomain S" "\<forall>x\<in>S. compact x" "k \<in> S" by blast
-  let ?A = "subdom_of_set S"
-  have A: "set_of_subdom ?A = S"
-    using semi_factor_subdomain.axioms(1)[OF S(1)] by (simp add: stable_subdom.subdom_of_set_inverse)
-  with S(1) have "is_semi_factor ?A" by (simp add: is_semi_factor_def)
-  then have "set_of_factor (factor_of_subdom ?A) = S"
-    by (simp add: set_of_factor.abs_eq eq_onp_same_args A)
-  with S show thesis by (intro that[of "factor_of_subdom ?A"]) (simp_all add: finitary_def)
+definition faithful :: "('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool" where
+  "faithful d \<longleftrightarrow> (\<forall>x. d\<cdot>x = \<bottom> \<longrightarrow> x = \<bottom>)"
+
+lemma finitary_bottom: "finitary \<bottom>"
+  by (simp add: finitary_def)
+
+text \<open>A level of detail is a finitary semi-factor.  The constructions act on the deflations;
+  @{const semi_factor_of_defl} turns the result back into a semi-factor.\<close>
+
+definition finitary_semi_factor :: "'a::{bifinite, distributive_cpo} semi_factor \<Rightarrow> bool" where
+  "finitary_semi_factor F \<longleftrightarrow> finitary (semi_factor_p F)"
+
+lemma ex_finitary_semi_factor_iff:
+  fixes k :: "'a::{bifinite, distributive_cpo}"
+  shows "(\<exists>F. finitary_semi_factor F \<and> k \<downharpoonright> F = k) \<longleftrightarrow> (\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k)"
+proof
+  assume "\<exists>F. finitary_semi_factor F \<and> k \<downharpoonright> F = k"
+  then obtain F where "finitary_semi_factor F" "k \<downharpoonright> F = k" by blast
+  then show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+    by (intro exI[of _ "semi_factor_p F"])
+      (simp add: semi_factor_defl_semi_factor_p finitary_semi_factor_def)
+next
+  assume "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+  then obtain e where "semi_factor_defl e" "finitary e" "e\<cdot>k = k" by blast
+  then show "\<exists>F. finitary_semi_factor F \<and> k \<downharpoonright> F = k"
+    by (intro exI[of _ "semi_factor_of_defl e"])
+      (simp add: finitary_semi_factor_def semi_factor_p_of_defl)
 qed
 
-typedef (overloaded) 'a lod = "{F :: 'a::{bifinite, distributive_cpo} semi_factor. finitary F}"
-  morphisms factor_of_lod lod_of_factor
-  using finitary_bot by blast
+class locally_finitely_detailed = bifinite + distributive_cpo +
+  assumes compact_level: "compact k \<Longrightarrow> \<exists>F. finitary_semi_factor F \<and> k \<downharpoonright> F = k"
+
+subsection \<open>Levels through the constructions\<close>
+
+
+lemma semi_factor_defl_u_map:
+  assumes f: "semi_factor_defl (f :: 'a::{bifinite, distributive_cpo} \<rightarrow> 'a)"
+  shows "semi_factor_defl (u_map\<cdot>f)"
+proof (rule semi_factor_deflI)
+  show "stable_defl (u_map\<cdot>f)" by (rule stable_defl_u_map[OF semi_factor_defl.axioms(1)[OF f]])
+  fix x y :: "'a u" assume y: "u_map\<cdot>f\<cdot>y = y" and le: "u_map\<cdot>f\<cdot>x \<sqsubseteq> y"
+  show "x \<Up> y"
+  proof (cases x)
+    case bottom then show ?thesis by (simp add: bottom_joinable)
+  next
+    case (up a)
+    with le obtain b where b: "y = up\<cdot>b" "f\<cdot>a \<sqsubseteq> b" by (cases y) auto
+    with y have "f\<cdot>b = b" by simp
+    from semi_factor_defl.slide[OF f this b(2)] up b(1) show ?thesis
+      by (simp add: cfun_arg_joinable)
+  qed
+qed
+
+lemma finitary_u_map:
+  assumes "finitary f" shows "finitary (u_map\<cdot>f)"
+  unfolding finitary_def
+proof
+  fix x show "compact (u_map\<cdot>f\<cdot>x)"
+    using assms unfolding finitary_def by (cases x) (simp_all add: compact_up)
+qed
+
+lemma semi_factor_defl_ssum_map:
+  assumes f: "semi_factor_defl f" "faithful f" and g: "semi_factor_defl g" "faithful g"
+  shows "semi_factor_defl (ssum_map\<cdot>f\<cdot>g)"
+proof (rule semi_factor_deflI)
+  show "stable_defl (ssum_map\<cdot>f\<cdot>g)"
+    by (rule stable_defl_ssum_map[OF semi_factor_defl.axioms(1)[OF f(1)]
+          semi_factor_defl.axioms(1)[OF g(1)]])
+  fix x y assume y: "ssum_map\<cdot>f\<cdot>g\<cdot>y = y" and le: "ssum_map\<cdot>f\<cdot>g\<cdot>x \<sqsubseteq> y"
+  show "x \<Up> y"
+  proof (cases x)
+    case bottom then show ?thesis by (simp add: bottom_joinable)
+  next
+    case (sinl a)
+    with f(2) have fa: "f\<cdot>a \<noteq> \<bottom>" unfolding faithful_def by blast
+    from le sinl fa obtain b where b: "y = sinl\<cdot>b" "b \<noteq> \<bottom>" "f\<cdot>a \<sqsubseteq> b" by (cases y) auto
+    with y have "f\<cdot>b = b" by simp
+    from semi_factor_defl.slide[OF f(1) this b(3)] sinl b(1) show ?thesis
+      by (simp add: cfun_arg_joinable)
+  next
+    case (sinr a)
+    with g(2) have ga: "g\<cdot>a \<noteq> \<bottom>" unfolding faithful_def by blast
+    from le sinr ga obtain b where b: "y = sinr\<cdot>b" "b \<noteq> \<bottom>" "g\<cdot>a \<sqsubseteq> b" by (cases y) auto
+    with y have "g\<cdot>b = b" by simp
+    from semi_factor_defl.slide[OF g(1) this b(3)] sinr b(1) show ?thesis
+      by (simp add: cfun_arg_joinable)
+  qed
+qed
+
+lemma finitary_ssum_map:
+  assumes "finitary f" "finitary g" shows "finitary (ssum_map\<cdot>f\<cdot>g)"
+  unfolding finitary_def
+proof
+  fix x show "compact (ssum_map\<cdot>f\<cdot>g\<cdot>x)"
+    using assms unfolding finitary_def by (cases x) (simp_all add: compact_sinl compact_sinr)
+qed
+
+lemma semi_factor_defl_sprod_map:
+  fixes f :: "'a::{bifinite, distributive_cpo, filter_sum} \<rightarrow> 'a"
+    and g :: "'b::{bifinite, distributive_cpo, filter_sum} \<rightarrow> 'b"
+  assumes f: "semi_factor_defl f" "faithful f" and g: "semi_factor_defl g" "faithful g"
+  shows "semi_factor_defl (sprod_map\<cdot>f\<cdot>g)"
+proof (rule semi_factor_deflI)
+  show "stable_defl (sprod_map\<cdot>f\<cdot>g)"
+    by (rule stable_defl_sprod_map[OF semi_factor_defl.axioms(1)[OF f(1)]
+          semi_factor_defl.axioms(1)[OF g(1)]])
+  fix x y assume y: "sprod_map\<cdot>f\<cdot>g\<cdot>y = y" and le: "sprod_map\<cdot>f\<cdot>g\<cdot>x \<sqsubseteq> y"
+  show "x \<Up> y"
+  proof (cases x)
+    case bottom then show ?thesis by (simp add: bottom_joinable)
+  next
+    case (spair a b)
+    have fa: "f\<cdot>a \<noteq> \<bottom>" "g\<cdot>b \<noteq> \<bottom>" using f(2) g(2) spair unfolding faithful_def by blast+
+    from le spair fa obtain c e where c: "y = (:c, e:)" "c \<noteq> \<bottom>" "e \<noteq> \<bottom>" "f\<cdot>a \<sqsubseteq> c" "g\<cdot>b \<sqsubseteq> e"
+      by (cases y) (auto simp: spair_below_iff)
+    with y have "f\<cdot>c = c" "g\<cdot>e = e" by (auto simp: spair_eq_iff)
+    with c have "a \<Up> c" "b \<Up> e"
+      by (auto intro: semi_factor_defl.slide[OF f(1)] semi_factor_defl.slide[OF g(1)])
+    with spair c show ?thesis by (simp add: spair_joinable_iff)
+  qed
+qed
+
+lemma finitary_sprod_map:
+  assumes "finitary f" "finitary g" shows "finitary (sprod_map\<cdot>f\<cdot>g)"
+  unfolding finitary_def
+proof
+  fix x show "compact (sprod_map\<cdot>f\<cdot>g\<cdot>x)"
+    using assms unfolding finitary_def by (cases x) (simp_all add: compact_spair)
+qed
+
+
+subsection \<open>Levels through isomorphisms\<close>
+
+lemma semi_factor_defl_iso:
+  fixes abs :: "'r::{bifinite, distributive_cpo} \<rightarrow> 't::{bifinite, distributive_cpo}" and rep
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "semi_factor_defl f"
+  shows "semi_factor_defl (abs oo f oo rep)"
+proof (rule semi_factor_deflI)
+  have iso: "iso abs rep" by (rule iso.intro[OF iso_abs iso_rep])
+  interpret iso abs rep by (fact iso)
+  show "stable_defl (abs oo f oo rep)"
+    by (rule stable_defl_iso[OF iso_abs iso_rep semi_factor_defl.axioms(1)[OF f]])
+  fix x y assume y: "(abs oo f oo rep)\<cdot>y = y" and le: "(abs oo f oo rep)\<cdot>x \<sqsubseteq> y"
+  have "rep\<cdot>(abs\<cdot>(f\<cdot>(rep\<cdot>y))) = rep\<cdot>y" using y by simp
+  then have fy: "f\<cdot>(rep\<cdot>y) = rep\<cdot>y" by simp
+  have "rep\<cdot>((abs oo f oo rep)\<cdot>x) \<sqsubseteq> rep\<cdot>y" using le by (rule monofun_cfun_arg)
+  then have "f\<cdot>(rep\<cdot>x) \<sqsubseteq> rep\<cdot>y" by simp
+  then have "rep\<cdot>x \<Up> rep\<cdot>y" by (rule semi_factor_defl.slide[OF f fy])
+  then show "x \<Up> y" by (simp add: iso_rep_joinable_iff[OF iso])
+qed
+
+lemma finitary_iso:
+  fixes abs :: "'r::pcpo \<rightarrow> 't::pcpo" and rep
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "finitary f"
+  shows "finitary (abs oo f oo rep)"
+proof -
+  interpret iso abs rep by (rule iso.intro[OF iso_abs iso_rep])
+  show ?thesis using f unfolding finitary_def by (simp add: compact_abs)
+qed
+
+text \<open>Finitary deflations are not admissible (the \<open>take\<close> functions converge to \<open>ID\<close>), so they
+  get no fixed-point rule; the map and iso rules still derive them through non-recursive types
+  (@{thm [source] map_fix_const}).\<close>
+
+lemmas [domain_category_map] = finitary_u_map finitary_ssum_map finitary_sprod_map
+lemmas [domain_category_iso] = finitary_iso
+
+
+subsection \<open>Discriminator for separated sums\<close>
+
+text \<open>In a separated sum every nonbottom element lies above a unique atom.  The discriminator
+  sends it there: it is the lub of the step functions \<open>stepfn a a\<close> at the atoms, which are
+  compact.  It is a faithful finitary semi-factor deflation, whose image is \<open>\<bottom>\<close> and the atoms.\<close>
+
+
+definition discriminator :: "'a::{bifinite, bounded_complete, separated_sum} \<rightarrow> 'a"
+  where "discriminator = lub {stepfn a a |a. atom a}"
+
+lemma discriminator_bound:
+  "{stepfn a a |a. atom a} <| (ID :: 'a::{bifinite, bounded_complete, separated_sum} \<rightarrow> 'a)"
+  by (auto intro!: is_ubI simp: stepfn_below_iff atom_compact)
+
+lemma discriminator_app:
+  "discriminator\<cdot>x = lub ((\<lambda>a. if a \<sqsubseteq> x then a else \<bottom>) ` {a. atom a})"
+proof -
+  have S: "{stepfn a a |a. atom a} = (\<lambda>a. stepfn a a) ` {a. atom a}" by blast
+  have "(\<lambda>f. f\<cdot>x) ` {stepfn a a |a. atom a} = (\<lambda>a. stepfn a a\<cdot>x) ` {a. atom a}"
+    unfolding S image_image ..
+  also have "\<dots> = (\<lambda>a. if a \<sqsubseteq> x then a else \<bottom>) ` {a. atom a}"
+    by (rule image_cong[OF refl]) (simp add: stepfn_beta[OF atom_compact])
+  finally have "(\<lambda>f. f\<cdot>x) ` {stepfn a a |a. atom a} = (\<lambda>a. if a \<sqsubseteq> x then a else \<bottom>) ` {a. atom a}" .
+  then show ?thesis
+    unfolding discriminator_def cfun_lub[OF discriminator_bound] by simp
+qed
+
+lemma discriminator_eq:
+  assumes a: "atom a" and ax: "a \<sqsubseteq> x"
+  shows "discriminator\<cdot>x = a"
+  unfolding discriminator_app
+proof (rule lub_eqI, rule is_lubI)
+  show "(\<lambda>a. if a \<sqsubseteq> x then a else \<bottom>) ` {a. atom a} <| a"
+    by (auto intro!: is_ubI dest: atom_unique[OF _ a _ ax])
+next
+  fix u assume "(\<lambda>a. if a \<sqsubseteq> x then a else \<bottom>) ` {a. atom a} <| u"
+  moreover have "a \<in> (\<lambda>a. if a \<sqsubseteq> x then a else \<bottom>) ` {a. atom a}"
+    using a ax by (auto intro!: image_eqI[of _ _ a])
+  ultimately show "a \<sqsubseteq> u" by (rule is_ubD)
+qed
+
+lemma discriminator_strict [simp]: "discriminator\<cdot>\<bottom> = \<bottom>"
+  unfolding discriminator_app
+  by (rule lub_eqI) (auto intro!: is_lubI is_ubI dest: atom_nonbottom)
+
+lemma discriminator_atom:
+  assumes "x \<noteq> \<bottom>" shows "atom (discriminator\<cdot>x)" and "discriminator\<cdot>x \<sqsubseteq> x"
+proof -
+  obtain a where "atom a" "a \<sqsubseteq> x" using assms by (rule atom_below)
+  then show "atom (discriminator\<cdot>x)" "discriminator\<cdot>x \<sqsubseteq> x" by (simp_all add: discriminator_eq)
+qed
+
+
+lemma discriminator_below: "discriminator\<cdot>x \<sqsubseteq> x"
+  by (cases "x = \<bottom>") (simp_all add: discriminator_atom)
+
+lemma discriminator_fixes: "discriminator\<cdot>x = x \<longleftrightarrow> x = \<bottom> \<or> atom x"
+  by (metis discriminator_atom(1) discriminator_eq below_refl discriminator_strict)
+
+lemma discriminator_faithful: "faithful discriminator"
+  unfolding faithful_def using discriminator_atom atom_nonbottom by blast
+
+lemma discriminator_finitary: "finitary discriminator"
+  unfolding finitary_def
+  by (metis atom_compact compact_bottom discriminator_atom discriminator_strict)
+
+lemma stable_discriminator: "stable_defl discriminator"
+proof standard
+  fix x show "discriminator\<cdot>(discriminator\<cdot>x) = discriminator\<cdot>x"
+    by (cases "x = \<bottom>") (simp_all add: discriminator_atom discriminator_eq)
+next
+  fix x show "discriminator\<cdot>x \<sqsubseteq> x" by (rule discriminator_below)
+next
+  fix x y assume "discriminator\<cdot>y = y" and "x \<sqsubseteq> y"
+  then show "discriminator\<cdot>x = x" by (auto simp: discriminator_fixes dest: atomD)
+qed
+
+lemma discriminator_semi_factor:
+  "semi_factor_defl (discriminator :: 'a::{bifinite, distributive_cpo, separated_sum} \<rightarrow> 'a)"
+proof (rule semi_factor_deflI[OF stable_discriminator])
+  fix x y :: 'a assume y: "discriminator\<cdot>y = y" and le: "discriminator\<cdot>x \<sqsubseteq> y"
+  show "x \<Up> y"
+  proof (cases "x = \<bottom>")
+    case True then show ?thesis by (simp add: bottom_joinable)
+  next
+    case False
+    note a = discriminator_atom[OF False]
+    have "y \<noteq> \<bottom>" using le atom_nonbottom[OF a(1)] by (metis below_bottom_iff)
+    with y have "atom y" by (simp add: discriminator_fixes)
+    with a(1) le have "discriminator\<cdot>x = y" using atomD atom_nonbottom by blast
+    with a(2) have "y \<sqsubseteq> x" by simp
+    then show ?thesis by (rule joinableI[OF below_refl])
+  qed
+qed
+
+lemma discriminator_deflation: "deflation discriminator"
+  by (rule stable_defl.deflation[OF stable_discriminator])
+
+text \<open>In a separated sum every nonbottom semi-factor is faithful: an element sent to \<open>\<bottom>\<close> is
+  joinable with every image element (slide rule), hence shares an atom with a nonbottom one; the
+  atom is in the image (stability), and below the element, so it is sent to \<open>\<bottom>\<close> as well.\<close>
+
+lemma semi_factor_defl_faithful:
+  fixes d :: "'a::{bifinite, distributive_cpo, separated_sum} \<rightarrow> 'a"
+  assumes d: "semi_factor_defl d" and a: "d\<cdot>a = a" "a \<noteq> \<bottom>"
+  shows "faithful d"
+  unfolding faithful_def
+proof (intro allI impI, rule ccontr)
+  interpret D: semi_factor_defl d by (rule d)
+  fix x assume dx: "d\<cdot>x = \<bottom>" and x: "x \<noteq> \<bottom>"
+  have xa: "x \<Up> a" using a(1) by (rule D.slide) (simp add: dx)
+  obtain l where l: "atom l" "l \<sqsubseteq> x" "l \<sqsubseteq> a"
+    using separated_sum[OF x a(2) joinableD(1)[OF xa] joinableD(2)[OF xa]] by blast
+  have "d\<cdot>l = l" using a(1) l(3) by (rule D.downclosed)
+  moreover have "d\<cdot>l \<sqsubseteq> d\<cdot>x" using l(2) by (rule monofun_cfun_arg)
+  ultimately have "l = \<bottom>" using dx by simp
+  with atom_nonbottom[OF l(1)] show False by contradiction
+qed
+
+
+subsection \<open>Finitary and faithful deflations under joins\<close>
+
+lemma finitary_join:
+  fixes p q :: "'a::bounded_complete \<rightarrow> 'a"
+  assumes p: "deflation p" and q: "deflation q" and "finitary p" "finitary q"
+  shows "finitary (p \<squnion> q)"
+  using assms(3,4)
+  unfolding finitary_def cfun_join[OF deflation_joinable[OF p q]]
+  by (blast intro: compact_join joinableI deflation.below[OF p] deflation.below[OF q])
+
+text \<open>Faithfulness is upward closed, so it passes to joins.\<close>
+
+lemma faithful_mono: "faithful p \<Longrightarrow> p \<sqsubseteq> q \<Longrightarrow> faithful q"
+  unfolding faithful_def by (metis monofun_cfun_fun below_bottom_iff)
+
+lemma faithful_joinI1:
+  fixes p q :: "'a::bounded_complete \<rightarrow> 'a"
+  shows "deflation p \<Longrightarrow> deflation q \<Longrightarrow> faithful p \<Longrightarrow> faithful (p \<squnion> q)"
+  by (erule faithful_mono[OF _ joinableD(1)[OF deflation_joinable]])
+
+lemma faithful_joinI2:
+  fixes p q :: "'a::bounded_complete \<rightarrow> 'a"
+  shows "deflation p \<Longrightarrow> deflation q \<Longrightarrow> faithful q \<Longrightarrow> faithful (p \<squnion> q)"
+  by (erule faithful_mono[OF _ joinableD(2)[OF deflation_joinable]])
+
+text \<open>In a separated sum, the faithful deflations are exactly those above the discriminator.\<close>
+
+lemma faithful_iff_discriminator_below:
+  fixes d :: "'a::{bifinite, bounded_complete, separated_sum} \<rightarrow> 'a"
+  assumes d: "deflation d"
+  shows "faithful d \<longleftrightarrow> discriminator \<sqsubseteq> d"
+proof
+  assume f: "faithful d"
+  show "discriminator \<sqsubseteq> d"
+  proof (rule cfun_belowI)
+    fix x show "discriminator\<cdot>x \<sqsubseteq> d\<cdot>x"
+    proof (cases "x = \<bottom>")
+      case False
+      with f have "d\<cdot>x \<noteq> \<bottom>" unfolding faithful_def by blast
+      then obtain a where a: "atom a" "a \<sqsubseteq> d\<cdot>x" by (rule atom_below)
+      have "a \<sqsubseteq> x" using a(2) deflation.below[OF d] by (rule below_trans)
+      with a show ?thesis by (simp add: discriminator_eq)
+    qed simp
+  qed
+next
+  assume "discriminator \<sqsubseteq> d"
+  with discriminator_faithful show "faithful d" by (rule faithful_mono)
+qed
+
+text \<open>Hence the discriminator lies below every nonbottom semi-factor: it is the only atom of the
+  lattice of semi-factors.\<close>
+
+lemma discriminator_below_semi_factor_defl:
+  fixes d :: "'a::{bifinite, distributive_cpo, separated_sum} \<rightarrow> 'a"
+  assumes d: "semi_factor_defl d" and nz: "d \<noteq> \<bottom>"
+  shows "discriminator \<sqsubseteq> d"
+proof -
+  interpret D: semi_factor_defl d by (rule d)
+  from nz obtain x where x: "d\<cdot>x \<noteq> \<bottom>" using cfun_eqI[of d \<bottom>] by auto
+  have "faithful d" by (rule semi_factor_defl_faithful[OF d D.idem x])
+  then show ?thesis by (simp add: faithful_iff_discriminator_below[OF D.deflation])
+qed
+
+
+
+subsection \<open>Local finite detail as a deflation predicate\<close>
+
+text \<open>Every compact element of the image is fixed by a finitary level of the whole type.  The
+  level is not relative to the image, which makes the predicate admissible for free: a compact
+  element fixed by the limit of a chain is fixed at some finite stage.  At \<open>ID\<close> it is
+  @{class locally_finitely_detailed}.  The strict combinators need faithful levels of their
+  components; these come from the components being separated sums, as a sort constraint.
+  Lifting needs nothing.\<close>
+
+locale locally_finitely_detailed_defl = deflation d for d :: "'a::{bifinite, distributive_cpo} \<rightarrow> 'a" +
+  assumes level_image: "compact k \<Longrightarrow> d\<cdot>k = k \<Longrightarrow> \<exists>F. finitary_semi_factor F \<and> k \<downharpoonright> F = k"
+
+lemma (in locally_finitely_detailed_defl) deflation: "deflation d" by (fact deflation_axioms)
+
+lemmas (in locally_finitely_detailed_defl) level_image_defl =
+  level_image[unfolded ex_finitary_semi_factor_iff]
+
+text \<open>The introduction rule asks for the levels as deflations, which is the form the
+  constructions produce.\<close>
+
+lemma locally_finitely_detailed_deflI:
+  assumes "deflation d"
+    and "\<And>k. compact k \<Longrightarrow> d\<cdot>k = k \<Longrightarrow> \<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+  shows "locally_finitely_detailed_defl d"
+  using assms
+  by (simp add: locally_finitely_detailed_defl_def locally_finitely_detailed_defl_axioms_def
+      ex_finitary_semi_factor_iff)
+
+lemma locally_finitely_detailed_defl_bottom:
+  "locally_finitely_detailed_defl (\<bottom> :: 'a::{bifinite, distributive_cpo} \<rightarrow> 'a)"
+proof (rule locally_finitely_detailed_deflI[OF deflation_bottom])
+  fix k :: 'a assume "\<bottom>\<cdot>k = k"
+  then show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+    using semi_factor_defl_bottom finitary_bottom by (intro exI[of _ \<bottom>]) simp
+qed
+
+lemma locally_finitely_detailed_defl_ID:
+  "locally_finitely_detailed_defl (ID :: 'a::locally_finitely_detailed \<rightarrow> 'a)"
+  by (rule locally_finitely_detailed_deflI[OF deflation_ID])
+    (rule compact_level[unfolded ex_finitary_semi_factor_iff]; simp)
+
+lemma locally_finitely_detailed_class_deflI:
+  assumes d: "locally_finitely_detailed_defl (ID :: 'a::{bifinite, distributive_cpo} \<rightarrow> 'a)"
+  shows "OFCLASS('a, locally_finitely_detailed_class)"
+  by intro_classes
+    (rule locally_finitely_detailed_defl.level_image[OF d]; simp)
+
+lemma adm_locally_finitely_detailed_defl:
+  "adm (locally_finitely_detailed_defl :: ('a::{bifinite, distributive_cpo} \<rightarrow> 'a) \<Rightarrow> bool)"
+proof (rule admI)
+  fix Y :: "nat \<Rightarrow> 'a \<rightarrow> 'a" assume Y: "chain Y" and P: "\<forall>i. locally_finitely_detailed_defl (Y i)"
+  show "locally_finitely_detailed_defl (\<Squnion>i. Y i)"
+  proof (rule locally_finitely_detailed_deflI)
+    show "deflation (\<Squnion>i. Y i)"
+      by (rule admD[OF adm_deflation Y]) (use P in \<open>simp add: locally_finitely_detailed_defl_def\<close>)
+    fix k assume k: "compact k" and fk: "(\<Squnion>i. Y i)\<cdot>k = k"
+    have chk: "chain (\<lambda>i. Y i\<cdot>k)" by (rule ch2ch_Rep_cfunL[OF Y])
+    have "k \<sqsubseteq> (\<Squnion>i. Y i\<cdot>k)" using fk by (simp add: contlub_cfun_fun[OF Y])
+    then obtain n where "k \<sqsubseteq> Y n\<cdot>k" using compactD2[OF k chk] by blast
+    then have "Y n\<cdot>k = k"
+      using deflation.below[OF locally_finitely_detailed_defl.deflation[OF P[rule_format]]]
+      by (rule below_antisym[rotated])
+    then show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+      by (rule locally_finitely_detailed_defl.level_image_defl[OF P[rule_format] k])
+  qed
+qed
+
+lemma locally_finitely_detailed_defl_u_map:
+  assumes f: "locally_finitely_detailed_defl (f :: 'a::{bifinite, distributive_cpo} \<rightarrow> 'a)"
+  shows "locally_finitely_detailed_defl (u_map\<cdot>f)"
+proof (rule locally_finitely_detailed_deflI)
+  show "deflation (u_map\<cdot>f)"
+    by (rule deflation_u_map[OF locally_finitely_detailed_defl.deflation[OF f]])
+  fix k :: "'a u" assume k: "compact k" and fk: "u_map\<cdot>f\<cdot>k = k"
+  show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+  proof (cases k)
+    case bottom
+    then show ?thesis using semi_factor_defl_bottom finitary_bottom by (intro exI[of _ \<bottom>]) simp
+  next
+    case (up k')
+    with k fk have "compact k'" "f\<cdot>k' = k'" by simp_all
+    from locally_finitely_detailed_defl.level_image_defl[OF f this] obtain e
+      where e: "semi_factor_defl e" "finitary e" "e\<cdot>k' = k'" by blast
+    with up show ?thesis
+      by (intro exI[of _ "u_map\<cdot>e"]) (simp add: semi_factor_defl_u_map finitary_u_map)
+  qed
+qed
+
+text \<open>The strict combinators need faithful levels of their components.  A level fixing a
+  nonbottom element of a separated sum is faithful (@{thm [source] semi_factor_defl_faithful});
+  the branch of a sum not containing the element gets the discriminator.\<close>
+
+lemma locally_finitely_detailed_defl_ssum_map:
+  assumes f: "locally_finitely_detailed_defl (f :: 'a::{bifinite, distributive_cpo, separated_sum} \<rightarrow> 'a)"
+    and g: "locally_finitely_detailed_defl (g :: 'b::{bifinite, distributive_cpo, separated_sum} \<rightarrow> 'b)"
+  shows "locally_finitely_detailed_defl (ssum_map\<cdot>f\<cdot>g)"
+proof (rule locally_finitely_detailed_deflI)
+  note df = locally_finitely_detailed_defl.deflation[OF f]
+    and dg = locally_finitely_detailed_defl.deflation[OF g]
+  show "deflation (ssum_map\<cdot>f\<cdot>g)" by (rule deflation_ssum_map[OF df dg])
+  note d = discriminator_semi_factor discriminator_finitary discriminator_faithful
+  fix k :: "'a \<oplus> 'b" assume k: "compact k" and fk: "ssum_map\<cdot>f\<cdot>g\<cdot>k = k"
+  show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+  proof (cases k)
+    case bottom
+    then show ?thesis using semi_factor_defl_bottom finitary_bottom by (intro exI[of _ \<bottom>]) simp
+  next
+    case (sinl a)
+    with k fk have "compact a" "f\<cdot>a = a" by (simp_all add: deflation_strict[OF df])
+    from locally_finitely_detailed_defl.level_image_defl[OF f this] obtain e
+      where e: "semi_factor_defl e" "finitary e" "e\<cdot>a = a" by blast
+    have "faithful e" using e(1,3) sinl(2) by (rule semi_factor_defl_faithful)
+    with sinl e show ?thesis
+      by (intro exI[of _ "ssum_map\<cdot>e\<cdot>discriminator"] conjI
+          semi_factor_defl_ssum_map finitary_ssum_map d) simp_all
+  next
+    case (sinr b)
+    with k fk have "compact b" "g\<cdot>b = b" by (simp_all add: deflation_strict[OF dg])
+    from locally_finitely_detailed_defl.level_image_defl[OF g this] obtain e
+      where e: "semi_factor_defl e" "finitary e" "e\<cdot>b = b" by blast
+    have "faithful e" using e(1,3) sinr(2) by (rule semi_factor_defl_faithful)
+    with sinr e show ?thesis
+      by (intro exI[of _ "ssum_map\<cdot>discriminator\<cdot>e"] conjI
+          semi_factor_defl_ssum_map finitary_ssum_map d) simp_all
+  qed
+qed
+
+lemma locally_finitely_detailed_defl_sprod_map:
+  assumes f: "locally_finitely_detailed_defl (f :: 'a::{bifinite, distributive_cpo, separated_sum} \<rightarrow> 'a)"
+    and g: "locally_finitely_detailed_defl (g :: 'b::{bifinite, distributive_cpo, separated_sum} \<rightarrow> 'b)"
+  shows "locally_finitely_detailed_defl (sprod_map\<cdot>f\<cdot>g)"
+proof (rule locally_finitely_detailed_deflI)
+  note df = locally_finitely_detailed_defl.deflation[OF f]
+    and dg = locally_finitely_detailed_defl.deflation[OF g]
+  show "deflation (sprod_map\<cdot>f\<cdot>g)" by (rule deflation_sprod_map[OF df dg])
+  fix k :: "'a \<otimes> 'b" assume k: "compact k" and fk: "sprod_map\<cdot>f\<cdot>g\<cdot>k = k"
+  obtain a b where ab: "k = (:a, b:)" "compact a" "compact b" "f\<cdot>a = a" "g\<cdot>b = b"
+  proof (cases k)
+    case bottom
+    with deflation_strict[OF df] deflation_strict[OF dg] show thesis
+      by (intro that[of \<bottom> \<bottom>]) simp_all
+  next
+    case (spair a b)
+    with k fk show thesis
+      by (intro that[of a b]) (simp_all add: compact_spair_iff spair_eq_iff
+          deflation_strict[OF df] deflation_strict[OF dg])
+  qed
+  from locally_finitely_detailed_defl.level_image_defl[OF f ab(2,4)] obtain e
+    where e: "semi_factor_defl e" "finitary e" "e\<cdot>a = a" by blast
+  from locally_finitely_detailed_defl.level_image_defl[OF g ab(3,5)] obtain e'
+    where e': "semi_factor_defl e'" "finitary e'" "e'\<cdot>b = b" by blast
+  show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+  proof (cases "a = \<bottom> \<or> b = \<bottom>")
+    case True
+    then have "k = \<bottom>" using ab(1) by auto
+    then show ?thesis using semi_factor_defl_bottom finitary_bottom by (intro exI[of _ \<bottom>]) simp
+  next
+    case False
+    then have "faithful e" "faithful e'"
+      using semi_factor_defl_faithful[OF e(1,3)] semi_factor_defl_faithful[OF e'(1,3)] by blast+
+    with False ab(1) e e' show ?thesis
+      by (intro exI[of _ "sprod_map\<cdot>e\<cdot>e'"]) (simp add: semi_factor_defl_sprod_map finitary_sprod_map)
+  qed
+qed
+
+lemma locally_finitely_detailed_defl_iso:
+  fixes abs :: "'r::{bifinite, distributive_cpo} \<rightarrow> 't::{bifinite, distributive_cpo}" and rep
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "locally_finitely_detailed_defl f"
+  shows "locally_finitely_detailed_defl (abs oo f oo rep)"
+proof (rule locally_finitely_detailed_deflI)
+  have iso: "iso abs rep" by (rule iso.intro[OF iso_abs iso_rep])
+  interpret iso abs rep by (fact iso)
+  show "deflation (abs oo f oo rep)"
+    by (rule deflation_abs_rep[OF abs_iso rep_iso locally_finitely_detailed_defl.deflation[OF f]])
+  fix k assume k: "compact k" and fk: "(abs oo f oo rep)\<cdot>k = k"
+  have "compact (rep\<cdot>k)" using k by (rule compact_rep)
+  moreover have "f\<cdot>(rep\<cdot>k) = rep\<cdot>k"
+  proof -
+    have "rep\<cdot>(abs\<cdot>(f\<cdot>(rep\<cdot>k))) = rep\<cdot>k" using fk by simp
+    then show ?thesis by simp
+  qed
+  ultimately obtain e where e: "semi_factor_defl e" "finitary e" "e\<cdot>(rep\<cdot>k) = rep\<cdot>k"
+    using locally_finitely_detailed_defl.level_image_defl[OF f] by blast
+  show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
+    using e by (intro exI[of _ "abs oo e oo rep"])
+      (simp add: semi_factor_defl_iso[OF iso_abs iso_rep] finitary_iso[OF iso_abs iso_rep])
+qed
+
+lemmas [domain_category_adm] = adm_locally_finitely_detailed_defl
+lemmas [domain_category_bottom] = locally_finitely_detailed_defl_bottom
+lemmas [domain_category_iso] = locally_finitely_detailed_defl_iso
+lemmas [domain_category_map] = locally_finitely_detailed_defl_u_map
+  locally_finitely_detailed_defl_ssum_map locally_finitely_detailed_defl_sprod_map
+lemmas [domain_category_ID] = locally_finitely_detailed_defl_ID
+lemmas [domain_category_deflation] = locally_finitely_detailed_defl.deflation
+lemmas [domain_category_class] = locally_finitely_detailed_class_deflI
+
+text \<open>The class instances of the strict combinators, from the map rules at \<open>ID\<close>.\<close>
+
+instance ssum :: ("{locally_finitely_detailed, separated_sum}", "{locally_finitely_detailed, separated_sum}")
+  locally_finitely_detailed
+  by (rule locally_finitely_detailed_class_deflI, subst ssum_map_ID[symmetric],
+      rule locally_finitely_detailed_defl_ssum_map; rule locally_finitely_detailed_defl_ID)
+
+instance sprod :: ("{locally_finitely_detailed, separated_sum}", "{locally_finitely_detailed, separated_sum}")
+  locally_finitely_detailed
+  by (rule locally_finitely_detailed_class_deflI, subst sprod_map_ID[symmetric],
+      rule locally_finitely_detailed_defl_sprod_map; rule locally_finitely_detailed_defl_ID)
+
+instance u :: (locally_finitely_detailed) locally_finitely_detailed
+  by (rule locally_finitely_detailed_class_deflI, subst u_map_ID[symmetric],
+      rule locally_finitely_detailed_defl_u_map, rule locally_finitely_detailed_defl_ID)
+
+text \<open>With finite height the whole domain is a finitary level of detail.  This cannot be a
+  subclass statement (\<open>chfin\<close> and \<open>flat\<close> do not entail \<open>bifinite\<close>), but it makes every bifinite
+  flat type locally finitely detailed in one line.\<close>
+
+lemma chfin_locally_finitely_detailedI:
+  "OFCLASS('a::{chfin, bifinite, distributive_cpo}, locally_finitely_detailed_class)"
+  by intro_classes (unfold ex_finitary_semi_factor_iff,
+      intro exI[of _ ID], simp add: semi_factor_defl_ID finitary_def)
+
+instance lift :: (countable) locally_finitely_detailed
+  by (rule chfin_locally_finitely_detailedI)
+
+subsection \<open>Tuples\<close>
+
+text \<open>Under the isomorphism with families of semi-factors, the finitary semi-factors of the tuples
+  are the finitely supported families of finitary semi-factors.\<close>
+
+lemma finitary_semi_factor_of_family:
+  fixes F :: "'d::countable \<Rightarrow> 'v::{bifinite, distributive_cpo} semi_factor"
+  shows "finitary_semi_factor (semi_factor_of_family F) \<longleftrightarrow>
+    finite {d. F d \<noteq> bot} \<and> (\<forall>d. finitary_semi_factor (F d))"
+proof safe
+  assume fin: "finitary_semi_factor (semi_factor_of_family F)"
+  then have cpt: "compact (t \<downharpoonright> semi_factor_of_family F)" for t
+    by (simp add: finitary_semi_factor_def finitary_def)
+  show "finitary_semi_factor (F d)" for d
+    unfolding finitary_semi_factor_def finitary_def
+  proof
+    fix x
+    have "compact ((tupd d\<cdot>\<bottom>\<cdot>x \<downharpoonright> semi_factor_of_family F)\<langle>d\<rangle>)" by (rule compact_tget[OF cpt])
+    then show "compact (x \<downharpoonright> F d)" by (simp add: tupd_bot_tget)
+  qed
+  show "finite {d. F d \<noteq> bot}"
+  proof (rule ccontr)
+    assume inf: "infinite {d. F d \<noteq> bot}"
+    have "\<exists>x. x \<downharpoonright> F d \<noteq> \<bottom>" if "F d \<noteq> bot" for d
+    proof (rule ccontr)
+      assume "\<nexists>x. x \<downharpoonright> F d \<noteq> \<bottom>"
+      then have "semi_factor_p (F d) = semi_factor_p bot" by (simp add: cfun_eq_iff semi_factor_p_bot)
+      with that show False by (simp add: semi_factor_p_inject)
+    qed
+    then obtain x where x: "\<And>d. F d \<noteq> bot \<Longrightarrow> x d \<downharpoonright> F d \<noteq> \<bottom>" by metis
+    define t :: "('d, 'v) tuple" where "t = Abs_tuple x"
+    have "{d. F d \<noteq> bot} \<subseteq> tsupp (t \<downharpoonright> semi_factor_of_family F)"
+      using x by (auto simp: tsupp_def t_def Abs_tuple_inverse')
+    with inf compact_finite_tsupp[OF cpt] show False by (metis finite_subset)
+  qed
+next
+  assume fin: "finite {d. F d \<noteq> bot}" and F: "\<forall>d. finitary_semi_factor (F d)"
+  show "finitary_semi_factor (semi_factor_of_family F)"
+    unfolding finitary_semi_factor_def finitary_def
+  proof
+    fix t show "compact (t \<downharpoonright> semi_factor_of_family F)"
+    proof (rule compact_tupleI)
+      have "tsupp (t \<downharpoonright> semi_factor_of_family F) \<subseteq> {d. F d \<noteq> bot}"
+        by (auto simp: tsupp_def semi_factor_p_bot)
+      then show "finite (tsupp (t \<downharpoonright> semi_factor_of_family F))" using fin by (rule finite_subset)
+      show "compact ((t \<downharpoonright> semi_factor_of_family F)\<langle>d\<rangle>)" for d
+        using F by (simp add: finitary_semi_factor_def finitary_def)
+    qed
+  qed
+qed
+
+text \<open>A compact tuple has finite support and compact components.  A finitary level containing
+  it is the family of finitary levels containing the components on its support, and \<open>bot\<close>
+  elsewhere.\<close>
+
+instance tuple :: (countable, locally_finitely_detailed) locally_finitely_detailed
+proof
+  fix K :: "('a, 'b) tuple" assume K: "compact K"
+  define F where "F d = (if d \<in> tsupp K
+      then (SOME G. finitary_semi_factor G \<and> K\<langle>d\<rangle> \<downharpoonright> G = K\<langle>d\<rangle>) else bot)" for d
+  have F: "finitary_semi_factor (F d) \<and> K\<langle>d\<rangle> \<downharpoonright> F d = K\<langle>d\<rangle>" for d
+  proof (cases "d \<in> tsupp K")
+    case True
+    then show ?thesis using someI_ex[OF compact_level[OF compact_tget[OF K, of d]]]
+      by (simp add: F_def)
+  next
+    case False
+    then show ?thesis
+      by (simp add: F_def tsupp_def finitary_semi_factor_def finitary_def semi_factor_p_bot)
+  qed
+  have "{d. F d \<noteq> bot} \<subseteq> tsupp K" by (auto simp: F_def)
+  then have "finite {d. F d \<noteq> bot}" using compact_finite_tsupp[OF K] by (rule finite_subset)
+  with F have "finitary_semi_factor (semi_factor_of_family F)"
+    by (simp add: finitary_semi_factor_of_family)
+  moreover have "K \<downharpoonright> semi_factor_of_family F = K" using F by (simp add: tuple_eq_iff)
+  ultimately show "\<exists>G. finitary_semi_factor G \<and> K \<downharpoonright> G = K" by blast
+qed
+
+section \<open>The type of levels of detail\<close>
+
+text \<open>Levels of detail are the finitary semi-factors.  They are closed under meets (composition
+  of a compact-valued deflation), binary joins (joins of compacts) and \<open>\<bottom>\<close>.\<close>
+
+lemma finitary_semi_factor_inf:
+  "finitary_semi_factor F \<Longrightarrow> finitary_semi_factor G \<Longrightarrow> finitary_semi_factor (inf F G)"
+  by (simp add: finitary_semi_factor_def finitary_def semi_factor_p.rep_eq inf_semi_factor.rep_eq
+      p_inf)
+
+lemma finitary_semi_factor_sup:
+  "finitary_semi_factor F \<Longrightarrow> finitary_semi_factor G \<Longrightarrow> finitary_semi_factor (sup F G)"
+  by (simp add: finitary_semi_factor_def finitary_def semi_factor_p.rep_eq sup_semi_factor.rep_eq
+      p_sup_join compact_join)
+
+lemma finitary_semi_factor_bot: "finitary_semi_factor bot"
+  by (simp add: finitary_semi_factor_def finitary_def semi_factor_p.rep_eq bot_semi_factor.rep_eq
+      p_bot_stable_subdom)
+
+typedef (overloaded) 'a lod =
+  "{F :: 'a::{bifinite, distributive_cpo} semi_factor. finitary_semi_factor F}"
+  morphisms semi_factor_of_lod lod_of_semi_factor
+  using finitary_semi_factor_bot by blast
 
 setup_lifting type_definition_lod
 
@@ -94,9 +714,9 @@ begin
 
 lift_definition less_eq_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> bool" is "(\<le>)" .
 lift_definition less_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> bool" is "(<)" .
-lift_definition inf_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> 'a lod" is inf by (rule finitary_inf)
-lift_definition sup_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> 'a lod" is sup by (rule finitary_sup)
-lift_definition bot_lod :: "'a lod" is bot by (rule finitary_bot)
+lift_definition inf_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> 'a lod" is inf by (rule finitary_semi_factor_inf)
+lift_definition sup_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> 'a lod" is sup by (rule finitary_semi_factor_sup)
+lift_definition bot_lod :: "'a lod" is bot by (rule finitary_semi_factor_bot)
 
 instance
   apply (standard; transfer; simp add: less_le_not_le)
@@ -106,430 +726,26 @@ instance
 
 end
 
-interpretation lod: lod_space "\<lambda>F. semi_factor_p (factor_of_lod F) :: 'a::locally_finitely_detailed \<rightarrow> 'a"
+interpretation lod: lod_space "\<lambda>L. semi_factor_p (semi_factor_of_lod L) :: 'a::locally_finitely_detailed \<rightarrow> 'a"
 proof unfold_locales
   fix a b :: "'a lod" and k x y :: 'a
-  show "k \<downharpoonright> factor_of_lod (inf a b) = k \<downharpoonright> factor_of_lod b \<downharpoonright> factor_of_lod a"
+  note sf = semi_factor_defl_semi_factor_p[of "semi_factor_of_lod a"]
+  show "k \<downharpoonright> semi_factor_of_lod (inf a b) = k \<downharpoonright> semi_factor_of_lod b \<downharpoonright> semi_factor_of_lod a"
     by (simp add: inf_lod.rep_eq semi_factor_proj_comp inf_commute)
-  show "k \<downharpoonright> factor_of_lod (sup a b) = k \<downharpoonright> factor_of_lod a \<squnion> k \<downharpoonright> factor_of_lod b"
+  show "k \<downharpoonright> semi_factor_of_lod (sup a b) = k \<downharpoonright> semi_factor_of_lod a \<squnion> k \<downharpoonright> semi_factor_of_lod b"
     by (simp add: sup_lod.rep_eq semi_factor_p_sup)
-  show "semi_factor_p (factor_of_lod bot) = \<bottom>"
+  show "semi_factor_p (semi_factor_of_lod bot) = \<bottom>"
     by (simp add: bot_lod.rep_eq semi_factor_p_bot)
-  show "x \<Up> y" if "y \<downharpoonright> factor_of_lod a = y" "x \<downharpoonright> factor_of_lod a \<sqsubseteq> y"
-    using that by (simp add: semi_factor.p_fixed_iff semi_factor.slide_rule)
-  show "compact (k \<downharpoonright> factor_of_lod a)"
-    using factor_of_lod[of a] semi_factor.p_in_S by (simp add: finitary_def)
+  show "x \<Up> y" if "y \<downharpoonright> semi_factor_of_lod a = y" "x \<downharpoonright> semi_factor_of_lod a \<sqsubseteq> y"
+    using that by (rule semi_factor_defl.slide[OF sf])
+  show "compact (k \<downharpoonright> semi_factor_of_lod a)"
+    using semi_factor_of_lod[of a] by (simp add: finitary_semi_factor_def finitary_def)
 next
   fix k :: 'a assume "compact k"
-  then obtain F where F: "finitary F" "k \<in> set_of_factor F" by (rule compact_home)
-  then show "\<exists>c. k \<downharpoonright> factor_of_lod c = k"
-    by (intro exI[of _ "lod_of_factor F"]) (simp add: lod_of_factor_inverse semi_factor.p_fixed)
+  then obtain F where F: "finitary_semi_factor F" "k \<downharpoonright> F = k" using compact_level by blast
+  then show "\<exists>c. k \<downharpoonright> semi_factor_of_lod c = k"
+    by (intro exI[of _ "lod_of_semi_factor F"]) (simp add: lod_of_semi_factor_inverse)
 qed
 
-section \<open>Locally finitely detailed domains\<close>
-
-subsection \<open>Generic constructions\<close>
-
-lemma semi_factor_subdomain_UNIV: "semi_factor_subdomain (UNIV :: 'a::{bifinite, distributive_cpo} set)"
-  using is_semi_factor_top unfolding is_semi_factor_def by (simp add: top_stable_subdom.rep_eq)
-
-text \<open>A semi-factor from a deflation: downward closure of its fixed points and the slide rule.\<close>
-
-lemma semi_factor_subdomain_deflationI:
-  fixes D :: "'a::{bifinite, distributive_cpo} \<rightarrow> 'a"
-  assumes D: "deflation D"
-    and down: "\<And>x y. D\<cdot>y = y \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> D\<cdot>x = x"
-    and slide: "\<And>x y. D\<cdot>y = y \<Longrightarrow> D\<cdot>x \<sqsubseteq> y \<Longrightarrow> x \<Up> y"
-  shows "semi_factor_subdomain {x. D\<cdot>x = x}"
-proof -
-  have st: "stable_subdomain {x. D\<cdot>x = x}" using D down by (rule deflation_stable_subdomainI)
-  have "stable_subdomain.p {x. D\<cdot>x = x} = D"
-    using stable_subdomain_deflation[OF D st] by simp
-  with st slide show ?thesis
-    by (intro semi_factor_subdomain.intro semi_factor_subdomain_axioms.intro) auto
-qed
-
-subsection \<open>Lifting\<close>
-
-text \<open>Lifting adds a single new bottom below everything, so the home of \<open>up\<cdot>k\<close> is the lifted
-  home of \<open>k\<close>.\<close>
-
-lemma semi_factor_subdomain_u:
-  fixes S :: "'a::{bifinite, distributive_cpo} set"
-  assumes S: "semi_factor_subdomain S"
-  shows "semi_factor_subdomain {u :: 'a u. u_map\<cdot>(stable_subdomain.p S)\<cdot>u = u}"
-proof -
-  have ss: "stable_subdomain S" using S by (rule semi_factor_subdomain.axioms(1))
-  note p = stable_subdomain.p_fixed_iff[OF ss]
-  show ?thesis
-  proof (rule semi_factor_subdomain_deflationI)
-    show "deflation (u_map\<cdot>(stable_subdomain.p S))"
-      by (rule deflation_u_map[OF stable_subdomain.deflation_p[OF ss]])
-  next
-    fix x y :: "'a u"
-    assume "u_map\<cdot>(stable_subdomain.p S)\<cdot>y = y" "x \<sqsubseteq> y"
-    then show "u_map\<cdot>(stable_subdomain.p S)\<cdot>x = x"
-      by (cases x; cases y) (auto simp: p intro: stable_subdomain.downward[OF ss])
-  next
-    fix x y :: "'a u"
-    assume "u_map\<cdot>(stable_subdomain.p S)\<cdot>y = y" "u_map\<cdot>(stable_subdomain.p S)\<cdot>x \<sqsubseteq> y"
-    then show "x \<Up> y"
-      by (cases x; cases y) (auto simp: p intro: semi_factor_subdomain.slide_rule[OF S])
-  qed
-qed
-
-instance u :: (locally_finitely_detailed) locally_finitely_detailed
-proof
-  fix k :: "'a u" assume k: "compact k"
-  show "\<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> k \<in> S"
-  proof (cases k)
-    case bottom
-    then show ?thesis using semi_factor_subdomain_bot by auto
-  next
-    case (up k')
-    with k obtain S where S: "semi_factor_subdomain S" "\<forall>x\<in>S. compact x" "k' \<in> S"
-      using compact_home_set by auto
-    have ss: "stable_subdomain S" using S(1) by (rule semi_factor_subdomain.axioms(1))
-    let ?H = "{u :: 'a u. u_map\<cdot>(stable_subdomain.p S)\<cdot>u = u}"
-    have "\<forall>x\<in>?H. compact x"
-    proof
-      fix x assume "x \<in> ?H"
-      with S(2) show "compact x"
-        by (cases x) (auto simp: stable_subdomain.p_fixed_iff[OF ss])
-    qed
-    with S up show ?thesis
-      by (intro exI[of _ ?H]) (simp add: semi_factor_subdomain_u stable_subdomain.p_fixed[OF ss])
-  qed
-qed
-
-subsection \<open>Faithfully finitely detailed domains\<close>
-
-text \<open>A domain is \<^emph>\<open>faithfully\<close> finitely detailed when, in addition, some finite level of detail
-  sees every nonbottom element: its projection reflects \<open>\<bottom>\<close>.  This is what strict sums need: a
-  home for \<open>sinl\<cdot>t\<close> must not collapse any nonbottom \<open>sinr\<cdot>b\<close> to \<open>\<bottom>\<close>, or the slide rule would make
-  the two joinable.  Lifting always provides it, via the level \<open>{\<bottom>, up\<cdot>\<bottom>}\<close>.\<close>
-
-definition faithful :: "'a::{bifinite, distributive_cpo} set \<Rightarrow> bool" where
-  "faithful S \<longleftrightarrow> (\<forall>b. stable_subdomain.p S\<cdot>b = \<bottom> \<longrightarrow> b = \<bottom>)"
-
-class faithfully_finitely_detailed = locally_finitely_detailed +
-  assumes faithful_home: "\<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> faithful S"
-
-lemma faithful_mono:
-  assumes "stable_subdomain A" "stable_subdomain B" "A \<subseteq> B" "faithful A" shows "faithful B"
-  unfolding faithful_def
-proof (intro allI impI)
-  fix b assume "stable_subdomain.p B\<cdot>b = \<bottom>"
-  with proj_mono_subdomain[OF assms(1-3), of b] have "stable_subdomain.p A\<cdot>b = \<bottom>"
-    by (simp add: stable_subdomain.p_beta[OF assms(1)] stable_subdomain.p_beta[OF assms(2)] bottomI)
-  with assms(4) show "b = \<bottom>" unfolding faithful_def by blast
-qed
-
-text \<open>Joining a home with a faithful finite level of detail gives a faithful home.\<close>
-
-lemma compact_faithful_home:
-  fixes k :: "'a::faithfully_finitely_detailed"
-  assumes "compact k"
-  shows "\<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> faithful S \<and> k \<in> S"
-proof -
-  obtain H where H: "semi_factor_subdomain H" "\<forall>x\<in>H. compact x" "k \<in> H"
-    using compact_home_set[OF assms] by blast
-  obtain F :: "'a set" where F: "semi_factor_subdomain F" "\<forall>x\<in>F. compact x" "faithful F"
-    using faithful_home by (elim exE conjE) (rule that)
-  note ssH = semi_factor_subdomain.axioms(1)[OF H(1)]
-  note ssF = semi_factor_subdomain.axioms(1)[OF F(1)]
-  let ?J = "{a \<squnion> b |a b. a \<in> H \<and> b \<in> F \<and> a \<Up> b}"
-  have J: "semi_factor_subdomain ?J" using H(1) F(1) by (rule semi_factor_subdomain_join)
-  have "\<forall>x\<in>?J. compact x" using H(2) F(2) by (auto intro: compact_join)
-  moreover have "F \<subseteq> ?J"
-  proof
-    fix b assume "b \<in> F"
-    with stable_subdomain.bot_in_S[OF ssH] show "b \<in> ?J"
-      by (intro CollectI exI[of _ "\<bottom>"] exI[of _ b]) simp
-  qed
-  then have "faithful ?J"
-    using faithful_mono[OF ssF semi_factor_subdomain.axioms(1)[OF J] _ F(3)] by blast
-  moreover have "k \<in> ?J"
-    using H(3) stable_subdomain.bot_in_S[OF ssF] by (intro CollectI exI[of _ k] exI[of _ "\<bottom>"]) simp
-  ultimately show ?thesis using J by blast
-qed
-
-text \<open>Conversely, a finitary faithful home for every compact element gives both class axioms
-  (the home of \<open>\<bottom>\<close> is the faithful level).\<close>
-
-lemma faithfully_finitely_detailedI:
-  assumes "\<And>k::'a::{bifinite, distributive_cpo}. compact k \<Longrightarrow>
-    \<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> faithful S \<and> k \<in> S"
-  shows "OFCLASS('a, faithfully_finitely_detailed_class)"
-proof intro_classes
-  fix k :: 'a assume "compact k"
-  from assms[OF this] show "\<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> k \<in> S"
-    by (elim exE conjE) (intro exI conjI)
-next
-  from assms[OF compact_bottom]
-  show "\<exists>S :: 'a set. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> faithful S"
-    by (elim exE conjE) (intro exI conjI)
-qed
-
-
-instance u :: (locally_finitely_detailed) faithfully_finitely_detailed
-proof
-  let ?D = "u_map\<cdot>(stable_subdomain.p {\<bottom>}) :: 'a u \<rightarrow> 'a u"
-  have p: "stable_subdomain.p {\<bottom>}\<cdot>x = \<bottom>" for x :: 'a by (rule p_bot)
-  have S: "semi_factor_subdomain {u. ?D\<cdot>u = u}"
-    by (rule semi_factor_subdomain_u[OF semi_factor_subdomain_bot])
-  have pD: "stable_subdomain.p {u. ?D\<cdot>u = u} = ?D"
-    using stable_subdomain_deflation[OF deflation_u_map[OF stable_subdomain.deflation_p[OF
-      stable_subdomain_bot]] semi_factor_subdomain.axioms(1)[OF S]] by simp
-  have "\<forall>x\<in>{u. ?D\<cdot>u = u}. compact x"
-  proof
-    fix x assume "x \<in> {u. ?D\<cdot>u = u}"
-    then show "compact x" by (cases x) (simp_all add: p)
-  qed
-  moreover have "faithful {u. ?D\<cdot>u = u}"
-    unfolding faithful_def pD
-  proof (intro allI impI)
-    fix b assume "?D\<cdot>b = \<bottom>"
-    then show "b = \<bottom>" by (cases b) (simp_all add: p)
-  qed
-  ultimately show "\<exists>S :: 'a u set. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> faithful S"
-    using S by blast
-qed
-
-subsection \<open>Strict sums\<close>
-
-text \<open>A sum of two faithful finitary levels is a level of the strict sum: faithfulness is exactly
-  what closes the cross case of the slide rule (a left element is never projected to \<open>\<bottom>\<close> below a
-  right one).\<close>
-
-lemma semi_factor_subdomain_ssum:
-  fixes S :: "'a::{bifinite, distributive_cpo} set" and T :: "'b::{bifinite, distributive_cpo} set"
-  assumes S: "semi_factor_subdomain S" and T: "semi_factor_subdomain T"
-    and fS: "faithful S" and fT: "faithful T"
-  shows "semi_factor_subdomain
-    {u :: 'a \<oplus> 'b. ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T)\<cdot>u = u}"
-proof -
-  note ssS = semi_factor_subdomain.axioms(1)[OF S] and ssT = semi_factor_subdomain.axioms(1)[OF T]
-  have strict: "stable_subdomain.p S\<cdot>\<bottom> = \<bottom>" "stable_subdomain.p T\<cdot>\<bottom> = \<bottom>"
-    by (simp_all add: stable_subdomain.p_fixed stable_subdomain.bot_in_S ssS ssT)
-  note simps = ssum_map_sinl'[OF strict(1)] ssum_map_sinr'[OF strict(2)]
-    stable_subdomain.p_fixed_iff[OF ssS] stable_subdomain.p_fixed_iff[OF ssT]
-  show ?thesis
-  proof (rule semi_factor_subdomain_deflationI)
-    show "deflation (ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T))"
-      by (intro deflation_ssum_map stable_subdomain.deflation_p ssS ssT)
-  next
-    fix x y :: "'a \<oplus> 'b"
-    assume "ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T)\<cdot>y = y" "x \<sqsubseteq> y"
-    then show "ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T)\<cdot>x = x"
-      by (cases x; cases y)
-        (auto simp: simps intro: stable_subdomain.downward[OF ssS] stable_subdomain.downward[OF ssT])
-  next
-    fix x y :: "'a \<oplus> 'b"
-    assume "ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T)\<cdot>y = y"
-      "ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T)\<cdot>x \<sqsubseteq> y"
-    then show "x \<Up> y"
-      using fS fT unfolding faithful_def
-      by (cases x; cases y)
-        (auto simp: simps intro: semi_factor_subdomain.slide_rule[OF S] semi_factor_subdomain.slide_rule[OF T])
-  qed
-qed
-
-instance ssum :: (faithfully_finitely_detailed, faithfully_finitely_detailed)
-  faithfully_finitely_detailed
-proof (rule faithfully_finitely_detailedI)
-  fix k :: "'a \<oplus> 'b" assume k: "compact k"
-  have home: "\<exists>U. semi_factor_subdomain U \<and> (\<forall>x\<in>U. compact x) \<and> faithful U \<and> k \<in> U"
-    if a: "compact a" and b: "compact b"
-      and kD: "\<And>S T. stable_subdomain S \<Longrightarrow> stable_subdomain T \<Longrightarrow> a \<in> S \<Longrightarrow> b \<in> T \<Longrightarrow>
-        ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T)\<cdot>k = k"
-    for a :: 'a and b :: 'b
-  proof -
-    obtain S where S: "semi_factor_subdomain S" "\<forall>x\<in>S. compact x" "faithful S" "a \<in> S"
-      using compact_faithful_home[OF a] by (elim exE conjE) (rule that)
-    obtain T where T: "semi_factor_subdomain T" "\<forall>x\<in>T. compact x" "faithful T" "b \<in> T"
-      using compact_faithful_home[OF b] by (elim exE conjE) (rule that)
-    note ssS = semi_factor_subdomain.axioms(1)[OF S(1)] and ssT = semi_factor_subdomain.axioms(1)[OF T(1)]
-    let ?D = "ssum_map\<cdot>(stable_subdomain.p S)\<cdot>(stable_subdomain.p T)"
-    have strict: "stable_subdomain.p S\<cdot>\<bottom> = \<bottom>" "stable_subdomain.p T\<cdot>\<bottom> = \<bottom>"
-      by (simp_all add: stable_subdomain.p_fixed stable_subdomain.bot_in_S ssS ssT)
-    note simps = ssum_map_sinl'[OF strict(1)] ssum_map_sinr'[OF strict(2)]
-      stable_subdomain.p_fixed_iff[OF ssS] stable_subdomain.p_fixed_iff[OF ssT]
-    have U: "semi_factor_subdomain {u. ?D\<cdot>u = u}"
-      by (rule semi_factor_subdomain_ssum[OF S(1) T(1) S(3) T(3)])
-    have pD: "stable_subdomain.p {u. ?D\<cdot>u = u} = ?D"
-      using stable_subdomain_deflation[OF deflation_ssum_map[OF stable_subdomain.deflation_p[OF ssS]
-        stable_subdomain.deflation_p[OF ssT]] semi_factor_subdomain.axioms(1)[OF U]] by simp
-    have "\<forall>x\<in>{u. ?D\<cdot>u = u}. compact x"
-    proof
-      fix x assume "x \<in> {u. ?D\<cdot>u = u}"
-      with S(2) T(2) show "compact x" by (cases x) (auto simp: simps)
-    qed
-    moreover have "faithful {u. ?D\<cdot>u = u}"
-      unfolding faithful_def pD
-    proof (intro allI impI)
-      fix x assume "?D\<cdot>x = \<bottom>"
-      with S(3) T(3) show "x = \<bottom>" unfolding faithful_def by (cases x) (auto simp: simps)
-    qed
-    moreover have "k \<in> {u. ?D\<cdot>u = u}" using kD[OF ssS ssT S(4) T(4)] by simp
-    ultimately show ?thesis using U by blast
-  qed
-  show "\<exists>U. semi_factor_subdomain U \<and> (\<forall>x\<in>U. compact x) \<and> faithful U \<and> k \<in> U"
-  proof (cases k)
-    case bottom then show ?thesis by (intro home[of \<bottom> \<bottom>]) simp_all
-  next
-    case (sinl a)
-    with k show ?thesis
-      by (intro home[of a \<bottom>]) (simp_all add: stable_subdomain.p_fixed)
-  next
-    case (sinr b)
-    with k show ?thesis
-      by (intro home[of \<bottom> b]) (simp_all add: stable_subdomain.p_fixed)
-  qed
-qed
-
-subsection \<open>Finite height and flat domains\<close>
-
-text \<open>With finite height the whole domain is a finitary level of detail, and it is trivially
-  faithful.\<close>
-
-lemma chfin_faithful_home:
-  fixes k :: "'a::{bifinite, distributive_cpo, chfin}"
-  shows "\<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> faithful S \<and> k \<in> S"
-proof (intro exI conjI)
-  show "faithful (UNIV :: 'a set)" by (simp add: faithful_def p_UNIV)
-qed (simp_all add: semi_factor_subdomain_UNIV compact_chfin)
-
-instance lift :: (countable) faithfully_finitely_detailed
-  by (rule faithfully_finitely_detailedI) (rule chfin_faithful_home)
-
-subsection \<open>Tuples\<close>
-
-text \<open>A compact tuple has finite support and compact components.  Its finitary home is the
-  product of finitary homes of the components on its support (and of \<open>{\<bottom>}\<close> elsewhere).\<close>
-
-definition tmap :: "('d \<Rightarrow> 'v::pcpo \<rightarrow> 'v) \<Rightarrow> ('d, 'v) tuple \<rightarrow> ('d, 'v) tuple" where
-  "tmap f = (\<Lambda> t. Abs_tuple (\<lambda>d. f d\<cdot>(t\<langle>d\<rangle>)))"
-
-lemma tmap_tget [simp]: "(tmap f\<cdot>t)\<langle>d\<rangle> = f d\<cdot>(t\<langle>d\<rangle>)"
-  unfolding tmap_def
-  by (subst beta_cfun)
-    (simp_all add: cont_Abs_tuple cont2cont_lambda cont2cont_fun cont_tget Abs_tuple_inverse')
-
-lemma tuple_below_iff: "x \<sqsubseteq> y \<longleftrightarrow> (\<forall>d. x\<langle>d\<rangle> \<sqsubseteq> y\<langle>d\<rangle>)"
-  by (simp add: below_tuple_def fun_below_iff)
-
-lemma tuple_joinableI:
-  fixes x y :: "('d, 'v::bounded_complete) tuple"
-  assumes "\<And>d. x\<langle>d\<rangle> \<Up> y\<langle>d\<rangle>"
-  shows "x \<Up> y"
-proof (rule joinableI)
-  let ?z = "Abs_tuple (\<lambda>d. x\<langle>d\<rangle> \<squnion> y\<langle>d\<rangle>) :: ('d, 'v) tuple"
-  show "x \<sqsubseteq> ?z" "y \<sqsubseteq> ?z"
-    using joinableD[OF assms] by (simp_all add: tuple_below_iff Abs_tuple_inverse')
-qed
-
-text \<open>A component of a compact tuple is compact: a chain approximating the component, placed
-  into the tuple, approximates the whole tuple.\<close>
-
-lemma compact_tget:
-  fixes K :: "('d, 'v::pcpo) tuple"
-  assumes "compact K" shows "compact (K\<langle>d\<rangle>)"
-proof (rule compactI2)
-  fix Y :: "nat \<Rightarrow> 'v" assume Y: "chain Y" and le: "K\<langle>d\<rangle> \<sqsubseteq> (\<Squnion>i. Y i)"
-  define Z where "Z i = Abs_tuple ((tget K)(d := Y i))" for i
-  have Zd: "(Z i)\<langle>e\<rangle> = (if e = d then Y i else K\<langle>e\<rangle>)" for i e
-    by (simp add: Z_def Abs_tuple_inverse')
-  have Z: "chain Z"
-    using Y by (simp add: chain_def tuple_below_iff Zd)
-  have "K \<sqsubseteq> (\<Squnion>i. Z i)"
-    using le by (simp add: tuple_below_iff tget_lub[OF Z] Zd Y)
-  then obtain i where "K \<sqsubseteq> Z i" using compactD2[OF assms Z] by blast
-  then have "K\<langle>d\<rangle> \<sqsubseteq> (Z i)\<langle>d\<rangle>" by (simp add: tuple_below_iff)
-  then show "\<exists>i. K\<langle>d\<rangle> \<sqsubseteq> Y i" by (auto simp: Zd)
-qed
-
-lemma compact_tupleI:
-  fixes K :: "('d, 'v::pcpo) tuple"
-  assumes "finite (tsupp K)" and "\<And>d. compact (K\<langle>d\<rangle>)"
-  shows "compact K"
-proof (rule compactI)
-  have "(\<not> K \<sqsubseteq> u) \<longleftrightarrow> (\<exists>d\<in>tsupp K. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)" for u
-    by (auto simp: tuple_below_iff tsupp_def)
-  moreover have "adm (\<lambda>u. \<exists>d\<in>tsupp K. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)"
-    using assms(1) proof (rule adm_finite_bex)
-    show "adm (\<lambda>u. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)" for d
-      by (rule adm_compact_not_below[OF assms(2)]) (simp add: cont2cont_fun cont_tget)
-  qed
-  ultimately show "adm (\<lambda>u. \<not> K \<sqsubseteq> u)" by simp
-qed
-
-lemma tuple_eq_iff: "x = y \<longleftrightarrow> (\<forall>d. x\<langle>d\<rangle> = y\<langle>d\<rangle>)"
-  by (auto simp: po_eq_conv tuple_below_iff)
-
-text \<open>A product of semi-factors, one per dimension, is a semi-factor: its projection acts
-  componentwise, and the slide rule holds componentwise.\<close>
-
-lemma semi_factor_subdomain_tprod:
-  fixes S :: "'d::countable \<Rightarrow> 'v::{bifinite, distributive_cpo} set"
-  assumes S: "\<And>d. semi_factor_subdomain (S d)"
-  shows "semi_factor_subdomain {t :: ('d, 'v) tuple. \<forall>d. t\<langle>d\<rangle> \<in> S d}"
-proof -
-  have ss: "stable_subdomain (S d)" for d using S semi_factor_subdomain.axioms(1) by blast
-  define D where "D = (tmap (\<lambda>d. stable_subdomain.p (S d)) :: ('d, 'v) tuple \<rightarrow> _)"
-  have fix_iff: "D\<cdot>t = t \<longleftrightarrow> (\<forall>d. t\<langle>d\<rangle> \<in> S d)" for t
-    by (simp add: D_def tuple_eq_iff stable_subdomain.p_fixed_iff[OF ss])
-  have defl: "deflation D"
-    by (rule deflation.intro)
-      (simp_all add: D_def tuple_eq_iff tuple_below_iff stable_subdomain.p_fixed[OF ss]
-        stable_subdomain.p_in_S[OF ss] stable_subdomain.p_below[OF ss])
-  have set_eq: "{t. \<forall>d. t\<langle>d\<rangle> \<in> S d} = {t. D\<cdot>t = t}" using fix_iff by blast
-  have st: "stable_subdomain {t. D\<cdot>t = t}"
-  proof (rule deflation_stable_subdomainI[OF defl])
-    fix x y :: "('d, 'v) tuple" assume "D\<cdot>y = y" "x \<sqsubseteq> y"
-    then show "D\<cdot>x = x"
-      unfolding fix_iff tuple_below_iff by (blast intro: stable_subdomain.downward[OF ss])
-  qed
-  have pD: "stable_subdomain.p {t. D\<cdot>t = t} = D"
-    using stable_subdomain_deflation[OF defl st] by simp
-  show ?thesis unfolding set_eq
-  proof (rule semi_factor_subdomain.intro[OF st], unfold_locales, unfold pD)
-    fix y x :: "('d, 'v) tuple" assume y: "y \<in> {t. D\<cdot>t = t}" and le: "D\<cdot>x \<sqsubseteq> y"
-    show "x \<Up> y"
-    proof (rule tuple_joinableI)
-      fix d
-      from y have yd: "y\<langle>d\<rangle> \<in> S d" by (simp add: fix_iff)
-      from le have "stable_subdomain.p (S d)\<cdot>(x\<langle>d\<rangle>) \<sqsubseteq> y\<langle>d\<rangle>" by (simp add: D_def tuple_below_iff)
-      with yd show "x\<langle>d\<rangle> \<Up> y\<langle>d\<rangle>" by (rule semi_factor_subdomain.slide_rule[OF S])
-    qed
-  qed
-qed
-
-instance tuple :: (countable, locally_finitely_detailed) locally_finitely_detailed
-proof
-  fix K :: "('a, 'b) tuple" assume K: "compact K"
-  define H where "H d = (if d \<in> tsupp K
-      then (SOME S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> K\<langle>d\<rangle> \<in> S) else {\<bottom>})" for d
-  have H: "semi_factor_subdomain (H d) \<and> (\<forall>x\<in>H d. compact x) \<and> K\<langle>d\<rangle> \<in> H d" for d
-  proof (cases "d \<in> tsupp K")
-    case True
-    then show ?thesis
-      using someI_ex[OF compact_home_set[OF compact_tget[OF K, of d]]] by (simp add: H_def)
-  next
-    case False
-    then show ?thesis using semi_factor_subdomain_bot by (simp add: H_def tsupp_def)
-  qed
-  let ?S = "{t :: ('a, 'b) tuple. \<forall>d. t\<langle>d\<rangle> \<in> H d}"
-  have "semi_factor_subdomain ?S" using H by (blast intro: semi_factor_subdomain_tprod)
-  moreover have "compact t" if t: "t \<in> ?S" for t
-  proof (rule compact_tupleI)
-    have "tsupp t \<subseteq> tsupp K"
-      using t by (auto simp: tsupp_def H_def split: if_splits)
-    then show "finite (tsupp t)" using compact_finite_tsupp[OF K] by (rule finite_subset)
-    show "compact (t\<langle>d\<rangle>)" for d using t H by blast
-  qed
-  moreover have "K \<in> ?S" using H by blast
-  ultimately show "\<exists>S. semi_factor_subdomain S \<and> (\<forall>x\<in>S. compact x) \<and> K \<in> S" by blast
-qed
 end
 

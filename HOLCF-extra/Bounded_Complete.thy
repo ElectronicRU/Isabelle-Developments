@@ -1320,4 +1320,63 @@ lemma [simp]: "(a :: 'a top) \<Up> b" by (auto intro: joinableI below_Top)
 
 end
 
+subsection \<open>Joins: auxiliary lemmas\<close>
+
+lemma bottom_joinable: "\<bottom> \<Up> (y::'a::bounded_complete)"
+  by (auto simp add: joinable_def)
+
+lemma cfun_arg_joinable:
+  fixes a b :: "'a::bounded_complete" and f :: "'a \<rightarrow> 'b::bounded_complete"
+  assumes "a \<Up> b" shows "f\<cdot>a \<Up> f\<cdot>b"
+proof -
+  from assms obtain c where "a \<sqsubseteq> c" "b \<sqsubseteq> c" unfolding joinable_def by blast
+  then show ?thesis by (blast intro: joinableI monofun_cfun_arg)
+qed
+
+text \<open>Deflations lie below @{term ID}, so any two are joinable.\<close>
+
+lemma deflation_joinable:
+  assumes "deflation p" and "deflation q" shows "p \<Up> q"
+  by (rule joinableI[OF deflation.below_ID[OF assms(1)] deflation.below_ID[OF assms(2)]])
+
+lemma compact_join:
+  fixes x y :: "'a::bounded_complete"
+  assumes x: "compact x" and y: "compact y" and xy: "x \<Up> y"
+  shows "compact (x \<squnion> y)"
+proof (rule compactI2)
+  fix Y :: "nat \<Rightarrow> 'a" assume Y: "chain Y" and le: "x \<squnion> y \<sqsubseteq> (\<Squnion>i. Y i)"
+  from le joinableD[OF xy] have "x \<sqsubseteq> (\<Squnion>i. Y i)" "y \<sqsubseteq> (\<Squnion>i. Y i)"
+    by (blast intro: below_trans)+
+  then obtain i j where "x \<sqsubseteq> Y i" "y \<sqsubseteq> Y j"
+    using compactD2[OF x Y] compactD2[OF y Y] by blast
+  then have "x \<sqsubseteq> Y (max i j)" "y \<sqsubseteq> Y (max i j)"
+    using chain_mono[OF Y] by (blast intro: below_trans max.cobounded1 max.cobounded2)+
+  then show "\<exists>i. x \<squnion> y \<sqsubseteq> Y i" by (blast intro: join_belowI)
+qed
+
+lemma insert_join_is_lub:
+  fixes S :: "'a::bounded_complete set"
+  assumes Sl: "S <<| l" and j: "z \<Up> l"
+  shows "insert z S <<| z \<squnion> l"
+proof (rule is_lubI)
+  show "insert z S <| z \<squnion> l"
+  proof (rule is_ubI)
+    fix w assume w: "w \<in> insert z S"
+    show "w \<sqsubseteq> z \<squnion> l"
+    proof (cases "w = z")
+      case True then show ?thesis by (simp add: joinableD(1)[OF j])
+    next
+      case False with w have "w \<in> S" by simp
+      with is_lubD1[OF Sl] have "w \<sqsubseteq> l" by (rule is_ubD)
+      also have "l \<sqsubseteq> z \<squnion> l" by (rule joinableD(2)[OF j])
+      finally show ?thesis .
+    qed
+  qed
+next
+  fix u assume "insert z S <| u"
+  then have zu: "z \<sqsubseteq> u" and Su: "S <| u" by (auto simp: is_ub_insert)
+  from Sl Su have "l \<sqsubseteq> u" by (rule is_lubD2)
+  with zu show "z \<squnion> l \<sqsubseteq> u" by (rule join_belowI)
+qed
+
 end
