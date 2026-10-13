@@ -190,6 +190,10 @@ locale separated_defl = deflation d for d :: "'a::bifinite \<rightarrow> 'a" +
   assumes separated_image:
     "d\<cdot>x \<noteq> \<bottom> \<Longrightarrow> d\<cdot>y \<noteq> \<bottom> \<Longrightarrow> d\<cdot>x \<sqsubseteq> u \<Longrightarrow> d\<cdot>y \<sqsubseteq> u \<Longrightarrow> \<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> d\<cdot>x \<and> l \<sqsubseteq> d\<cdot>y"
 
+lemma (in bounded_complete_defl) deflation: "deflation d" by (fact deflation_axioms)
+
+lemma (in separated_defl) deflation: "deflation d" by (fact deflation_axioms)
+
 subsection \<open>Bounded completeness\<close>
 
 lemma bounded_complete_deflI:
@@ -398,9 +402,11 @@ qed
 
 lemma bounded_complete_defl_iso:
   fixes abs :: "'r::bifinite \<rightarrow> 't::bifinite" and rep
-  assumes iso: "iso abs rep" and f: "bounded_complete_defl f"
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "bounded_complete_defl f"
   shows "bounded_complete_defl (abs oo f oo rep)"
 proof (rule bounded_complete_deflI)
+  have iso: "iso abs rep" by (rule iso.intro[OF iso_abs iso_rep])
   interpret iso abs rep by (fact iso)
   show "deflation (abs oo f oo rep)"
     by (rule deflation_abs_rep[OF abs_iso rep_iso bounded_complete_defl.axioms(1)[OF f]])
@@ -461,12 +467,12 @@ qed
 text \<open>Antitone among deflations: a smaller deflation has a smaller image.\<close>
 
 lemma bounded_complete_defl_below:
-  assumes e: "bounded_complete_defl e" and d: "deflation d" "d \<sqsubseteq> e"
+  assumes le: "d \<sqsubseteq> e" and e: "bounded_complete_defl e" and d: "deflation d"
   shows "bounded_complete_defl d"
-proof (rule bounded_complete_deflI[OF d(1)])
+proof (rule bounded_complete_deflI[OF d])
   have de: "deflation e" by (rule bounded_complete_defl.axioms(1)[OF e])
   fix a b c assume "d\<cdot>a \<sqsubseteq> c" "d\<cdot>b \<sqsubseteq> c"
-  moreover have "e\<cdot>(d\<cdot>a) = d\<cdot>a" "e\<cdot>(d\<cdot>b) = d\<cdot>b" by (rule deflation_below_comp2[OF d(1) de d(2)])+
+  moreover have "e\<cdot>(d\<cdot>a) = d\<cdot>a" "e\<cdot>(d\<cdot>b) = d\<cdot>b" by (rule deflation_below_comp2[OF d de le])+
   ultimately show "\<exists>z. {d\<cdot>a, d\<cdot>b} <<| z"
     using bounded_complete_defl.pair_lubs[OF e, of "d\<cdot>a" c "d\<cdot>b"] by simp
 qed
@@ -569,10 +575,11 @@ qed
 
 lemma separated_defl_iso:
   fixes abs :: "'r::bifinite \<rightarrow> 't::bifinite" and rep
-  assumes iso: "iso abs rep" and f: "separated_defl f"
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "separated_defl f"
   shows "separated_defl (abs oo f oo rep)"
 proof (rule separated_deflI)
-  interpret iso abs rep by (fact iso)
+  interpret iso abs rep by (rule iso.intro[OF iso_abs iso_rep])
   show "deflation (abs oo f oo rep)"
     by (rule deflation_abs_rep[OF abs_iso rep_iso separated_defl.axioms(1)[OF f]])
   fix x y u
@@ -616,12 +623,12 @@ proof (rule admI)
 qed
 
 lemma separated_defl_below:
-  assumes e: "separated_defl e" and d: "deflation d" "d \<sqsubseteq> e"
+  assumes le: "d \<sqsubseteq> e" and e: "separated_defl e" and d: "deflation d"
   shows "separated_defl d"
-proof (rule separated_deflI[OF d(1)])
+proof (rule separated_deflI[OF d])
   have de: "deflation e" by (rule separated_defl.axioms(1)[OF e])
   fix x y u assume "d\<cdot>x \<noteq> \<bottom>" "d\<cdot>y \<noteq> \<bottom>" "d\<cdot>x \<sqsubseteq> u" "d\<cdot>y \<sqsubseteq> u"
-  moreover have "e\<cdot>(d\<cdot>x) = d\<cdot>x" "e\<cdot>(d\<cdot>y) = d\<cdot>y" by (rule deflation_below_comp2[OF d(1) de d(2)])+
+  moreover have "e\<cdot>(d\<cdot>x) = d\<cdot>x" "e\<cdot>(d\<cdot>y) = d\<cdot>y" by (rule deflation_below_comp2[OF d de le])+
   ultimately show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> d\<cdot>x \<and> l \<sqsubseteq> d\<cdot>y"
     using separated_defl.separated_image[OF e, of "d\<cdot>x" "d\<cdot>y" u] by simp
 qed
@@ -647,6 +654,8 @@ text \<open>A deflation with downward-closed image (its fixed points form a stab
 
 locale downclosed_defl = deflation d for d :: "'a::bifinite \<rightarrow> 'a" +
   assumes downclosed: "d\<cdot>y = y \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> d\<cdot>x = x"
+
+lemma (in downclosed_defl) deflation: "deflation d" by (fact deflation_axioms)
 
 lemma downclosed_deflI:
   "deflation d \<Longrightarrow> (\<And>x y. d\<cdot>y = y \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> d\<cdot>x = x) \<Longrightarrow> downclosed_defl d"
@@ -773,10 +782,11 @@ qed
 
 lemma downclosed_defl_iso:
   fixes abs :: "'r::bifinite \<rightarrow> 't::bifinite" and rep
-  assumes iso: "iso abs rep" and f: "downclosed_defl f"
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "downclosed_defl f"
   shows "downclosed_defl (abs oo f oo rep)"
 proof (rule downclosed_deflI)
-  interpret iso abs rep by (fact iso)
+  interpret iso abs rep by (rule iso.intro[OF iso_abs iso_rep])
   show "deflation (abs oo f oo rep)"
     by (rule deflation_abs_rep[OF abs_iso rep_iso downclosed_defl.axioms(1)[OF f]])
   fix x y assume fy: "(abs oo f oo rep)\<cdot>y = y" and xy: "x \<sqsubseteq> y"
@@ -919,6 +929,8 @@ locale distributive_defl = bounded_complete_defl d + downclosed_defl d
   for d :: "'a::bifinite \<rightarrow> 'a" +
   assumes distrib_image:
     "{a, b} <<| j \<Longrightarrow> is_glb {d\<cdot>c, j} m \<Longrightarrow> is_glb {d\<cdot>c, a} ma \<Longrightarrow> is_glb {d\<cdot>c, b} mb \<Longrightarrow> {ma, mb} <<| m"
+
+lemma (in distributive_defl) deflation: "deflation d" by (fact deflation_axioms)
 
 lemma distributive_deflI:
   assumes "bounded_complete_defl d" "downclosed_defl d"
@@ -1078,14 +1090,17 @@ qed
 
 lemma distributive_defl_iso:
   fixes abs :: "'r::bifinite \<rightarrow> 't::bifinite" and rep
-  assumes iso: "iso abs rep" and f: "distributive_defl f"
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "distributive_defl f"
   shows "distributive_defl (abs oo f oo rep)"
 proof (rule distributive_deflI)
+  have iso: "iso abs rep" by (rule iso.intro[OF iso_abs iso_rep])
   interpret iso abs rep by (fact iso)
   have fbc: "bounded_complete_defl f" and fdc: "downclosed_defl f"
     using f by (simp_all add: distributive_defl_def)
-  show "bounded_complete_defl (abs oo f oo rep)" by (rule bounded_complete_defl_iso[OF iso fbc])
-  show "downclosed_defl (abs oo f oo rep)" by (rule downclosed_defl_iso[OF iso fdc])
+  show "bounded_complete_defl (abs oo f oo rep)"
+    by (rule bounded_complete_defl_iso[OF iso_abs iso_rep fbc])
+  show "downclosed_defl (abs oo f oo rep)" by (rule downclosed_defl_iso[OF iso_abs iso_rep fdc])
   fix a b j c m ma mb
   assume j: "{a, b} <<| j" and m: "is_glb {(abs oo f oo rep)\<cdot>c, j} m"
     and ma: "is_glb {(abs oo f oo rep)\<cdot>c, a} ma" and mb: "is_glb {(abs oo f oo rep)\<cdot>c, b} mb"
@@ -1442,6 +1457,8 @@ locale separating_defl = deflation d for d :: "'a::bifinite \<rightarrow> 'a" +
   assumes separating:
     "d\<cdot>x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> d\<cdot>x \<sqsubseteq> u \<Longrightarrow> y \<sqsubseteq> u \<Longrightarrow> \<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> d\<cdot>x \<and> l \<sqsubseteq> y"
 
+lemma (in separating_defl) deflation: "deflation d" by (fact deflation_axioms)
+
 lemma separating_deflI:
   assumes "deflation d"
     and "\<And>x y u. d\<cdot>x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> d\<cdot>x \<sqsubseteq> u \<Longrightarrow> y \<sqsubseteq> u \<Longrightarrow> \<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> d\<cdot>x \<and> l \<sqsubseteq> y"
@@ -1531,10 +1548,11 @@ qed
 
 lemma separating_defl_iso:
   fixes abs :: "'r::bifinite \<rightarrow> 't::bifinite" and rep
-  assumes iso: "iso abs rep" and f: "separating_defl f"
+  assumes iso_abs: "\<And>x. rep\<cdot>(abs\<cdot>x) = x" and iso_rep: "\<And>y. abs\<cdot>(rep\<cdot>y) = y"
+    and f: "separating_defl f"
   shows "separating_defl (abs oo f oo rep)"
 proof (rule separating_deflI)
-  interpret iso abs rep by (fact iso)
+  interpret iso abs rep by (rule iso.intro[OF iso_abs iso_rep])
   show "deflation (abs oo f oo rep)"
     using f by (intro deflation_abs_rep[OF abs_iso rep_iso]) (simp add: separating_defl_def)
   fix x y u assume x: "(abs oo f oo rep)\<cdot>x \<noteq> \<bottom>" and y: "y \<noteq> \<bottom>"
@@ -1574,12 +1592,12 @@ proof (rule admI)
 qed
 
 lemma separating_defl_below:
-  assumes e: "separating_defl e" and d: "deflation d" "d \<sqsubseteq> e"
+  assumes le: "d \<sqsubseteq> e" and e: "separating_defl e" and d: "deflation d"
   shows "separating_defl d"
-proof (rule separating_deflI[OF d(1)])
+proof (rule separating_deflI[OF d])
   fix x y u assume x: "d\<cdot>x \<noteq> \<bottom>" "y \<noteq> \<bottom>" "d\<cdot>x \<sqsubseteq> u" "y \<sqsubseteq> u"
   have "e\<cdot>(d\<cdot>x) = d\<cdot>x"
-    by (rule deflation_below_comp2[OF d(1) separating_defl.axioms(1)[OF e] d(2)])
+    by (rule deflation_below_comp2[OF d separating_defl.axioms(1)[OF e] le])
   then show "\<exists>l. l \<noteq> \<bottom> \<and> l \<sqsubseteq> d\<cdot>x \<and> l \<sqsubseteq> y"
     using separating_defl.separating[OF e, of "d\<cdot>x" y u] x by simp
 qed

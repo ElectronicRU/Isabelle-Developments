@@ -23,60 +23,64 @@ lemma slist_map_bottom_iff [simp]: "slist_map\<cdot>f\<cdot>l = \<bottom> \<long
 subsection \<open>Generic derivation: map rules by fixed-point induction\<close>
 
 text \<open>Only the package's @{thm [source] slist_map_def}, @{thm [source] slist.iso_rews} and
-  @{thm [source] slist_map_ID} are used.  The map rules are registered in @{attribute defl_map},
-  so types nesting @{typ "'v slist"} can use them.\<close>
+  @{thm [source] slist_map_ID} are used.  The map rules are registered in
+  @{attribute domain_category_map}, so types nesting @{typ "'v slist"} can use them.\<close>
 
-lemma bounded_complete_defl_slist_map [defl_map]:
+lemma bounded_complete_defl_slist_map [domain_category_map]:
   "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (slist_map\<cdot>v)"
-  by (defl_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
+  by (domain_category_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
 
-lemma separated_defl_slist_map [defl_map]: "deflation v \<Longrightarrow> separated_defl (slist_map\<cdot>v)"
-  by (defl_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
+lemma separated_defl_slist_map [domain_category_map]:
+  "deflation v \<Longrightarrow> separated_defl (slist_map\<cdot>v)"
+  by (domain_category_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
 
-lemma downclosed_defl_slist_map [defl_map]: "downclosed_defl v \<Longrightarrow> downclosed_defl (slist_map\<cdot>v)"
-  by (defl_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
+lemma downclosed_defl_slist_map [domain_category_map]:
+  "downclosed_defl v \<Longrightarrow> downclosed_defl (slist_map\<cdot>v)"
+  by (domain_category_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
 
-lemma separating_defl_slist_map [defl_map]: "deflation v \<Longrightarrow> separating_defl (slist_map\<cdot>v)"
-  by (defl_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
+lemma separating_defl_slist_map [domain_category_map]:
+  "deflation v \<Longrightarrow> separating_defl (slist_map\<cdot>v)"
+  by (domain_category_map_rule map_def: slist_map_def iso_rews: slist.iso_rews)
 
 text \<open>Recursion passes through \<open>\<otimes>\<close>, whose rule needs the recursive occurrence separated.  The
   iterates lie below the fixed point, so separation (antitone, registered just above) transfers
   to them and need not be carried through the induction.\<close>
 
-lemma distributive_defl_slist_map [defl_map]:
+lemma distributive_defl_slist_map [domain_category_map]:
   "distributive_defl v \<Longrightarrow> distributive_defl (slist_map\<cdot>v)"
-  by (defl_map_rule map_def: slist_map_def iso_rews: slist.iso_rews
+  by (domain_category_map_rule map_def: slist_map_def iso_rews: slist.iso_rews
       fix_facts: separating_defl_slist_map)
 
 lemma "OFCLASS('v::{domain, bounded_complete} slist, bounded_complete_class)"
-  by (defl_instance map_ID: slist_map_ID)
+  by (domain_category_instance map_ID: slist_map_ID)
 
 lemma "OFCLASS('v::domain slist, separated_po_class)"
-  by (defl_instance map_ID: slist_map_ID)
+  by (domain_category_instance map_ID: slist_map_ID)
 
 domain ('v::"domain") lstream = LSCons (lazy 'v) (lazy "'v lstream")
 
 text \<open>Recursion only through lazy fields, i.e. under \<open>u_map\<close>: no separation needed for \<open>\<otimes>\<close>.\<close>
 
-lemma bounded_complete_defl_lstream_map [defl_map]:
+lemma bounded_complete_defl_lstream_map [domain_category_map]:
   "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (lstream_map\<cdot>v)"
-  by (defl_map_rule map_def: lstream_map_def iso_rews: lstream.iso_rews)
+  by (domain_category_map_rule map_def: lstream_map_def iso_rews: lstream.iso_rews)
 
-lemma separated_defl_lstream_map [defl_map]: "deflation v \<Longrightarrow> separated_defl (lstream_map\<cdot>v)"
-  by (defl_map_rule map_def: lstream_map_def iso_rews: lstream.iso_rews)
+lemma separated_defl_lstream_map [domain_category_map]:
+  "deflation v \<Longrightarrow> separated_defl (lstream_map\<cdot>v)"
+  by (domain_category_map_rule map_def: lstream_map_def iso_rews: lstream.iso_rews)
 
-lemma distributive_defl_lstream_map [defl_map]:
+lemma distributive_defl_lstream_map [domain_category_map]:
   "distributive_defl v \<Longrightarrow> distributive_defl (lstream_map\<cdot>v)"
-  by (defl_map_rule map_def: lstream_map_def iso_rews: lstream.iso_rews)
+  by (domain_category_map_rule map_def: lstream_map_def iso_rews: lstream.iso_rews)
 
 instance lstream :: ("{domain, bounded_complete}") bounded_complete
-  by (defl_instance map_ID: lstream_map_ID)
+  by (domain_category_instance map_ID: lstream_map_ID)
 
 instance lstream :: ("domain") separated_po
-  by (defl_instance map_ID: lstream_map_ID)
+  by (domain_category_instance map_ID: lstream_map_ID)
 
 instance lstream :: ("{domain, distributive_cpo}") distributive_cpo
-  by (defl_instance map_ID: lstream_map_ID)
+  by (domain_category_instance map_ID: lstream_map_ID)
 
 
 subsection \<open>Bounded completeness\<close>
@@ -299,7 +303,7 @@ text \<open>The generic derivation (@{thm [source] distributive_defl_slist_map})
   instance at the same parameter sort.\<close>
 
 lemma "OFCLASS('v::{domain, distributive_cpo} slist, distributive_cpo_class)"
-  by (defl_instance map_ID: slist_map_ID)
+  by (domain_category_instance map_ID: slist_map_ID)
 
 instance slist :: ("{domain, distributive_cpo}") distributive_cpo
   by intro_classes (rule slist_distrib)
