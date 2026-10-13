@@ -1,4 +1,4 @@
- theory SList
+theory SList
   imports "HOLCF-extra.Domain_Order_Derive"
 begin
 
@@ -12,10 +12,10 @@ lemma slist_map_strict [simp]: "slist_map\<cdot>f\<cdot>\<bottom> = \<bottom>"
   by (subst slist_map_unfold) simp
 
 lemma slist_map_SNil [simp]: "slist_map\<cdot>f\<cdot>SNil = SNil"
-  by (subst slist_map_unfold) (simp add: SNil_def slist.abs_iso)
+  by (subst slist_map_unfold) (simp add: SNil_def)
 
 lemma slist_map_SCons [simp]: "l \<noteq> \<bottom> \<Longrightarrow> slist_map\<cdot>f\<cdot>(SCons\<cdot>v\<cdot>l) = SCons\<cdot>(f\<cdot>v)\<cdot>(slist_map\<cdot>f\<cdot>l)"
-  by (subst slist_map_unfold) (simp add: SCons_def slist.abs_iso)
+  by (subst slist_map_unfold) (simp add: SCons_def)
 
 lemma slist_map_bottom_iff [simp]: "slist_map\<cdot>f\<cdot>l = \<bottom> \<longleftrightarrow> l = \<bottom>"
   by (induct l rule: slist.induct) simp_all
@@ -271,7 +271,7 @@ next
     have cong: "l \<sqinter> la = \<bottom> \<longleftrightarrow> l \<sqinter> lb = \<bottom>"
       using 4 j slist_meet_bottom_cong joinable_sym by metis
     have cong2: "l \<sqinter> (la \<squnion> lb) = \<bottom> \<longleftrightarrow> l \<sqinter> la = \<bottom>"
-      using 4 j lab slist_meet_bottom_cong joinableD joinable_if_below1 joinable_sym by metis
+      using 4 j lab slist_meet_bottom_cong joinableD(1) joinable_if_below1 joinable_sym by metis
     show ?thesis
     proof (cases "l \<sqinter> la = \<bottom>")
       case True

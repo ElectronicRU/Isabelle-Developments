@@ -142,9 +142,6 @@ text \<open>The domain package defines \<open>T_map \<equiv> \<Lambda> v. \<mu> 
 definition preserves :: "(('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool) \<Rightarrow> (('a \<rightarrow> 'a) \<rightarrow> ('a \<rightarrow> 'a)) \<Rightarrow> bool" where
   "preserves P F \<longleftrightarrow> (\<forall>f. P f \<longrightarrow> P (F\<cdot>f))"
 
-lemma preservesI: "(\<And>f. P f \<Longrightarrow> P (F\<cdot>f)) \<Longrightarrow> preserves P F"
-  by (simp add: preserves_def)
-
 lemma preserves_LAM: "cont G \<Longrightarrow> (\<And>f. P f \<Longrightarrow> P (G f)) \<Longrightarrow> preserves P (\<Lambda> f. G f)"
   by (simp add: preserves_def)
 

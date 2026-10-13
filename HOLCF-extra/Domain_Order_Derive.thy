@@ -17,8 +17,9 @@ text \<open>The package defines \<open>T_map \<equiv> \<Lambda> v\<^sub>1 \<dots
   equation \<open>M = (\<Lambda> v. B v)\<close> into \<open>M\<cdot>v = B v\<close>, again an equation of the same shape with one
   \<open>\<Lambda>\<close> fewer; its continuity side condition is a single goal for @{attribute cont2cont}.  After
   \<open>n\<close> steps the equation reads \<open>T_map\<cdot>v\<^sub>1\<cdot>\<dots>\<cdot>v\<^sub>n = \<mu> f. G f\<close>, with the parameters free in \<open>G\<close>,
-  and the induction rule below needs nothing more.  Its step is stated for the folded left-hand
-  side (the iterate lies below it), and its continuity premise comes last.\<close>
+  and the induction rule below needs nothing more.  The equation is its first premise, for
+  @{text erule}; the others come easiest first, ending with the step, which is stated for the
+  folded left-hand side (the iterate lies below it).\<close>
 
 lemma defl_beta_step: "M = (\<Lambda> v. B v) \<Longrightarrow> cont B \<Longrightarrow> M\<cdot>v = B v"
   by simp
