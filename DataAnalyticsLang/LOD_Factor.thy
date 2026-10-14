@@ -740,6 +740,11 @@ proof unfold_locales
     using that by (rule semi_factor_defl.slide[OF sf])
   show "compact (k \<downharpoonright> semi_factor_of_lod a)"
     using semi_factor_of_lod[of a] by (simp add: finitary_semi_factor_def finitary_def)
+  show "(x \<squnion> y) \<downharpoonright> semi_factor_of_lod a = x \<downharpoonright> semi_factor_of_lod a \<squnion> y \<downharpoonright> semi_factor_of_lod a"
+    if "x \<Up> y"
+    using semi_factor_defl.axioms(1)[OF sf] that by (rule stable_defl_image_join)
+  show "x \<downharpoonright> semi_factor_of_lod a = x" if "y \<downharpoonright> semi_factor_of_lod a = y" "x \<sqsubseteq> y"
+    using that by (rule stable_defl.downclosed[OF semi_factor_defl.axioms(1)[OF sf]])
 next
   fix k :: 'a assume "compact k"
   then obtain F where F: "finitary_semi_factor F" "k \<downharpoonright> F = k" using compact_level by blast

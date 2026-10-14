@@ -18,18 +18,17 @@ subsection \<open>Three-valued predicates\<close>
 
 text \<open>Where a three-valued predicate is true.\<close>
 
-lift_definition holds :: "('a::pcpo \<rightarrow> tr) \<Rightarrow> 'a sel" is "\<lambda>p. {x. p\<cdot>x = TT}"
+lift_definition holds :: "('a::pcpo \<rightarrow> tr) \<Rightarrow> 'a sel" is "\<lambda>p x. p\<cdot>x = TT"
 proof -
   fix p :: "'a \<rightarrow> tr"
   have "adm (\<lambda>x. p\<cdot>x \<noteq> TT)" by simp
   moreover have "p\<cdot>x = TT \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> p\<cdot>y = TT" for x y
     by (metis monofun_cfun_arg ax_flat dist_eq_tr(1))
-  ultimately show "(\<forall>x y. x \<in> {x. p\<cdot>x = TT} \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> y \<in> {x. p\<cdot>x = TT}) \<and>
-      adm (\<lambda>x. x \<notin> {x. p\<cdot>x = TT})" by (simp only: mem_Collect_eq) blast
+  ultimately show "(\<forall>x y. p\<cdot>x = TT \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> p\<cdot>y = TT) \<and> adm (\<lambda>x. p\<cdot>x \<noteq> TT)" by blast
 qed
 
 lemma holds_TT [simp]: "holds (\<Lambda> _. TT) = top"
-  by transfer simp
+  by transfer (simp add: top_fun_def)
 
 lemma neg_neg_tr [simp]: "neg\<cdot>(neg\<cdot>x) = x"
   by (cases x rule: trE) simp_all
@@ -153,6 +152,7 @@ axiomatization where
   and adims_acrs: "fset (adims (acrs A a)) \<subseteq> fset (adims a) \<inter> A"
   and acrs_cut: "sand\<cdot>(aeval a\<cdot>u)\<cdot>(aeval (acrs A a)\<cdot>(tcut A\<cdot>u)) = aeval a\<cdot>u"
   and acrs_inside: "fset (adims a) \<subseteq> A \<Longrightarrow> acrs A a = a"
+  and acrs_adims: "acrs A a = acrs (A \<inter> fset (adims a)) a"
 
 lemma aeval_tcut: "fset (adims a) \<subseteq> D \<Longrightarrow> aeval a\<cdot>(tcut D\<cdot>t) = aeval a\<cdot>t"
 proof -
@@ -187,11 +187,11 @@ primrec teval :: "filt \<Rightarrow> key \<rightarrow> tr" where
 definition fsel :: "filt \<Rightarrow> key sel" where
   "fsel f = holds (teval f)"
 
-lemma fsel_rows: "t \<in> sel_rows (fsel f) \<longleftrightarrow> teval f\<cdot>t = TT"
+lemma fsel_rows: "selects (fsel f) t \<longleftrightarrow> teval f\<cdot>t = TT"
   by (simp add: fsel_def holds.rep_eq)
 
 lemma fsel_conj: "fsel (Conj a b) = inf (fsel a) (fsel b)"
-  by (rule sel_eqI) (simp add: fsel_rows inf_sel.rep_eq)
+  by (rule sel_eqI) (simp add: fsel_rows)
 
 lemma fsel_ftop: "fsel ftop = top"
   by (simp add: fsel_def ftop_def)
@@ -294,6 +294,33 @@ text \<open>Coarsening keeps only target dimensions, never adds errors, and hold
 lemma crs_sdim: "fset (sdim (crs A f)) \<subseteq> fset (sdim f) \<inter> A"
   by (induct A f rule: crs.induct) (auto dest: adims_acrs[THEN subsetD])
 
+text \<open>Coarsening only depends on the target within the filter's own dimensions.\<close>
+
+lemma crs_sdim_eq:
+  "A \<inter> fset (sdim f) = B \<inter> fset (sdim f) \<Longrightarrow> crs A f = crs B f \<and> crs A (Neg f) = crs B (Neg f)"
+proof (induct f arbitrary: A B)
+  case (Atom a)
+  have "acrs A a = acrs B a" "acrs A (aneg a) = acrs B (aneg a)"
+    using Atom by (metis acrs_adims adims_aneg sdim.simps(1))+
+  then show ?case by simp
+next
+  case (Conj a b)
+  have "A \<inter> fset (sdim a) = B \<inter> fset (sdim a)" "A \<inter> fset (sdim b) = B \<inter> fset (sdim b)"
+    using Conj.prems by (simp_all add: set_eq_iff) blast+
+  from Conj.hyps(1)[OF this(1)] Conj.hyps(2)[OF this(2)] show ?case by simp
+next
+  case (Disj a b)
+  have "A \<inter> fset (sdim a) = B \<inter> fset (sdim a)" "A \<inter> fset (sdim b) = B \<inter> fset (sdim b)"
+    using Disj.prems by (simp_all add: set_eq_iff) blast+
+  from Disj.hyps(1)[OF this(1)] Disj.hyps(2)[OF this(2)] show ?case by simp
+next
+  case (Neg a)
+  from Neg.hyps[OF Neg.prems[unfolded sdim.simps]] show ?case by simp
+qed
+
+lemma crs_restrict: "crs A f = crs (A \<inter> fset (sdim f)) f"
+  by (rule crs_sdim_eq[THEN conjunct1]) auto
+
 lemma crs_cut: "sand\<cdot>(teval f\<cdot>u)\<cdot>(teval (crs A f)\<cdot>(tcut A\<cdot>u)) = teval f\<cdot>u"
 proof (induct A f rule: crs.induct)
   case (1 A a) show ?case by (simp add: acrs_cut)
@@ -329,9 +356,10 @@ subsection \<open>Selections, dimensions and coarsening of slices\<close>
 
 lift_definition slice_ssel :: "slice \<Rightarrow> key sel" is fsel by (rule fsel_feq)
 
-lift_definition slice_dims :: "slice \<Rightarrow> dim set" is "\<lambda>f. fset (sdim f)" by (rule fset_sdim_feq)
+lift_definition slice_dims :: "slice \<Rightarrow> dim fset" is sdim by (metis fset_sdim_feq fset_inject)
 
-lift_definition slice_coarsen :: "dim set \<Rightarrow> slice \<Rightarrow> slice" is crs by (rule crs_feq)
+lift_definition slice_coarsen :: "dim fset \<Rightarrow> slice \<Rightarrow> slice" is "\<lambda>A. crs (fset A)"
+  by (rule crs_feq)
 
 text \<open>Selections are a lifted type too, so \<open>transfer\<close> on goals mentioning their constants
   alone (\<open>\<top>\<close>) gets confused; those go via the abstraction equations instead.\<close>
@@ -376,35 +404,45 @@ next
   show ?case using a(2) feq.trans[OF a(1) feq.sym[OF feq.neg_neg]] by simp
 qed
 
-text \<open>The slice-level facts.\<close>
+text \<open>The slice-level facts.  Levels of detail are finite dimension sets, acting on keys by
+  cutting.\<close>
 
-lemma slice_ssel_dims:
-  "t \<in> sel_rows (slice_ssel s) \<Longrightarrow> tcut (slice_dims s)\<cdot>t \<in> sel_rows (slice_ssel s)"
+lemma slice_ssel_lod:
+  "selects (slice_ssel s) (tcut (fset (slice_dims s))\<cdot>t) \<longleftrightarrow> selects (slice_ssel s) t"
   by transfer (simp add: fsel_rows teval_tcut)
 
-lemma slice_ssel_total: "t \<in> sel_rows (slice_ssel s) \<Longrightarrow> slice_dims s \<subseteq> tsupp t"
+lemma slice_ssel_total: "selects (slice_ssel s) t \<Longrightarrow> fset (slice_dims s) \<subseteq> tsupp t"
   by transfer (simp add: fsel_rows teval_strict)
 
 lemma slice_coarsen_conj:
   "slice_coarsen A (inf a b) = inf (slice_coarsen A a) (slice_coarsen A b)"
   by transfer (simp add: feq.refl)
 
-lemma slice_coarsen_inside: "slice_dims s \<subseteq> A \<Longrightarrow> slice_coarsen A s = s"
-  by transfer (simp add: crs_inside)
+lemma slice_coarsen_inside: "slice_dims s \<le> A \<Longrightarrow> slice_coarsen A s = s"
+  by transfer (simp add: crs_inside less_eq_fset.rep_eq)
 
-lemma slice_dims_coarsen: "slice_dims (slice_coarsen A s) \<subseteq> slice_dims s \<inter> A"
-  by transfer (rule crs_sdim)
+lemma slice_dims_coarsen: "slice_dims (slice_coarsen A s) \<le> inf (slice_dims s) A"
+  by transfer (use crs_sdim in \<open>auto simp: less_eq_fset.rep_eq inf_fset.rep_eq\<close>)
 
 lemma slice_coarsen_cut:
-  "t \<in> sel_rows (slice_ssel f) \<Longrightarrow> tcut A\<cdot>t \<in> sel_rows (slice_ssel (slice_coarsen A f))"
+  "selects (slice_ssel f) t \<Longrightarrow> selects (slice_ssel (slice_coarsen A f)) (tcut (fset A)\<cdot>t)"
   by transfer (simp add: fsel_rows crs_holds)
+
+lemma slice_coarsen_slod: "slice_coarsen A s = slice_coarsen (inf A (slice_dims s)) s"
+proof transfer
+  fix A f
+  have "crs (fset A) f = crs (fset (A |\<inter>| sdim f)) f"
+    by (subst crs_restrict) (simp add: inf_fset.rep_eq)
+  then show "crs (fset A) f \<approx> crs (fset (A |\<inter>| sdim f)) f" by (simp add: feq.refl)
+qed
 
 text \<open>The toy slices form a slicer.\<close>
 
-interpretation toy: slicer "inf :: slice \<Rightarrow> slice \<Rightarrow> slice" top slice_ssel slice_dims slice_coarsen
+interpretation toy: slicer "\<lambda>A. tcut (fset A) :: key \<rightarrow> key" "inf :: slice \<Rightarrow> slice \<Rightarrow> slice" top
+    slice_dims slice_ssel slice_coarsen
   by unfold_locales
-    (fact slice_ssel_dims slice_ssel_total slice_coarsen_conj slice_coarsen_inside
-      slice_dims_coarsen slice_coarsen_cut)+
+    (fact slice_ssel_lod slice_coarsen_conj slice_coarsen_inside slice_dims_coarsen
+      slice_coarsen_cut slice_coarsen_slod)+
 
 end
 

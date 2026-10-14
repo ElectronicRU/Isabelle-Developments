@@ -1,5 +1,5 @@
 theory Slicer
-  imports ValsetBase Congruence "HOL-Library.FSet"
+  imports ValsetBase Congruence LOD "HOL-Library.FSet"
 begin
 
 default_sort type
@@ -9,11 +9,10 @@ section \<open>Levels of detail as syntactic dimension sets\<close>
 text \<open>
   Dimensions are drawn from a (countable, nominal) label set \<^typ>\<open>'d\<close>; each label is
   evaluated on rows by a continuous row-level expression into a value domain.  Two labels may
-  share an expression: they are then functionally dependent, but distinct.  A level of detail
-  is a set of labels, and its meaning on a row is the tuple of its dimensions' values, with the
-  other coordinates cut to \<^term>\<open>\<bottom>\<close>.
+  share an expression: they are then functionally dependent, but distinct.  The key of a row is
+  the tuple of all its dimensions' values; a level of detail then cuts it.
 
-  The image of a row under this map need \<^emph>\<open>not\<close> be a stable subdomain of the tuple domain
+  The image of a row under the cut key need \<^emph>\<open>not\<close> be a stable subdomain of the tuple domain
   (with an expression dimension \<open>c \<approx> a + b\<close> the allowable sub-rows are not closed under existing
   joins), and we never require it to be: the domain stays the source rows, and functional
   dependence is stated relationally via kernel orders.
@@ -23,133 +22,102 @@ locale dim_eval =
   fixes deval :: "'d \<Rightarrow> ('r::pcpo \<rightarrow> 'v::pcpo)" (\<open>\<lbrakk>_\<rbrakk>\<close>)
 begin
 
-definition keyof :: "'d set \<Rightarrow> 'r \<rightarrow> ('d, 'v) tuple" where
-  "keyof D = (\<Lambda> r. tcut D\<cdot>(Abs_tuple (\<lambda>d. \<lbrakk>d\<rbrakk>\<cdot>r)))"
+definition keyof :: "'r \<rightarrow> ('d, 'v) tuple" where
+  "keyof = (\<Lambda> r. Abs_tuple (\<lambda>d. \<lbrakk>d\<rbrakk>\<cdot>r))"
 
-lemma keyof_beta: "keyof D\<cdot>r = tcut D\<cdot>(Abs_tuple (\<lambda>d. \<lbrakk>d\<rbrakk>\<cdot>r))"
+lemma keyof_beta: "keyof\<cdot>r = Abs_tuple (\<lambda>d. \<lbrakk>d\<rbrakk>\<cdot>r)"
   unfolding keyof_def by (simp add: cont_Abs_tuple)
 
-lemma keyof_tget: "(keyof D\<cdot>r)\<langle>d\<rangle> = (if d \<in> D then \<lbrakk>d\<rbrakk>\<cdot>r else \<bottom>)"
-  by (simp add: keyof_beta tcut_tget Abs_tuple_inverse')
-
-lemma keyof_empty [simp]: "keyof {} = \<bottom>"
-  by (intro cfun_eqI tuple_eqI) (simp add: keyof_tget tget_strict)
-
-lemma keyof_mono: "D \<subseteq> E \<Longrightarrow> keyof D \<sqsubseteq> keyof E"
-  by (simp add: cfun_below_iff below_tuple_def fun_below_iff keyof_tget subset_iff)
-
-text \<open>Coarsening a level of detail is cutting its key: \<^term>\<open>keyof E\<close> determines
-  \<^term>\<open>keyof D\<close> for \<^term>\<open>D \<subseteq> E\<close> uniformly, by \<^term>\<open>tcut D\<close>.\<close>
-
-lemma tcut_keyof: "tcut E\<cdot>(keyof D\<cdot>r) = keyof (D \<inter> E)\<cdot>r"
-  by (simp add: keyof_beta tcut_compose Int_commute)
-
-lemma tsupp_keyof: "tsupp (keyof A\<cdot>m) = {d \<in> A. \<lbrakk>d\<rbrakk>\<cdot>m \<noteq> \<bottom>}"
-  by (auto simp: tsupp_def keyof_tget)
+lemma keyof_tget [simp]: "(keyof\<cdot>r)\<langle>d\<rangle> = \<lbrakk>d\<rbrakk>\<cdot>r"
+  by (simp add: keyof_beta Abs_tuple_inverse')
 
 subsection \<open>Kernel orders and functional dependence\<close>
 
-definition kern :: "'d set \<Rightarrow> 'r \<Rightarrow> 'r \<Rightarrow> bool" where
-  "kern D x y \<longleftrightarrow> keyof D\<cdot>x \<sqsubseteq> keyof D\<cdot>y"
+text \<open>The kernel order of a projection \<open>p\<close> on keys (in practice a deflation, such as an LOD's):
+  rows compared by what \<open>p\<close> keeps of their keys.\<close>
 
-lemma kern_iff: "kern D x y \<longleftrightarrow> (\<forall>d\<in>D. \<lbrakk>d\<rbrakk>\<cdot>x \<sqsubseteq> \<lbrakk>d\<rbrakk>\<cdot>y)"
-  unfolding kern_def below_tuple_def fun_below_iff by (auto simp: keyof_tget)
+definition kern :: "(('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> 'r \<Rightarrow> 'r \<Rightarrow> bool" where
+  "kern p x y \<longleftrightarrow> p\<cdot>(keyof\<cdot>x) \<sqsubseteq> p\<cdot>(keyof\<cdot>y)"
 
-lemma is_cong_kern: "is_cong (kern D)"
+lemma is_cong_kern: "is_cong (kern p)"
   unfolding kern_def by unfold_locales (auto intro: below_trans monofun_cfun_arg)
 
-lemma kern_empty: "kern {} x y"
-  by (simp add: kern_iff)
+lemma kern_bot: "kern \<bottom> x y"
+  by (simp add: kern_def)
 
-lemma kern_Un: "kern (D \<union> E) = inf (kern D) (kern E)"
-  by (auto simp: kern_iff fun_eq_iff)
+lemma kern_below:
+  assumes "deflation p" "deflation q" "p \<sqsubseteq> q" and "kern q x y"
+  shows "kern p x y"
+proof -
+  have "p\<cdot>(q\<cdot>(keyof\<cdot>x)) \<sqsubseteq> p\<cdot>(q\<cdot>(keyof\<cdot>y))" using assms(4) unfolding kern_def by (rule monofun_cfun_arg)
+  then show ?thesis unfolding kern_def by (simp add: deflation_below_comp1[OF assms(1-3)])
+qed
 
-lemma kern_antimono: "D \<subseteq> E \<Longrightarrow> kern E x y \<Longrightarrow> kern D x y"
-  by (auto simp: kern_iff)
+text \<open>Functional dependence of \<open>p\<close> on \<open>q\<close>, relative to a support predicate \<^term>\<open>S\<close> on source
+  rows: rows that \<open>q\<close> cannot tell apart (in the kernel order), \<open>p\<close> cannot either.  Taking
+  \<^term>\<open>S\<close> true everywhere gives schema-level dependence; taking \<^term>\<open>S\<close> to be what a filter
+  selects gives the data-level one.\<close>
 
-text \<open>Functional dependence of \<^term>\<open>D\<close> on \<^term>\<open>E\<close>, relative to a support set
-  \<^term>\<open>S\<close> of source rows: rows that \<^term>\<open>E\<close> cannot tell apart (in the kernel order),
-  \<^term>\<open>D\<close> cannot either.  Taking \<^term>\<open>S = UNIV\<close> gives schema-level dependence; taking
-  \<^term>\<open>S\<close> to be the rows a filter selects gives the data-level one.\<close>
+definition fdep :: "('r \<Rightarrow> bool) \<Rightarrow> (('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> (('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> bool" where
+  "fdep S p q \<longleftrightarrow> (\<forall>x y. S x \<longrightarrow> S y \<longrightarrow> kern q x y \<longrightarrow> kern p x y)"
 
-definition fdep :: "'r set \<Rightarrow> 'd set \<Rightarrow> 'd set \<Rightarrow> bool" where
-  "fdep S D E \<longleftrightarrow> (\<forall>x\<in>S. \<forall>y\<in>S. kern E x y \<longrightarrow> kern D x y)"
-
-lemma fdep_refl: "fdep S D D"
+lemma fdep_refl: "fdep S p p"
   by (simp add: fdep_def)
 
-lemma fdep_trans: "fdep S D E \<Longrightarrow> fdep S E F \<Longrightarrow> fdep S D F"
+lemma fdep_trans: "fdep S p q \<Longrightarrow> fdep S q r \<Longrightarrow> fdep S p r"
   unfolding fdep_def by blast
 
-lemma fdep_subset: "D \<subseteq> E \<Longrightarrow> fdep S D E"
-  unfolding fdep_def by (blast intro: kern_antimono)
+lemma fdep_below: "deflation p \<Longrightarrow> deflation q \<Longrightarrow> p \<sqsubseteq> q \<Longrightarrow> fdep S p q"
+  unfolding fdep_def by (blast intro: kern_below)
 
-lemma fdep_Un: "fdep S D F \<Longrightarrow> fdep S E F \<Longrightarrow> fdep S (D \<union> E) F"
-  unfolding fdep_def by (simp add: kern_Un)
-
-lemma fdep_support_mono: "S' \<subseteq> S \<Longrightarrow> fdep S D E \<Longrightarrow> fdep S' D E"
+lemma fdep_support_mono: "(\<And>x. S' x \<Longrightarrow> S x) \<Longrightarrow> fdep S p q \<Longrightarrow> fdep S' p q"
   unfolding fdep_def by blast
 
 end
 
-text \<open>A single dimension into a flat value domain is a flat congruence: the generators.\<close>
-
-lemma is_flat_cong_kern_single:
-  fixes deval :: "'d \<Rightarrow> ('r::pcpo \<rightarrow> 'v::flat)"
-  shows "is_flat_cong (dim_eval.kern deval {d})"
-  unfolding dim_eval.kern_iff by (simp add: is_flat_cong_eq_on)
-
-text \<open>With bounded-complete values (in particular flat ones, via the subclass
-  \<open>flat \<subseteq> bounded_complete\<close>), the union of dimension sets is the pointwise join.\<close>
-
-lemma keyof_Un:
-  fixes deval :: "'d \<Rightarrow> ('r::pcpo \<rightarrow> 'v::bounded_complete)"
-  shows "dim_eval.keyof deval (D \<union> E)\<cdot>r = dim_eval.keyof deval D\<cdot>r \<squnion> dim_eval.keyof deval E\<cdot>r"
-  by (simp add: dim_eval.keyof_beta tcut_join)
-
 section \<open>Filters\<close>
 
-text \<open>A filter is a continuous predicate into \<^typ>\<open>one\<close> (Sierpinski space): the rows it
-  \<^emph>\<open>selects\<close> are those it maps to \<^term>\<open>ONE\<close>, a Scott-open set.  Several filters are
-  combined by continuous conjunction.\<close>
+text \<open>A filter is a continuous predicate into \<^typ>\<open>one\<close> (Sierpinski space): a row \<^emph>\<open>passes\<close> it
+  when it maps to \<^term>\<open>ONE\<close>, a Scott-open predicate.  Several filters are combined by
+  continuous conjunction.\<close>
 
-definition selected :: "('r::pcpo \<rightarrow> one) \<Rightarrow> 'r set" where
-  "selected \<phi> = {r. \<phi>\<cdot>r = ONE}"
+definition passes :: "('r::pcpo \<rightarrow> one) \<Rightarrow> 'r \<Rightarrow> bool" where
+  "passes \<phi> r \<longleftrightarrow> \<phi>\<cdot>r = ONE"
 
-lemma selected_upclosed: "x \<in> selected \<phi> \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> y \<in> selected \<phi>"
-  unfolding selected_def by (cases "\<phi>\<cdot>y") (auto dest: monofun_cfun_arg[of x y \<phi>])
+lemma passes_up: "passes \<phi> x \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> passes \<phi> y"
+  unfolding passes_def by (cases "\<phi>\<cdot>y") (auto dest: monofun_cfun_arg[of x y \<phi>])
 
-lemma selected_open: "adm (\<lambda>r. r \<notin> selected \<phi>)"
+lemma passes_open: "adm (\<lambda>r. \<not> passes \<phi> r)"
 proof -
-  have "r \<notin> selected \<phi> \<longleftrightarrow> \<phi>\<cdot>r \<sqsubseteq> \<bottom>" for r
-    unfolding selected_def by (cases "\<phi>\<cdot>r") simp_all
+  have "\<not> passes \<phi> r \<longleftrightarrow> \<phi>\<cdot>r \<sqsubseteq> \<bottom>" for r
+    unfolding passes_def by (cases "\<phi>\<cdot>r") simp_all
   then show ?thesis by simp
 qed
 
 definition fconj :: "('r::pcpo \<rightarrow> one) \<Rightarrow> ('r \<rightarrow> one) \<Rightarrow> ('r \<rightarrow> one)" where
   "fconj \<phi> \<psi> = (\<Lambda> r. seq\<cdot>(\<phi>\<cdot>r)\<cdot>(\<psi>\<cdot>r))"
 
-lemma selected_fconj: "selected (fconj \<phi> \<psi>) = selected \<phi> \<inter> selected \<psi>"
-  unfolding selected_def fconj_def by (auto simp: seq_conv_if split: if_splits)
+lemma passes_fconj [simp]: "passes (fconj \<phi> \<psi>) r \<longleftrightarrow> passes \<phi> r \<and> passes \<psi> r"
+  unfolding passes_def fconj_def by (auto simp: seq_conv_if split: if_splits)
 
-lemma selected_ftrue: "selected (\<Lambda> _. ONE) = UNIV"
-  by (simp add: selected_def)
+lemma passes_ftrue [simp]: "passes (\<Lambda> _. ONE) r"
+  by (simp add: passes_def)
 
 section \<open>Datasets\<close>
 
 text \<open>A dataset is a Scott-closed set \<^term>\<open>S\<close> of rows whose \<^emph>\<open>maximal\<close> elements are the
   actual data points; the rest are their partial approximations (sub-rows).  These need not be
-  maximal in the row \<^emph>\<open>type\<close>.  Applying a filter keeps the selected data points and everything
-  below them.  The result is generally \<^emph>\<open>not\<close> a stable subdomain (it need not be closed under
-  joins of compatible sub-rows), but it is again a dataset, with exactly the selected points as
-  its maximal elements.  We assume finitely many data points, which also makes closedness
-  automatic.\<close>
+  maximal in the row \<^emph>\<open>type\<close>.  Restricting to a predicate keeps the data points satisfying it and
+  everything below them.  The result is generally \<^emph>\<open>not\<close> a stable subdomain (it need not be
+  closed under joins of compatible sub-rows), but it is again a dataset, with exactly those
+  points as its maximal elements.  We assume finitely many data points, which also makes
+  closedness automatic.\<close>
 
 definition pts :: "'r::pcpo set \<Rightarrow> 'r set" where
   "pts S = {m \<in> S. \<forall>y\<in>S. m \<sqsubseteq> y \<longrightarrow> y = m}"
 
-definition filtered :: "'r::pcpo set \<Rightarrow> 'r set \<Rightarrow> 'r set" where
-  "filtered S P = {x. \<exists>m \<in> pts S \<inter> P. x \<sqsubseteq> m}"
+definition filtered :: "'r::pcpo set \<Rightarrow> ('r \<Rightarrow> bool) \<Rightarrow> 'r set" where
+  "filtered S P = {x. \<exists>m \<in> pts S. P m \<and> x \<sqsubseteq> m}"
 
 lemma adm_below_finite: "finite P \<Longrightarrow> adm (\<lambda>x. \<exists>m\<in>P. x \<sqsubseteq> m)"
   by (induct rule: finite_induct) simp_all
@@ -170,7 +138,7 @@ lemma closed: "adm (\<lambda>x. x \<in> S)"
 lemma filtered_subset: "filtered S P \<subseteq> S"
   unfolding filtered_def pts_def using downward by blast
 
-lemma pts_filtered: "pts (filtered S P) = pts S \<inter> P"
+lemma pts_filtered: "pts (filtered S P) = {m \<in> pts S. P m}"
   using filtered_subset unfolding filtered_def pts_def by (auto 6 3)
 
 lemma dataset_filtered: "dataset (filtered S P)"
@@ -183,94 +151,77 @@ proof
     unfolding pts_filtered using finite_pts by simp
 qed
 
-lemma filtered_filtered: "filtered (filtered S P) Q = filtered S (P \<inter> Q)"
+lemma filtered_filtered: "filtered (filtered S P) Q = filtered S (\<lambda>x. P x \<and> Q x)"
   unfolding filtered_def[of "filtered S P"] pts_filtered
   by (auto simp: filtered_def)
 
-lemma filtered_UNIV: "filtered S UNIV = S"
+lemma filtered_top: "filtered S (\<lambda>_. True) = S"
   by (subst (2) S_eq) (simp add: filtered_def)
-
-end
-
-section \<open>Dropping dimensions from filters: the existential projection\<close>
-
-text \<open>Keeping only the dimensions \<^term>\<open>A\<close>, the best a filter can do is select every row whose
-  \<open>A\<close>-information lies above that of some row the original filter selects (over the row
-  \<^emph>\<open>type\<close>, not the data).  This set reads only \<open>A\<close>, contains the original selection, and is
-  the least such set.  It is a specification, not a computation: concrete dropping procedures
-  are required to select \<^emph>\<open>at least\<close> this set.\<close>
-
-context dim_eval
-begin
-
-definition exsel :: "'d set \<Rightarrow> 'r set \<Rightarrow> 'r set" where
-  "exsel A U = {x. \<exists>y\<in>U. kern A y x}"
-
-lemma subset_exsel: "U \<subseteq> exsel A U"
-  unfolding exsel_def kern_def by auto
-
-lemma exsel_up: "x \<in> exsel A U \<Longrightarrow> kern A x x' \<Longrightarrow> x' \<in> exsel A U"
-  unfolding exsel_def kern_def by (blast intro: below_trans)
-
-lemma exsel_least:
-  assumes "U \<subseteq> V" and "\<And>x x'. x \<in> V \<Longrightarrow> kern A x x' \<Longrightarrow> x' \<in> V"
-  shows "exsel A U \<subseteq> V"
-  unfolding exsel_def using assms by blast
-
-lemma exsel_antimono: "A \<subseteq> B \<Longrightarrow> exsel B U \<subseteq> exsel A U"
-  unfolding exsel_def using kern_antimono by blast
-
-text \<open>If the selection only reads dimensions in \<^term>\<open>A\<close>, keeping \<^term>\<open>A\<close> loses nothing.\<close>
-
-lemma exsel_supported:
-  assumes "\<And>x y. kern A x y \<Longrightarrow> x \<in> U \<Longrightarrow> y \<in> U"
-  shows "exsel A U = U"
-  using assms subset_exsel unfolding exsel_def by blast
-
-lemma selected_kern:
-  assumes "\<And>x y. kern A x y \<Longrightarrow> \<phi>\<cdot>x \<sqsubseteq> \<phi>\<cdot>y" and "kern A x y" and "x \<in> selected \<phi>"
-  shows "y \<in> selected \<phi>"
-  using assms(1)[OF assms(2)] assms(3) by (cases "\<phi>\<cdot>y") (simp_all add: selected_def)
 
 end
 
 section \<open>Slicers\<close>
 
-
 subsection \<open>Selections\<close>
 
-text \<open>What slices select: Scott-open sets of rows, i.e.\ upward closed and
-  inaccessible by directed sups.  These correspond one-to-one to filters
-  \<^typ>\<open>'r \<rightarrow> one\<close> (via \<^term>\<open>selected\<close>), but as sets they are plainly a distributive
-  bounded lattice under intersection and union.\<close>
+text \<open>What slices select: Scott-open predicates, i.e.\ upward closed with an admissible
+  complement.  These correspond one-to-one to filters \<^typ>\<open>'r \<rightarrow> one\<close>, and form a distributive
+  bounded lattice under the pointwise operations.\<close>
 
-typedef 'r sel = "{U :: 'r::pcpo set. (\<forall>x y. x \<in> U \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> y \<in> U) \<and> adm (\<lambda>x. x \<notin> U)}"
-  morphisms sel_rows Abs_sel
-  by (rule exI[of _ UNIV]) simp
+typedef 'r sel = "{P :: 'r::pcpo \<Rightarrow> bool. (\<forall>x y. P x \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> P y) \<and> adm (\<lambda>x. \<not> P x)}"
+  morphisms selects Abs_sel
+  by (rule exI[of _ "\<lambda>_. True"]) simp
 
 setup_lifting type_definition_sel
 
-lift_definition sel_of :: "('r::pcpo \<rightarrow> one) \<Rightarrow> 'r sel" is selected
-  using selected_upclosed selected_open by blast
+lemma selects_up: "selects s x \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> selects s y"
+  using selects[of s] by blast
+
+lemma selects_open: "adm (\<lambda>x. \<not> selects s x)"
+  using selects[of s] by blast
+
+lemma sel_eqI: "(\<And>x. selects a x \<longleftrightarrow> selects b x) \<Longrightarrow> a = b"
+  by (simp add: selects_inject[symmetric] fun_eq_iff)
+
+lift_definition sel_of :: "('r::pcpo \<rightarrow> one) \<Rightarrow> 'r sel" is passes
+  using passes_up passes_open by blast
 
 instantiation sel :: (pcpo) "{distrib_lattice, bounded_lattice}"
 begin
 
-lift_definition less_eq_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> bool" is "(\<subseteq>)" .
-lift_definition less_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> bool" is "(\<subset>)" .
-lift_definition inf_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> 'a sel" is "(\<inter>)"
+lift_definition less_eq_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> bool" is "(\<le>)" .
+lift_definition less_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> bool" is "(<)" .
+lift_definition inf_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> 'a sel" is inf
   by (auto intro!: adm_disj)
-lift_definition sup_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> 'a sel" is "(\<union>)"
+lift_definition sup_sel :: "'a sel \<Rightarrow> 'a sel \<Rightarrow> 'a sel" is sup
   by (auto intro!: adm_conj)
-lift_definition bot_sel :: "'a sel" is "{}" by simp
-lift_definition top_sel :: "'a sel" is UNIV by simp
+lift_definition bot_sel :: "'a sel" is bot by simp
+lift_definition top_sel :: "'a sel" is top by simp
 
-instance by standard (transfer; auto)+
+instance proof
+  fix x y z :: "'a sel"
+  show "x < y \<longleftrightarrow> x \<le> y \<and> \<not> y \<le> x" by transfer (rule less_le_not_le)
+  show "x \<le> x" by transfer (rule order_refl)
+  show "x \<le> y \<Longrightarrow> y \<le> z \<Longrightarrow> x \<le> z" by transfer (erule (1) order_trans)
+  show "x \<le> y \<Longrightarrow> y \<le> x \<Longrightarrow> x = y" by transfer (erule (1) antisym)
+  show "inf x y \<le> x" by transfer (rule inf_le1)
+  show "inf x y \<le> y" by transfer (rule inf_le2)
+  show "x \<le> y \<Longrightarrow> x \<le> z \<Longrightarrow> x \<le> inf y z" by transfer (erule (1) le_infI)
+  show "x \<le> sup x y" by transfer (rule sup_ge1)
+  show "y \<le> sup x y" by transfer (rule sup_ge2)
+  show "y \<le> x \<Longrightarrow> z \<le> x \<Longrightarrow> sup y z \<le> x" by transfer (erule (1) le_supI)
+  show "sup x (inf y z) = inf (sup x y) (sup x z)" by transfer (rule sup_inf_distrib1)
+  show "bot \<le> x" by transfer (rule bot_least)
+  show "x \<le> top" by transfer (rule top_greatest)
+qed
 
 end
 
-lemma sel_eqI: "(\<And>x. x \<in> sel_rows a \<longleftrightarrow> x \<in> sel_rows b) \<Longrightarrow> a = b"
-  by (simp add: sel_rows_inject[symmetric] set_eq_iff)
+lemma selects_inf [simp]: "selects (inf a b) x \<longleftrightarrow> selects a x \<and> selects b x"
+  by (simp add: inf_sel.rep_eq)
+
+lemma selects_top [simp]: "selects top x"
+  by (simp add: top_sel.rep_eq)
 
 subsection \<open>Semilattice homomorphisms\<close>
 
@@ -284,34 +235,26 @@ locale semilattice_hom = src: semilattice_neutr f z + tgt: semilattice_neutr g w
   assumes hom_f: "h (f a b) = g (h a) (h b)"
     and hom_z: "h z = w"
 
-subsection \<open>Key-level projection\<close>
-
-text \<open>Slices select keys, not rows.  Coarsening to the dimensions \<^term>\<open>A\<close> must
-  accept the \<open>A\<close>-cut of every key the original accepts.  This ranges over all keys, not only
-  those some row realises: under a functional dependency \<open>c = a + b\<close>, coarsening
-  \<open>a = 1 \<and> c = 3\<close> to \<open>b\<close> must accept every \<open>b\<close>, not just \<open>b = 2\<close>.\<close>
-
-lemma sel_rows_upclosed: "x \<in> sel_rows s \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> y \<in> sel_rows s"
-  using sel_rows[of s] by blast
-
-subsection \<open>Slice selections\<close>
+subsection \<open>Slice evaluation\<close>
 
 text \<open>Slices are given by their conjunction \<open>\<^bold>*\<close> and its unit \<open>\<^bold>1\<close>, nothing more: the slicer
-  constructs only conjoin.  The order is the one conjunction induces.  Each slice comes with the
-  dimensions it is written with, \<open>sdims\<close> (an upper bound on what it reads, not the least one);
-  its selection \<open>ssel\<close>, an open set of keys, is a meet-semilattice homomorphism reading only
-  those dimensions, and selects only keys defined on all of them.\<close>
+  constructs only conjoin.  The order is the one conjunction induces.  Slices act on keys, which
+  carry levels of detail (an @{locale lod_space}).  Each slice comes with the LOD it is written
+  at, \<open>slod\<close>: what it \<^emph>\<open>looks at\<close>, not what it selects (an upper bound, not the least one).  Its
+  meaning \<open>sopen\<close> is a Scott-open predicate on keys, and a meet-semilattice homomorphism.  A slice
+  reads a key only through its truncation to the slice's LOD, so it applies to keys finer than its
+  LOD as well.  \<open>holds\<close> is the plain predicate.\<close>
 
-locale slice_sel = conj: semilattice_neutr conj sunit +
-  ssel: semilattice_hom conj sunit inf top ssel +
-  sdims: semilattice_hom conj sunit sup bot sdims
-  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and ssel :: "'f \<Rightarrow> ('d, 'v::pcpo) tuple sel" and sdims :: "'f \<Rightarrow> 'd set" +
-  assumes ssel_sdims: "t \<in> sel_rows (ssel f) \<Longrightarrow> tcut (sdims f)\<cdot>t \<in> sel_rows (ssel f)"
-    and ssel_total: "t \<in> sel_rows (ssel f) \<Longrightarrow> sdims f \<subseteq> tsupp t"
+locale slice_eval = lod_space proj + conj: semilattice_neutr conj sunit +
+  slod: semilattice_hom conj sunit sup bot slod +
+  sopen: semilattice_hom conj sunit inf top sopen
+  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
+    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>) and slod :: "'f \<Rightarrow> 'l"
+    and sopen :: "'f \<Rightarrow> 'k sel" +
+  assumes sopen_lod: "selects (sopen f) (proj (slod f)\<cdot>k) \<longleftrightarrow> selects (sopen f) k"
 begin
 
-lemmas sdims_conj [simp] = sdims.hom_f and sdims_unit [simp] = sdims.hom_z
+lemmas slod_conj [simp] = slod.hom_f and slod_unit [simp] = slod.hom_z
 
 definition sle :: "'f \<Rightarrow> 'f \<Rightarrow> bool" (infix \<open>\<^bold>\<le>\<close> 50) where
   "a \<^bold>\<le> b \<longleftrightarrow> a = a \<^bold>* b"
@@ -322,37 +265,65 @@ definition slt :: "'f \<Rightarrow> 'f \<Rightarrow> bool" (infix \<open>\<^bold
 sublocale sord: semilattice_neutr_order conj sunit sle slt
   by unfold_locales (simp_all add: sle_def slt_def)
 
-lemma ssel_mono: "a \<^bold>\<le> b \<Longrightarrow> ssel a \<le> ssel b"
-  unfolding sle_def by (metis ssel.hom_f inf.orderI)
+lemma sopen_mono: "a \<^bold>\<le> b \<Longrightarrow> sopen a \<le> sopen b"
+  unfolding sle_def by (metis sopen.hom_f inf.orderI)
 
-lemma ssel_dim:
-  assumes "sdims f \<subseteq> D" and "t \<in> sel_rows (ssel f)"
-  shows "tcut D\<cdot>t \<in> sel_rows (ssel f)"
-  using ssel_sdims[OF assms(2)] tcut_mono_set[OF assms(1)] by (rule sel_rows_upclosed)
+definition holds :: "'f \<Rightarrow> 'k \<Rightarrow> bool" where
+  "holds f = selects (sopen f)"
 
-lemma ssel_dim_iff:
-  "sdims f \<subseteq> D \<Longrightarrow> tcut D\<cdot>t \<in> sel_rows (ssel f) \<longleftrightarrow> t \<in> sel_rows (ssel f)"
-  using ssel_dim sel_rows_upclosed tcut_below by blast
+lemma holds_conj [simp]: "holds (a \<^bold>* b) k \<longleftrightarrow> holds a k \<and> holds b k"
+  by (simp add: holds_def sopen.hom_f)
+
+lemma holds_unit [simp]: "holds \<^bold>1 k"
+  by (simp add: holds_def sopen.hom_z)
+
+lemma holds_up: "holds f k \<Longrightarrow> k \<sqsubseteq> k' \<Longrightarrow> holds f k'"
+  unfolding holds_def by (rule selects_up)
+
+lemma holds_open: "adm (\<lambda>k. \<not> holds f k)"
+  unfolding holds_def by (rule selects_open)
+
+lemma holds_mono: "a \<^bold>\<le> b \<Longrightarrow> holds a k \<Longrightarrow> holds b k"
+  unfolding sle_def by (metis holds_conj)
+
+lemma holds_lod: "holds f (proj (slod f)\<cdot>k) \<longleftrightarrow> holds f k"
+  by (simp add: holds_def sopen_lod)
+
+text \<open>Truncating to any LOD the slice is written within does not change whether it holds.\<close>
+
+lemma holds_proj: "slod f \<le> c \<Longrightarrow> holds f (proj c\<cdot>k) \<longleftrightarrow> holds f k"
+  by (metis holds_lod proj_le)
+
+lemma holds_bot_lod:
+  assumes "slod f = bot" shows "holds f k \<longleftrightarrow> holds f \<bottom>"
+  using holds_lod[of f k] by (simp add: assms proj_bot)
 
 end
 
 subsection \<open>Slicers\<close>
 
-text \<open>A slicer adds \<^emph>\<open>coarsening\<close> of a slice to a given (possibly co-finite) set of dimensions
-  to keep: \<open>GROUP BY ONLY D\<close> keeps \<open>D\<close>, \<open>FOR W\<close> keeps \<open>- W\<close>.  It distributes over conjunction,
-  leaves slices written inside the target alone, keeps only target dimensions, and accepts the
-  cut of every key the original accepts.  It is \<^emph>\<open>not\<close> extensional: coarsening
-  \<open>b = 2 \<and> b \<noteq> 2\<close> away from \<open>b\<close> gives \<open>True\<close>, coarsening \<open>False\<close> gives \<open>False\<close>.\<close>
+text \<open>A slicer adds \<^emph>\<open>coarsening\<close> of a slice to a given LOD.  \<open>GROUP BY ONLY\<close> coarsens to the new
+  frame LOD; \<open>FOR\<close> coarsens to the slice's own LOD with dimensions dropped by a transformer.
+  Coarsening distributes over conjunction, leaves slices written inside the target alone, keeps
+  only what the target looks at, and holds at the truncation of every key the original holds at.
+  It only depends on the part of the target the slice is written at: coarsening is about what is
+  cut away.
+  It is \<^emph>\<open>not\<close> extensional: coarsening \<open>b = 2 \<and> b \<noteq> 2\<close> away from \<open>b\<close> gives \<open>True\<close>, coarsening
+  \<open>False\<close> gives \<open>False\<close>.\<close>
 
-locale slicer = slice_sel conj sunit ssel sdims
-  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and ssel :: "'f \<Rightarrow> ('d, 'v::pcpo) tuple sel" and sdims +
-  fixes coarsen :: "'d set \<Rightarrow> 'f \<Rightarrow> 'f"
+locale slicer = slice_eval proj conj sunit slod sopen
+  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
+    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>) and slod sopen +
+  fixes coarsen :: "'l \<Rightarrow> 'f \<Rightarrow> 'f"
   assumes coarsen_conj: "coarsen A (a \<^bold>* b) = coarsen A a \<^bold>* coarsen A b"
-    and coarsen_inside: "sdims f \<subseteq> A \<Longrightarrow> coarsen A f = f"
-    and sdims_coarsen: "sdims (coarsen A f) \<subseteq> sdims f \<inter> A"
-    and coarsen_cut: "t \<in> sel_rows (ssel f) \<Longrightarrow> tcut A\<cdot>t \<in> sel_rows (ssel (coarsen A f))"
+    and coarsen_inside: "slod f \<le> A \<Longrightarrow> coarsen A f = f"
+    and slod_coarsen: "slod (coarsen A f) \<le> inf (slod f) A"
+    and coarsen_cut: "selects (sopen f) k \<Longrightarrow> selects (sopen (coarsen A f)) (proj A\<cdot>k)"
+    and coarsen_slod: "coarsen A f = coarsen (inf A (slod f)) f"
 begin
+
+lemma holds_coarsen_cut: "holds f k \<Longrightarrow> holds (coarsen A f) (proj A\<cdot>k)"
+  unfolding holds_def by (rule coarsen_cut)
 
 lemma coarsen_unit [simp]: "coarsen A \<^bold>1 = \<^bold>1"
   by (rule coarsen_inside) simp
@@ -363,91 +334,117 @@ lemma coarsen_hom: "semilattice_hom conj sunit conj sunit (coarsen A)"
 lemma coarsen_mono: "a \<^bold>\<le> b \<Longrightarrow> coarsen A a \<^bold>\<le> coarsen A b"
   unfolding sle_def by (metis coarsen_conj)
 
-lemma sdims_coarsen_target: "sdims (coarsen A f) \<subseteq> A"
-  by (rule subset_trans[OF sdims_coarsen Int_lower2])
+lemma slod_coarsen_target: "slod (coarsen A f) \<le> A"
+  using slod_coarsen[of A f] by simp
 
-lemma selected_coarsen: "t \<in> sel_rows (ssel f) \<Longrightarrow> t \<in> sel_rows (ssel (coarsen A f))"
-  using coarsen_cut tcut_below by (rule sel_rows_upclosed)
+lemma holds_coarsen: "holds f k \<Longrightarrow> holds (coarsen A f) k"
+  using holds_coarsen_cut proj_below by (rule holds_up)
 
-lemma ssel_coarsen_reads:
-  "t \<in> sel_rows (ssel (coarsen A f)) \<Longrightarrow> tcut A\<cdot>t \<in> sel_rows (ssel (coarsen A f))"
-  by (rule ssel_dim[OF sdims_coarsen_target])
+lemma holds_coarsen_reads: "holds (coarsen A f) (proj A\<cdot>k) \<longleftrightarrow> holds (coarsen A f) k"
+  by (rule holds_proj[OF slod_coarsen_target])
 
-text \<open>A slice written entirely outside the target coarsens to a constant, which is
-  \<^term>\<open>top\<close> as soon as the slice selects anything.  Syntactically this fails:
-  \<open>False \<and> a = 1\<close> coarsens to \<open>False\<close> away from \<open>a\<close>.\<close>
+text \<open>A slice written entirely outside the target coarsens to a constant, which is true as soon
+  as the slice holds anywhere.  Syntactically this fails: \<open>False \<and> a = 1\<close> coarsens to \<open>False\<close>
+  away from \<open>a\<close>.\<close>
 
 lemma coarsen_outside:
-  assumes "sdims f \<inter> A = {}" and "t \<in> sel_rows (ssel f)"
-  shows "ssel (coarsen A f) = top"
-proof (rule sel_eqI)
-  fix u
-  have "sdims (coarsen A f) \<subseteq> {}"
-    using sdims_coarsen[of A f] assms(1) by blast
-  moreover have "t \<in> sel_rows (ssel (coarsen A f))"
-    using selected_coarsen assms(2) by blast
-  moreover have "tcut {}\<cdot>t = \<bottom>"
-    by (rule tuple_eqI) (simp add: tget_strict)
-  ultimately have "\<bottom> \<in> sel_rows (ssel (coarsen A f))"
-    using ssel_dim[of "coarsen A f" "{}" t] by simp
-  then show "u \<in> sel_rows (ssel (coarsen A f)) \<longleftrightarrow> u \<in> sel_rows top"
-    by (auto simp: top_sel.rep_eq intro: sel_rows_upclosed)
+  assumes "inf (slod f) A = bot" and "holds f t"
+  shows "holds (coarsen A f) k"
+proof -
+  have lod: "slod (coarsen A f) = bot"
+    using slod_coarsen[of A f] assms(1) by (simp add: bot_unique)
+  have "holds (coarsen A f) (proj A\<cdot>t)" using assms(2) by (rule holds_coarsen_cut)
+  then have "holds (coarsen A f) \<bottom>" using holds_bot_lod[OF lod, of "proj A\<cdot>t"] by blast
+  then show ?thesis by (rule holds_up) simp
+qed
+
+end
+
+subsection \<open>Pins\<close>
+
+text \<open>\<open>spin K\<close> is the slice pinning the key \<open>K\<close>: on keys, the principal upset of \<open>K\<close>.  It is only
+  specified for compact keys, whose upsets are open.  The slicer picks the LOD a pin is written
+  at; nothing is assumed about it, but it is always one the key lives at.  Pins coarsen by
+  truncating the key, and compatible pins conjoin to the pin of the join.\<close>
+
+locale pin_slicer = slicer proj conj sunit slod sopen coarsen
+  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
+    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>) and slod sopen coarsen +
+  fixes spin :: "'k \<Rightarrow> 'f"
+  assumes sopen_spin: "compact K \<Longrightarrow> selects (sopen (spin K)) k \<longleftrightarrow> K \<sqsubseteq> k"
+    and coarsen_spin: "compact K \<Longrightarrow> coarsen A (spin K) = spin (proj A\<cdot>K)"
+    and spin_join: "compact K1 \<Longrightarrow> compact K2 \<Longrightarrow> K1 \<Up> K2 \<Longrightarrow> spin (K1 \<squnion> K2) = spin K1 \<^bold>* spin K2"
+begin
+
+lemma holds_spin: "compact K \<Longrightarrow> holds (spin K) k \<longleftrightarrow> K \<sqsubseteq> k"
+  unfolding holds_def by (rule sopen_spin)
+
+lemma slod_spin_lives:
+  assumes "compact K" shows "proj (slod (spin K))\<cdot>K = K"
+proof -
+  have "holds (spin K) K" by (simp add: holds_spin[OF assms])
+  then have "holds (spin K) (proj (slod (spin K))\<cdot>K)" by (simp only: holds_lod)
+  then have "K \<sqsubseteq> proj (slod (spin K))\<cdot>K" by (simp only: holds_spin[OF assms])
+  then show ?thesis using proj_below by (rule below_antisym[rotated])
+qed
+
+text \<open>A slice below a pin only holds above the pinned key.\<close>
+
+lemma holds_pinned:
+  assumes "compact K" and "f \<^bold>\<le> spin K" and "holds f k"
+  shows "K \<sqsubseteq> k"
+proof -
+  have "holds (spin K) k" using assms(2,3) by (rule holds_mono)
+  then show ?thesis by (simp only: holds_spin[OF assms(1)])
 qed
 
 end
 
 subsection \<open>Rows versus keys\<close>
 
-text \<open>A row selection reading only the dimensions \<^term>\<open>D\<close> is the same thing as a key selection,
-  via the level-of-detail map: its up-image is open (for finite \<^term>\<open>D\<close> and chain-finite
-  values, where the cut keys are compact), and its preimage gives back the row selection.
-  Preimages of open key sets are open for any \<^term>\<open>D\<close>.\<close>
-
+text \<open>A row predicate reading only what a projection \<open>p\<close> keeps of the key is the same thing as a
+  key predicate: its up-image is open (when the projected keys are compact), and its preimage
+  gives back the row predicate.
+  Preimages of open key predicates are open for any \<open>p\<close>.\<close>
 
 context dim_eval
 begin
 
-definition keyup :: "'d set \<Rightarrow> 'r set \<Rightarrow> ('d, 'v) tuple set" where
-  "keyup D V = {t. \<exists>r\<in>V. keyof D\<cdot>r \<sqsubseteq> t}"
+definition keyup :: "(('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> ('r \<Rightarrow> bool) \<Rightarrow> ('d, 'v) tuple \<Rightarrow> bool" where
+  "keyup p V t \<longleftrightarrow> (\<exists>r. V r \<and> p\<cdot>(keyof\<cdot>r) \<sqsubseteq> t)"
 
-definition rowpre :: "'d set \<Rightarrow> ('d, 'v) tuple set \<Rightarrow> 'r set" where
-  "rowpre D U = {r. keyof D\<cdot>r \<in> U}"
+definition rowpre :: "(('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> (('d, 'v) tuple \<Rightarrow> bool) \<Rightarrow> 'r \<Rightarrow> bool" where
+  "rowpre p U r \<longleftrightarrow> U (p\<cdot>(keyof\<cdot>r))"
 
-lemma keyup_upclosed: "t \<in> keyup D V \<Longrightarrow> t \<sqsubseteq> t' \<Longrightarrow> t' \<in> keyup D V"
+lemma keyup_up: "keyup p V t \<Longrightarrow> t \<sqsubseteq> t' \<Longrightarrow> keyup p V t'"
   unfolding keyup_def by (blast intro: below_trans)
 
 lemma rowpre_keyup:
-  assumes "\<And>x y. kern D x y \<Longrightarrow> x \<in> V \<Longrightarrow> y \<in> V"
-  shows "rowpre D (keyup D V) = V"
-  using assms unfolding rowpre_def keyup_def kern_def by blast
+  assumes "\<And>x y. kern p x y \<Longrightarrow> V x \<Longrightarrow> V y"
+  shows "rowpre p (keyup p V) = V"
+  using assms unfolding fun_eq_iff rowpre_def keyup_def kern_def by blast
 
-lemma rowpre_upclosed: "(\<And>t t'. t \<in> U \<Longrightarrow> t \<sqsubseteq> t' \<Longrightarrow> t' \<in> U) \<Longrightarrow> r \<in> rowpre D U \<Longrightarrow> r \<sqsubseteq> r' \<Longrightarrow> r' \<in> rowpre D U"
+lemma rowpre_up: "(\<And>t t'. U t \<Longrightarrow> t \<sqsubseteq> t' \<Longrightarrow> U t') \<Longrightarrow> rowpre p U r \<Longrightarrow> r \<sqsubseteq> r' \<Longrightarrow> rowpre p U r'"
   unfolding rowpre_def by (blast intro: monofun_cfun_arg)
 
-lemma rowpre_open: "adm (\<lambda>t. t \<notin> U) \<Longrightarrow> adm (\<lambda>r. r \<notin> rowpre D U)"
-  unfolding rowpre_def mem_Collect_eq
-  by (rule adm_subst[of "\<lambda>r. keyof D\<cdot>r" "\<lambda>t. t \<notin> U", simplified]) simp_all
-
-end
+lemma rowpre_open: "adm (\<lambda>t. \<not> U t) \<Longrightarrow> adm (\<lambda>r. \<not> rowpre p U r)"
+  unfolding rowpre_def using adm_subst[of "\<lambda>r. p\<cdot>(keyof\<cdot>r)" "\<lambda>t. \<not> U t"] by simp
 
 lemma keyup_open:
-  fixes deval :: "'d \<Rightarrow> ('r::pcpo \<rightarrow> 'v::{pcpo, chfin})"
-  assumes "finite D"
-  shows "adm (\<lambda>t. t \<notin> dim_eval.keyup deval D V)"
+  assumes "\<And>r. compact (p\<cdot>(keyof\<cdot>r))"
+  shows "adm (\<lambda>t. \<not> keyup p V t)"
 proof (rule admI)
   fix Y :: "nat \<Rightarrow> ('d, 'v) tuple"
-  assume Y: "chain Y" "\<forall>i. Y i \<notin> dim_eval.keyup deval D V"
-  show "(\<Squnion>i. Y i) \<notin> dim_eval.keyup deval D V"
+  assume Y: "chain Y" "\<forall>i. \<not> keyup p V (Y i)"
+  show "\<not> keyup p V (\<Squnion>i. Y i)"
   proof
-    assume "(\<Squnion>i. Y i) \<in> dim_eval.keyup deval D V"
-    then obtain r where "r \<in> V" "dim_eval.keyof deval D\<cdot>r \<sqsubseteq> (\<Squnion>i. Y i)"
-      by (auto simp: dim_eval.keyup_def)
-    moreover have "compact (dim_eval.keyof deval D\<cdot>r)"
-      using assms by (simp add: dim_eval.keyof_beta compact_tcut)
-    ultimately obtain i where "dim_eval.keyof deval D\<cdot>r \<sqsubseteq> Y i"
-      using Y(1) compact_below_lub_iff by blast
-    with \<open>r \<in> V\<close> Y(2) show False by (auto simp: dim_eval.keyup_def)
+    assume "keyup p V (\<Squnion>i. Y i)"
+    then obtain r where "V r" "p\<cdot>(keyof\<cdot>r) \<sqsubseteq> (\<Squnion>i. Y i)" by (auto simp: keyup_def)
+    then obtain i where "p\<cdot>(keyof\<cdot>r) \<sqsubseteq> Y i" using Y(1) assms compact_below_lub_iff by blast
+    with \<open>V r\<close> Y(2) show False by (auto simp: keyup_def)
   qed
 qed
+
+end
 
 end

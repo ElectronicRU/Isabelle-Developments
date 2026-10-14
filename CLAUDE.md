@@ -32,7 +32,9 @@ Theme: powerdomains for partial information / approximate queries (cf. the
 Buneman–Jung–Ohori & Libkin papers indexed below).
 
 ## Building
-`isabelle build -d . -d HOLCF-extra DataAnalyticsLang` (or per-session). Both
+`isabelle build -d DataAnalyticsLang -d HOLCF-extra DataAnalyticsLang` (or per-session; there is
+no top-level `ROOT`, so `-d .` fails). Building alongside a live jEdit/PIDE session can exhaust
+memory; close jEdit first. Both
 produce PDF documents into `output/`. HOLCF must be available as a heap image.
 
 ## Housekeeping
