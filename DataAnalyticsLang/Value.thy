@@ -1,0 +1,335 @@
+theory Value
+  imports Domain_Transfer
+begin
+
+section \<open>Values\<close>
+
+text \<open>Bottom is a data-quality lapse or divergence: a dangling foreign key, a failed cast, a
+  short row.  Missing values that are not lapses live at three levels.
+  \<^item> \<^emph>\<open>Data\<close> (records and record-level expressions), @{text "'v datum"}: \<open>NA\<close> (not
+    applicable; joins through it give \<open>NA\<close>), \<open>Val\<cdot>Null\<close> (present but unknown; joins
+    through it give \<open>\<bottom>\<close>), or a known value.  Source nulls map to one of the two per column.
+  \<^item> \<^emph>\<open>Keys\<close> (dimensions), @{text "'v with_na"}: nulls become \<open>NA\<close>, which can be pinned
+    (@{text to_key}).
+  \<^item> \<^emph>\<open>Measures\<close>, @{text "'v with_null"}: \<open>NA\<close> becomes \<open>\<bottom>\<close>, i.e.\ no entry
+    (@{text from_na}); aggregations treat \<open>\<bottom>\<close> and \<open>NA\<close> alike.
+  A record-level function is \<^emph>\<open>NA-blind\<close> when it commutes with @{text squash}, the
+  projection forgetting \<open>NA\<close>; lifted operators are, coalescing is not.\<close>
+
+subsection \<open>Scalars\<close>
+
+text \<open>Scalars have strict fields, so there are no per-type roots: @{text scalar} is flat.\<close>
+
+domain scalar = SBool tr | SInt "int lift"
+
+lemma bounded_complete_defl_scalar_map [domain_category_map]: "bounded_complete_defl scalar_map"
+  by (domain_category_map_rule map_def: scalar_map_def iso_rews: scalar.iso_rews)
+
+lemma separated_sum_defl_scalar_map [domain_category_map]: "separated_sum_defl scalar_map"
+  by (domain_category_map_rule map_def: scalar_map_def iso_rews: scalar.iso_rews)
+
+instance scalar :: bounded_complete
+  by (domain_category_instance map_ID: scalar_map_ID)
+
+instance scalar :: separated_sum
+  by (domain_category_instance map_ID: scalar_map_ID)
+
+lemma distributive_defl_scalar_map [domain_category_map]: "distributive_defl scalar_map"
+  by (domain_category_map_rule map_def: scalar_map_def iso_rews: scalar.iso_rews)
+
+instance scalar :: distributive_cpo
+  by (domain_category_instance map_ID: scalar_map_ID)
+
+lemma locally_finitely_detailed_defl_scalar_map [domain_category_map]:
+  "locally_finitely_detailed_defl scalar_map"
+  by (domain_category_map_rule map_def: scalar_map_def iso_rews: scalar.iso_rews)
+
+instance scalar :: locally_finitely_detailed
+  by (domain_category_instance map_ID: scalar_map_ID)
+
+subsection \<open>Measures: values with nulls\<close>
+
+domain ('v::"domain") with_null = Null | Known 'v
+
+lemma bounded_complete_defl_with_null_map [domain_category_map]:
+  "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (with_null_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
+
+lemma separated_sum_defl_with_null_map [domain_category_map]:
+  "separated_sum_defl v \<Longrightarrow> separated_sum_defl (with_null_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
+
+instance with_null :: ("{domain, bounded_complete}") bounded_complete
+  by (domain_category_instance map_ID: with_null_map_ID)
+
+instance with_null :: ("{domain, separated_sum}") separated_sum
+  by (domain_category_instance map_ID: with_null_map_ID)
+
+lemma distributive_defl_with_null_map [domain_category_map]:
+  "distributive_defl (v :: 'a::{domain, bounded_complete} \<rightarrow> 'a) \<Longrightarrow>
+    distributive_defl (with_null_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
+
+instance with_null :: ("{domain, distributive_cpo}") distributive_cpo
+  by (domain_category_instance map_ID: with_null_map_ID)
+
+lemma locally_finitely_detailed_defl_with_null_map [domain_category_map]:
+  "locally_finitely_detailed_defl (v :: 'a::{domain, distributive_cpo, separated_sum} \<rightarrow> 'a) \<Longrightarrow>
+    locally_finitely_detailed_defl (with_null_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
+
+instance with_null :: ("{domain, separated_sum, locally_finitely_detailed}") locally_finitely_detailed
+  by (domain_category_instance map_ID: with_null_map_ID)
+
+subsection \<open>Keys: values with NA\<close>
+
+text \<open>The lazy root \<open>Val\<cdot>\<bottom>\<close> is ``not \<open>NA\<close>, value not observed'': it gives the not-null
+  level of detail.  Keys from data are maximal and never take that value.\<close>
+
+domain ('a::"domain") with_na = NA | Val (lazy 'a)
+
+lemma bounded_complete_defl_with_na_map [domain_category_map]:
+  "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (with_na_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
+
+lemma filter_sum_defl_with_na_map [domain_category_map]:
+  "filter_sum_defl v \<Longrightarrow> filter_sum_defl (with_na_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
+
+lemma separated_sum_defl_with_na_map [domain_category_map]:
+  "deflation v \<Longrightarrow> separated_sum_defl (with_na_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
+
+instance with_na :: ("{domain, bounded_complete}") bounded_complete
+  by (domain_category_instance map_ID: with_na_map_ID)
+
+instance with_na :: ("domain") separated_sum
+  by (domain_category_instance map_ID: with_na_map_ID)
+
+lemma distributive_defl_with_na_map [domain_category_map]:
+  "distributive_defl (v :: 'a::{domain, bounded_complete} \<rightarrow> 'a) \<Longrightarrow>
+    distributive_defl (with_na_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
+
+instance with_na :: ("{domain, distributive_cpo}") distributive_cpo
+  by (domain_category_instance map_ID: with_na_map_ID)
+
+lemma locally_finitely_detailed_defl_with_na_map [domain_category_map]:
+  "locally_finitely_detailed_defl v \<Longrightarrow> locally_finitely_detailed_defl (with_na_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
+
+instance with_na :: ("{domain, locally_finitely_detailed}") locally_finitely_detailed
+  by (domain_category_instance map_ID: with_na_map_ID)
+
+subsection \<open>Data\<close>
+
+text \<open>A datum is \<open>NA\<close>, \<open>Val\<cdot>Null\<close>, or a known value.\<close>
+
+type_synonym 'v datum = "'v with_null with_na"
+
+section \<open>Coercions between the levels\<close>
+
+text \<open>Binding through \<open>NA\<close>: \<open>NA\<close> propagates, a value is passed on.  A join through a
+  relation that may be inapplicable is a bind.\<close>
+
+fixrec na_bind :: "('a::domain \<rightarrow> 'b::domain with_na) \<rightarrow> 'a with_na \<rightarrow> 'b with_na" where
+  "na_bind\<cdot>f\<cdot>NA = NA"
+| "na_bind\<cdot>f\<cdot>(Val\<cdot>x) = f\<cdot>x"
+
+lemma na_bind_strict [simp]: "na_bind\<cdot>f\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+text \<open>Measures: \<open>NA\<close> becomes \<open>\<bottom>\<close> (no entry).\<close>
+
+fixrec from_na :: "'a::domain with_na \<rightarrow> 'a" where
+  "from_na\<cdot>NA = \<bottom>"
+| "from_na\<cdot>(Val\<cdot>x) = x"
+
+lemma from_na_strict [simp]: "from_na\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+text \<open>Measures embed back strictly: @{text na_emb} and @{const from_na} form an
+  embedding-projection pair.  Their composition @{text squash} is the projection that forgets
+  \<open>NA\<close> (and the not-null root, which data never takes).\<close>
+
+definition na_emb :: "'a::domain \<rightarrow> 'a with_na" where
+  "na_emb = strictify\<cdot>Val"
+
+lemma na_emb_strict [simp]: "na_emb\<cdot>\<bottom> = \<bottom>"
+  by (simp add: na_emb_def)
+
+lemma na_emb_defined [simp]: "x \<noteq> \<bottom> \<Longrightarrow> na_emb\<cdot>x = Val\<cdot>x"
+  by (simp add: na_emb_def strictify_conv_if)
+
+lemma ep_pair_na: "ep_pair na_emb from_na"
+proof
+  fix x :: 'a show "from_na\<cdot>(na_emb\<cdot>x) = x" by (cases "x = \<bottom>") simp_all
+next
+  fix y :: "'a with_na" show "na_emb\<cdot>(from_na\<cdot>y) \<sqsubseteq> y"
+    by (cases y) (simp_all add: na_emb_def strictify_conv_if)
+qed
+
+definition squash :: "'a::domain with_na \<rightarrow> 'a with_na" where
+  "squash = na_emb oo from_na"
+
+lemma squash_simps [simp]: "squash\<cdot>\<bottom> = \<bottom>" "squash\<cdot>NA = \<bottom>" "squash\<cdot>(Val\<cdot>x) = na_emb\<cdot>x"
+  by (simp_all add: squash_def)
+
+lemma squash_na_emb [simp]: "squash\<cdot>(na_emb\<cdot>x) = na_emb\<cdot>x"
+  unfolding squash_def by (simp add: ep_pair.e_inverse[OF ep_pair_na])
+
+lemma deflation_squash: "deflation squash"
+  unfolding squash_def by (rule ep_pair.deflation_e_p[OF ep_pair_na])
+
+lemma from_na_squash [simp]: "from_na\<cdot>(squash\<cdot>x) = from_na\<cdot>x"
+  unfolding squash_def by (simp add: ep_pair.e_inverse[OF ep_pair_na])
+
+text \<open>Keys: nulls become \<open>NA\<close>.\<close>
+
+fixrec null_na :: "'v::domain with_null \<rightarrow> 'v with_na" where
+  "null_na\<cdot>Null = NA"
+| "v \<noteq> \<bottom> \<Longrightarrow> null_na\<cdot>(Known\<cdot>v) = Val\<cdot>v"
+
+lemma null_na_strict [simp]: "null_na\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+definition to_key :: "'v::domain datum \<rightarrow> 'v with_na" where
+  "to_key = na_bind\<cdot>null_na"
+
+section \<open>Record-level operators\<close>
+
+text \<open>Operators are lifted layer by layer, each layer's missing value infectious.  The outer
+  layer is checked first, so \<open>NA\<close> wins over \<open>Null\<close>; NA-blindness forces that choice.\<close>
+
+fixrec na_lift2 :: "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a with_na \<rightarrow> 'b with_na \<rightarrow> 'c with_na"
+  where
+  "na_lift2\<cdot>f\<cdot>NA\<cdot>NA = NA"
+| "na_lift2\<cdot>f\<cdot>NA\<cdot>(Val\<cdot>y) = NA"
+| "na_lift2\<cdot>f\<cdot>(Val\<cdot>x)\<cdot>NA = NA"
+| "na_lift2\<cdot>f\<cdot>(Val\<cdot>x)\<cdot>(Val\<cdot>y) = na_emb\<cdot>(f\<cdot>x\<cdot>y)"
+
+fixrec null_lift2 ::
+  "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a with_null \<rightarrow> 'b with_null \<rightarrow> 'c with_null"
+  where
+  "null_lift2\<cdot>f\<cdot>Null\<cdot>Null = Null"
+| "y \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>Null\<cdot>(Known\<cdot>y) = Null"
+| "x \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>Null = Null"
+| "x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>(Known\<cdot>y) = Known\<cdot>(f\<cdot>x\<cdot>y)"
+
+abbreviation dlift2 :: "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a datum \<rightarrow> 'b datum \<rightarrow> 'c datum" where
+  "dlift2 \<equiv> na_lift2 oo null_lift2"
+
+lemma na_lift2_strict [simp]: "na_lift2\<cdot>f\<cdot>\<bottom>\<cdot>y = \<bottom>" "na_lift2\<cdot>f\<cdot>x\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp (cases x; fixrec_simp)
+
+lemma null_lift2_strict [simp]: "null_lift2\<cdot>f\<cdot>\<bottom>\<cdot>y = \<bottom>" "null_lift2\<cdot>f\<cdot>x\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp (cases x; fixrec_simp)
+
+text \<open>A record-level function is NA-blind when swapping \<open>NA\<close> for \<open>\<bottom>\<close> in its inputs does
+  the same to its output.\<close>
+
+definition na_blind1 :: "('a::domain with_na \<rightarrow> 'b::domain with_na) \<Rightarrow> bool" where
+  "na_blind1 g \<longleftrightarrow> (\<forall>x. g\<cdot>(squash\<cdot>x) = squash\<cdot>(g\<cdot>x))"
+
+definition na_blind2 ::
+  "('a::domain with_na \<rightarrow> 'b::domain with_na \<rightarrow> 'c::domain with_na) \<Rightarrow> bool" where
+  "na_blind2 g \<longleftrightarrow> (\<forall>x y. g\<cdot>(squash\<cdot>x)\<cdot>(squash\<cdot>y) = squash\<cdot>(g\<cdot>x\<cdot>y))"
+
+lemma na_blind2_na_lift2:
+  assumes l: "\<And>y. f\<cdot>\<bottom>\<cdot>y = \<bottom>" and r: "\<And>x. f\<cdot>x\<cdot>\<bottom> = \<bottom>"
+  shows "na_blind2 (na_lift2\<cdot>f)"
+  unfolding na_blind2_def
+proof (intro allI)
+  fix x y show "na_lift2\<cdot>f\<cdot>(squash\<cdot>x)\<cdot>(squash\<cdot>y) = squash\<cdot>(na_lift2\<cdot>f\<cdot>x\<cdot>y)"
+    by (cases x; cases y) (auto simp: l r strictify_conv_if na_emb_def)
+qed
+
+text \<open>The inner layer is strict, so every lifted record-level operator is NA-blind.\<close>
+
+lemma na_blind2_dlift2: "na_blind2 (dlift2\<cdot>f)"
+  by (simp add: na_blind2_na_lift2)
+
+subsection \<open>Equality\<close>
+
+text \<open>Equality of flat values, strict in both arguments.  @{typ tr} is @{typ "bool lift"}, so
+  this covers both fields of @{text scalar}.\<close>
+
+definition lift_eq :: "'a lift \<rightarrow> 'a lift \<rightarrow> tr" where
+  "lift_eq = (FLIFT a. FLIFT b. Def (a = b))"
+
+lemma lift_eq_Def [simp]: "lift_eq\<cdot>(Def a)\<cdot>(Def b) = Def (a = b)"
+  by (simp add: lift_eq_def)
+
+lemma lift_eq_strict [simp]: "lift_eq\<cdot>\<bottom>\<cdot>y = \<bottom>" "lift_eq\<cdot>x\<cdot>\<bottom> = \<bottom>"
+  by (simp_all add: lift_eq_def) (cases x; simp)
+
+lemma lift_eq_defined: "x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> lift_eq\<cdot>x\<cdot>y = Def (x = y)"
+  by (cases x; cases y) simp_all
+
+text \<open>Scalars of different types are unequal; under static typing that case does not arise.\<close>
+
+fixrec scalar_eq :: "scalar \<rightarrow> scalar \<rightarrow> tr" where
+  "a \<noteq> \<bottom> \<Longrightarrow> b \<noteq> \<bottom> \<Longrightarrow> scalar_eq\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = lift_eq\<cdot>a\<cdot>b"
+| "m \<noteq> \<bottom> \<Longrightarrow> n \<noteq> \<bottom> \<Longrightarrow> scalar_eq\<cdot>(SInt\<cdot>m)\<cdot>(SInt\<cdot>n) = lift_eq\<cdot>m\<cdot>n"
+| "a \<noteq> \<bottom> \<Longrightarrow> n \<noteq> \<bottom> \<Longrightarrow> scalar_eq\<cdot>(SBool\<cdot>a)\<cdot>(SInt\<cdot>n) = FF"
+| "m \<noteq> \<bottom> \<Longrightarrow> b \<noteq> \<bottom> \<Longrightarrow> scalar_eq\<cdot>(SInt\<cdot>m)\<cdot>(SBool\<cdot>b) = FF"
+
+lemma scalar_eq_strict [simp]: "scalar_eq\<cdot>\<bottom>\<cdot>y = \<bottom>" "scalar_eq\<cdot>x\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp (cases x; fixrec_simp)
+
+lemma scalar_eq_defined: "x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> scalar_eq\<cdot>x\<cdot>y = Def (x = y)"
+  by (cases x; cases y) (simp_all add: lift_eq_defined FF_def)
+
+text \<open>Record-level equality is the lifted scalar equality, hence NA-blind.\<close>
+
+abbreviation datum_eq :: "scalar datum \<rightarrow> scalar datum \<rightarrow> tr datum" where
+  "datum_eq \<equiv> dlift2\<cdot>scalar_eq"
+
+section \<open>The not-null level of keys\<close>
+
+text \<open>The atoms of @{typ "'a with_na"} are \<open>NA\<close> and \<open>Val\<cdot>\<bottom>\<close>, so its discriminator is the
+  projection @{text not_null}, which observes only whether a key is \<open>NA\<close>.  It is a finitary
+  semi-factor, i.e.\ a level of detail, and @{text is_na} factors through it.\<close>
+
+fixrec is_na :: "'a::domain with_na \<rightarrow> tr" where
+  "is_na\<cdot>NA = TT"
+| "is_na\<cdot>(Val\<cdot>x) = FF"
+
+lemma is_na_strict [simp]: "is_na\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+fixrec not_null :: "'a::domain with_na \<rightarrow> 'a with_na" where
+  "not_null\<cdot>NA = NA"
+| "not_null\<cdot>(Val\<cdot>x) = Val\<cdot>\<bottom>"
+
+lemma not_null_strict [simp]: "not_null\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+lemma atom_NA: "atom NA"
+  by (rule atomI) (simp, case_tac z, simp_all)
+
+lemma atom_Val_bottom: "atom (Val\<cdot>\<bottom>)"
+  by (rule atomI) (simp, case_tac z, simp_all)
+
+lemma discriminator_with_na:
+  "discriminator\<cdot>x = not_null\<cdot>(x :: 'a::{domain, bounded_complete} with_na)"
+proof (cases x)
+  case bottom then show ?thesis by simp
+next
+  case NA then show ?thesis by (simp add: discriminator_eq[OF atom_NA below_refl])
+next
+  case (Val v)
+  have "Val\<cdot>\<bottom> \<sqsubseteq> x" unfolding Val by (rule monofun_cfun_arg) simp
+  then show ?thesis unfolding Val by (simp add: discriminator_eq[OF atom_Val_bottom])
+qed
+
+lemma not_null_level:
+  "semi_factor_defl (not_null :: 'a::{domain, distributive_cpo} with_na \<rightarrow> 'a with_na)"
+  "finitary (not_null :: 'a::{domain, distributive_cpo} with_na \<rightarrow> 'a with_na)"
+  using discriminator_semi_factor discriminator_finitary
+  by (simp_all add: cfun_eqI[OF discriminator_with_na, symmetric])
+
+lemma is_na_not_null: "is_na\<cdot>(not_null\<cdot>x) = is_na\<cdot>x"
+  by (cases x) simp_all
+
+end

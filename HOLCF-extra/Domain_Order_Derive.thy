@@ -110,12 +110,11 @@ instance T :: ("{domain, distributive_cpo}", "{domain, distributive_cpo}") distr
     registries list source theorems as they are, without \<open>OF\<close> or \<open>rotated\<close>.
   \<^item> \<open>intro domain_category_map domain_category_ID\<close> decomposes the rep type; a combinator rule
     whose sort constraints the component types do not meet simply does not apply.  Side goals
-    are closed by the induction hypothesis or by its deflation part.
+    are closed by the induction hypothesis or by its deflation part; a non-recursive type
+    without parameters leaves none.
   \<^item> \<open>declares cont2cont\<close> lets callers add continuity rules.
 
-  \<open>domain_category_instance\<close> rewrites \<open>ID\<close> to \<open>T_map\<cdot>ID\<cdot>\<dots>\<close>, finds the map rule in
-  @{attribute domain_category_map}, and closes the parameter premises from
-  @{attribute domain_category_ID}.  What the user still decides by hand: the parameter sorts of
+  \<open>domain_category_instance\<close> rewrites \<open>ID\<close> to \<open>T_map\<cdot>ID\<cdot>\<dots>\<close>, finds the map rule @{attribute domain_category_map}, and closes the parameter premises from @{attribute domain_category_ID}.  What the user still decides by hand: the parameter sorts of
   each instance, and the order of the derivations.\<close>
 
 method domain_category_side =
@@ -134,7 +133,7 @@ method domain_category_map_rule uses map_def iso_rews declares cont2cont =
      solves \<open>rule domain_category_bottom\<close>,
      solves \<open>intro cont2cont\<close>),
    rule domain_category_iso, solves \<open>rule iso_rews\<close>, solves \<open>rule iso_rews\<close>,
-   intro domain_category_map domain_category_ID, domain_category_side+)
+   intro domain_category_map domain_category_ID, (domain_category_side+)?)
 
 text \<open>Instance from the registered map rule: the class property is the predicate at \<open>ID\<close>, and
   \<open>T_map\<cdot>ID = ID\<close>.\<close>
