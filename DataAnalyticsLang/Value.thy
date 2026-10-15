@@ -169,6 +169,9 @@ next
     by (cases y) (simp_all add: na_emb_def strictify_conv_if)
 qed
 
+lemma from_na_na_emb [simp]: "from_na\<cdot>(na_emb\<cdot>x) = x"
+  by (rule ep_pair.e_inverse[OF ep_pair_na])
+
 definition squash :: "'a::domain with_na \<rightarrow> 'a with_na" where
   "squash = na_emb oo from_na"
 
@@ -196,6 +199,38 @@ lemma null_na_strict [simp]: "null_na\<cdot>\<bottom> = \<bottom>"
 definition to_key :: "'v::domain datum \<rightarrow> 'v with_na" where
   "to_key = na_bind\<cdot>null_na"
 
+text \<open>Measures project to plain values, \<open>Null\<close> becoming \<open>\<bottom>\<close>.  @{const Known} is strict,
+  so it is the embedding itself.\<close>
+
+fixrec from_null :: "'v::domain with_null \<rightarrow> 'v" where
+  "from_null\<cdot>Null = \<bottom>"
+| "v \<noteq> \<bottom> \<Longrightarrow> from_null\<cdot>(Known\<cdot>v) = v"
+
+lemma from_null_strict [simp]: "from_null\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+lemma ep_pair_null: "ep_pair (Known :: 'v::domain \<rightarrow> 'v with_null) from_null"
+proof
+  fix x :: 'v show "from_null\<cdot>(Known\<cdot>x) = x" by (cases "x = \<bottom>") simp_all
+next
+  fix y :: "'v with_null" show "Known\<cdot>(from_null\<cdot>y) \<sqsubseteq> y" by (cases y) simp_all
+qed
+
+lemma from_null_Known [simp]: "from_null\<cdot>(Known\<cdot>x) = x"
+  by (rule ep_pair.e_inverse[OF ep_pair_null])
+
+text \<open>The plain value of a datum: every missing value becomes \<open>\<bottom>\<close>.\<close>
+
+definition plain :: "'v::domain datum \<rightarrow> 'v" where
+  "plain = from_null oo from_na"
+
+lemma plain_simps [simp]:
+  "plain\<cdot>\<bottom> = \<bottom>" "plain\<cdot>NA = \<bottom>" "plain\<cdot>(Val\<cdot>x) = from_null\<cdot>x"
+  by (simp_all add: plain_def)
+
+lemma plain_na_emb [simp]: "plain\<cdot>(na_emb\<cdot>x) = from_null\<cdot>x"
+  by (simp add: plain_def)
+
 section \<open>Record-level operators\<close>
 
 text \<open>Operators are lifted layer by layer, each layer's missing value infectious.  The outer
@@ -215,6 +250,23 @@ fixrec null_lift2 ::
 | "y \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>Null\<cdot>(Known\<cdot>y) = Null"
 | "x \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>Null = Null"
 | "x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>(Known\<cdot>y) = Known\<cdot>(f\<cdot>x\<cdot>y)"
+
+fixrec na_lift1 :: "('a::domain \<rightarrow> 'b::domain) \<rightarrow> 'a with_na \<rightarrow> 'b with_na" where
+  "na_lift1\<cdot>f\<cdot>NA = NA"
+| "na_lift1\<cdot>f\<cdot>(Val\<cdot>x) = na_emb\<cdot>(f\<cdot>x)"
+
+fixrec null_lift1 :: "('a::domain \<rightarrow> 'b::domain) \<rightarrow> 'a with_null \<rightarrow> 'b with_null" where
+  "null_lift1\<cdot>f\<cdot>Null = Null"
+| "x \<noteq> \<bottom> \<Longrightarrow> null_lift1\<cdot>f\<cdot>(Known\<cdot>x) = Known\<cdot>(f\<cdot>x)"
+
+abbreviation dlift1 :: "('a::domain \<rightarrow> 'b::domain) \<rightarrow> 'a datum \<rightarrow> 'b datum" where
+  "dlift1 \<equiv> na_lift1 oo null_lift1"
+
+lemma na_lift1_strict [simp]: "na_lift1\<cdot>f\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+lemma null_lift1_strict [simp]: "null_lift1\<cdot>f\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
 
 abbreviation dlift2 :: "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a datum \<rightarrow> 'b datum \<rightarrow> 'c datum" where
   "dlift2 \<equiv> na_lift2 oo null_lift2"
@@ -248,6 +300,24 @@ text \<open>The inner layer is strict, so every lifted record-level operator is 
 
 lemma na_blind2_dlift2: "na_blind2 (dlift2\<cdot>f)"
   by (simp add: na_blind2_na_lift2)
+
+text \<open>On plain values, a lifted strict operator is the operator itself.\<close>
+
+lemma plain_dlift1:
+  assumes "f\<cdot>\<bottom> = \<bottom>" shows "plain\<cdot>(na_lift1\<cdot>(null_lift1\<cdot>f)\<cdot>x) = f\<cdot>(plain\<cdot>x)"
+proof (cases x)
+  case (Val a) then show ?thesis using assms by (cases a) simp_all
+qed (simp_all add: assms)
+
+lemma plain_dlift2:
+  assumes "\<And>y. f\<cdot>\<bottom>\<cdot>y = \<bottom>" "\<And>x. f\<cdot>x\<cdot>\<bottom> = \<bottom>"
+  shows "plain\<cdot>(na_lift2\<cdot>(null_lift2\<cdot>f)\<cdot>x\<cdot>y) = f\<cdot>(plain\<cdot>x)\<cdot>(plain\<cdot>y)"
+proof (cases x)
+  case x: (Val a) show ?thesis
+  proof (cases y)
+    case y: (Val b) show ?thesis unfolding x y using assms by (cases a; cases b) simp_all
+  qed (simp_all add: x assms)
+qed (cases y; simp add: assms)+
 
 subsection \<open>Equality\<close>
 
@@ -284,6 +354,96 @@ text \<open>Record-level equality is the lifted scalar equality, hence NA-blind.
 
 abbreviation datum_eq :: "scalar datum \<rightarrow> scalar datum \<rightarrow> tr datum" where
   "datum_eq \<equiv> dlift2\<cdot>scalar_eq"
+
+subsection \<open>Truth\<close>
+
+text \<open>The connectives are strict, so lifted to data they make \<open>NA\<close> and \<open>Null\<close>
+  infectious (\<open>NOT NA = NA\<close>).  @{text truth_d} projects a datum to @{typ tr}, sending every
+  missing value and every non-boolean to \<open>\<bottom>\<close>; it is a homomorphism for the connectives.  A
+  slicer condition holds where @{text truth_d} is @{term TT}.\<close>
+
+definition tr_and :: "tr \<rightarrow> tr \<rightarrow> tr" where
+  "tr_and = (FLIFT a. FLIFT b. Def (a \<and> b))"
+
+definition tr_or :: "tr \<rightarrow> tr \<rightarrow> tr" where
+  "tr_or = (FLIFT a. FLIFT b. Def (a \<or> b))"
+
+lemma tr_and_simps [simp]:
+  "tr_and\<cdot>\<bottom>\<cdot>y = \<bottom>" "tr_and\<cdot>x\<cdot>\<bottom> = \<bottom>" "tr_and\<cdot>(Def a)\<cdot>(Def b) = Def (a \<and> b)"
+  by (simp_all add: tr_and_def) (cases x rule: lift.exhaust; simp)
+
+lemma tr_or_simps [simp]:
+  "tr_or\<cdot>\<bottom>\<cdot>y = \<bottom>" "tr_or\<cdot>x\<cdot>\<bottom> = \<bottom>" "tr_or\<cdot>(Def a)\<cdot>(Def b) = Def (a \<or> b)"
+  by (simp_all add: tr_or_def) (cases x rule: lift.exhaust; simp)
+
+fixrec sbool :: "scalar \<rightarrow> tr" where
+  "b \<noteq> \<bottom> \<Longrightarrow> sbool\<cdot>(SBool\<cdot>b) = b"
+
+lemma sbool_strict [simp]: "sbool\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+fixrec snot :: "scalar \<rightarrow> scalar" where
+  "a \<noteq> \<bottom> \<Longrightarrow> snot\<cdot>(SBool\<cdot>a) = SBool\<cdot>(neg\<cdot>a)"
+
+fixrec sand :: "scalar \<rightarrow> scalar \<rightarrow> scalar" where
+  "a \<noteq> \<bottom> \<Longrightarrow> b \<noteq> \<bottom> \<Longrightarrow> sand\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_and\<cdot>a\<cdot>b)"
+
+fixrec sor :: "scalar \<rightarrow> scalar \<rightarrow> scalar" where
+  "a \<noteq> \<bottom> \<Longrightarrow> b \<noteq> \<bottom> \<Longrightarrow> sor\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_or\<cdot>a\<cdot>b)"
+
+text \<open>Unconditional constructor equations; ill-typed applications give \<open>\<bottom>\<close>.\<close>
+
+lemma sbool_simps [simp]: "sbool\<cdot>(SBool\<cdot>b) = b" "sbool\<cdot>(SInt\<cdot>n) = \<bottom>"
+  by (cases "b = \<bottom>"; simp) (cases "n = \<bottom>"; fixrec_simp)
+
+lemma snot_simps [simp]: "snot\<cdot>(SBool\<cdot>a) = SBool\<cdot>(neg\<cdot>a)" "snot\<cdot>(SInt\<cdot>n) = \<bottom>"
+  by (cases "a = \<bottom>"; simp; fixrec_simp) (cases "n = \<bottom>"; fixrec_simp)
+
+lemma sand_simps [simp]:
+  "sand\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_and\<cdot>a\<cdot>b)"
+  "sand\<cdot>(SInt\<cdot>m)\<cdot>y = \<bottom>" "sand\<cdot>x\<cdot>(SInt\<cdot>n) = \<bottom>"
+    apply (cases "a = \<bottom>"; cases "b = \<bottom>"; simp; fixrec_simp)
+   apply (cases "m = \<bottom>"; fixrec_simp)
+  apply (cases x; cases "n = \<bottom>"; fixrec_simp)
+  done
+
+lemma sor_simps [simp]:
+  "sor\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_or\<cdot>a\<cdot>b)"
+  "sor\<cdot>(SInt\<cdot>m)\<cdot>y = \<bottom>" "sor\<cdot>x\<cdot>(SInt\<cdot>n) = \<bottom>"
+    apply (cases "a = \<bottom>"; cases "b = \<bottom>"; simp; fixrec_simp)
+   apply (cases "m = \<bottom>"; fixrec_simp)
+  apply (cases x; cases "n = \<bottom>"; fixrec_simp)
+  done
+
+definition truth :: "scalar with_na \<rightarrow> tr" where
+  "truth = sbool oo from_na"
+
+definition truth_d :: "scalar datum \<rightarrow> tr" where
+  "truth_d = sbool oo plain"
+
+lemma scalar_connectives_strict [simp]:
+  "snot\<cdot>\<bottom> = \<bottom>" "sand\<cdot>\<bottom>\<cdot>y = \<bottom>" "sand\<cdot>x\<cdot>\<bottom> = \<bottom>" "sor\<cdot>\<bottom>\<cdot>y = \<bottom>" "sor\<cdot>x\<cdot>\<bottom> = \<bottom>"
+      apply fixrec_simp
+     apply fixrec_simp
+    apply (cases x; fixrec_simp)
+   apply fixrec_simp
+  apply (cases x; fixrec_simp)
+  done
+
+lemma sbool_connectives:
+  "sbool\<cdot>(snot\<cdot>s) = neg\<cdot>(sbool\<cdot>s)"
+  "sbool\<cdot>(sand\<cdot>s\<cdot>t) = tr_and\<cdot>(sbool\<cdot>s)\<cdot>(sbool\<cdot>t)"
+  "sbool\<cdot>(sor\<cdot>s\<cdot>t) = tr_or\<cdot>(sbool\<cdot>s)\<cdot>(sbool\<cdot>t)"
+  by (cases s; simp; cases t; simp)+
+
+lemma truth_d_not: "truth_d\<cdot>(dlift1\<cdot>snot\<cdot>x) = neg\<cdot>(truth_d\<cdot>x)"
+  by (simp add: truth_d_def plain_dlift1 sbool_connectives)
+
+lemma truth_d_and: "truth_d\<cdot>(dlift2\<cdot>sand\<cdot>x\<cdot>y) = tr_and\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
+  by (simp add: truth_d_def plain_dlift2 sbool_connectives)
+
+lemma truth_d_or: "truth_d\<cdot>(dlift2\<cdot>sor\<cdot>x\<cdot>y) = tr_or\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
+  by (simp add: truth_d_def plain_dlift2 sbool_connectives)
 
 section \<open>The not-null level of keys\<close>
 
