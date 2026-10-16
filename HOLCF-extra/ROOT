@@ -10,6 +10,7 @@ session "HOLCF-extra" = HOLCF +
     Bounded_Complete
     Distributive
     Filter_Sum
+    DI
     Domain_Order
     Domain_Order_Derive
     Directed
