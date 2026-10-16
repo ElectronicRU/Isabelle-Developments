@@ -1668,6 +1668,15 @@ instance semi_factor :: ("{bifinite,distributive_cpo}") bounded_complete
 instance semi_factor :: ("{bifinite,distributive_cpo}") lattice_complete
   by intro_classes (rule exI[of _ top], simp add: below_semi_factor_iff_le)
 
+lemma join_semi_factor: "F \<squnion> G = sup F G" for F G :: "'a semi_factor"
+  unfolding join_def by (rule lub_eqI) (simp add: semi_factor_is_lub[of "{F, G}", simplified])
+
+lemma meet_semi_factor: "F \<sqinter> G = inf F G" for F G :: "'a semi_factor"
+  unfolding meet_def by (rule glb_eqI) (simp add: is_glb_def below_semi_factor_iff_le)
+
+instance semi_factor :: ("{bifinite,distributive_cpo}") distributive_cpo
+  by intro_classes (simp add: join_semi_factor meet_semi_factor inf_sup_distrib1)
+
 lift_definition semi_factor_p :: "'a semi_factor \<Rightarrow> 'a \<rightarrow> 'a"
 is "stable_subdom_p" .
 
