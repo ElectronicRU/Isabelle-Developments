@@ -100,6 +100,29 @@ lemma meet_absorb2: "a \<sqsubseteq> b \<Longrightarrow> b \<sqinter> a = a"
 
 end
 
+text \<open>Binder syntax for @{const glb}, mirroring HOLCF's \<open>\<Squnion>\<close> for @{const lub}.  HOL's \<open>\<Sqinter>\<close> for
+  \<open>Inf\<close> lives in the bundle \<open>lattice_syntax\<close>, which \<open>Main\<close> leaves switched off.\<close>
+
+syntax (ASCII)
+  "_BGlb" :: "[pttrn, 'a set, 'b] \<Rightarrow> 'b" (\<open>(\<open>indent=3 notation=\<open>binder GLB\<close>\<close>GLB _:_./ _)\<close> [0,0, 10] 10)
+
+syntax
+  "_BGlb" :: "[pttrn, 'a set, 'b] \<Rightarrow> 'b" (\<open>(\<open>indent=3 notation=\<open>binder \<Sqinter>\<close>\<close>\<Sqinter>_\<in>_./ _)\<close> [0,0, 10] 10)
+
+syntax_consts
+  "_BGlb" \<rightleftharpoons> glb
+
+translations
+  "GLB x:A. t" \<rightleftharpoons> "CONST glb ((\<lambda>x. t) ` A)"
+
+context po
+begin
+
+abbreviation Glb  (binder \<open>\<Sqinter>\<close> 10)
+  where "\<Sqinter>n. t n \<equiv> glb (range t)"
+
+end
+
 text \<open>A constant defined in a class context exists twice: at locale level (\<open>po.meet (\<sqsubseteq>)\<close>) and
   at class level (\<open>(\<sqinter>)\<close>), the latter introduced by a kernel definition stored as
   \<open>po_class.meet_dict: (\<sqinter>) \<equiv> po.meet (\<sqsubseteq>)\<close>.  Collected here (turned around) for use as

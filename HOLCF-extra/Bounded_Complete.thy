@@ -76,6 +76,19 @@ lemma glb_greatest: "S \<noteq> {} \<Longrightarrow> (\<forall>x \<in> S. b \<sq
 lemma glb_below_iff: "S \<noteq> {} \<Longrightarrow> (b \<sqsubseteq> glb S) = (\<forall>x \<in> S. b \<sqsubseteq> x)"
   by (drule glb) (simp add: is_glb_def)
 
+lemma glb_eq_lub:
+  assumes "S \<noteq> {}"
+  shows "glb S = lub {x. \<forall>y \<in> S. x \<sqsubseteq> y}" (is "_ = lub ?B")
+proof (rule glb_eqI, rule is_glbI)
+  obtain y where "y \<in> S" using assms by blast
+  then have "?B <| y" by (simp add: is_ub_def)
+  then have B: "?B <<| lub ?B" by (rule ex_bound_lub)
+  show "lub ?B \<sqsubseteq> x" if "x \<in> S" for x
+    by (rule is_lubD2[OF B]) (simp add: is_ub_def that)
+  show "b \<sqsubseteq> lub ?B" if "\<forall>x \<in> S. b \<sqsubseteq> x" for b
+    by (rule is_ubD[OF is_lubD1[OF B]]) (simp add: that)
+qed
+
 lemma meet_below1: "a \<sqinter> b \<sqsubseteq> a" and meet_below2: "a \<sqinter> b \<sqsubseteq> b"
   unfolding meet_def
   by (fast intro: glb_below)+

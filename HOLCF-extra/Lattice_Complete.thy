@@ -15,9 +15,6 @@ class lattice_complete = bounded_complete +
 definition lattice_top :: "'a::lattice_complete" where
   "lattice_top = lub UNIV"
 
-definition Glb :: "'a::lattice_complete set \<Rightarrow> 'a" where
-  "Glb S = lub {x. \<forall>y\<in>S. x \<sqsubseteq> y}"
-
 lemma below_lattice_top [simp]: "x \<sqsubseteq> (lattice_top :: 'a::lattice_complete)"
 proof -
   obtain t :: 'a where "\<forall>x. x \<sqsubseteq> t" using ex_top by blast
@@ -41,23 +38,28 @@ lemma lattice_lub_upper: "x \<in> S \<Longrightarrow> x \<sqsubseteq> lub (S :: 
 lemma lattice_lub_least: "S <| b \<Longrightarrow> lub (S :: 'a::lattice_complete set) \<sqsubseteq> b"
   by (rule is_lubD2[OF lattice_is_lub])
 
-lemma Glb_lower: "x \<in> S \<Longrightarrow> Glb (S :: 'a::lattice_complete set) \<sqsubseteq> x"
-  unfolding Glb_def by (rule lattice_lub_least) (auto simp: is_ub_def)
+text \<open>Every set has a glb, the lub of its lower bounds (also for \<open>{}\<close>, unlike @{thm glb_eq_lub}).\<close>
 
-lemma Glb_greatest: "(\<And>y. y \<in> S \<Longrightarrow> b \<sqsubseteq> y) \<Longrightarrow> b \<sqsubseteq> Glb (S :: 'a::lattice_complete set)"
-  unfolding Glb_def by (rule lattice_lub_upper) simp
+lemma lattice_is_glb: "is_glb S (lub {x. \<forall>y\<in>S. x \<sqsubseteq> y} :: 'a::lattice_complete)"
+  by (rule is_glbI) (auto intro: lattice_lub_least lattice_lub_upper simp: is_ub_def)
+
+lemma lattice_glb_eq_lub: "glb S = lub {x. \<forall>y\<in>S. x \<sqsubseteq> (y :: 'a::lattice_complete)}"
+  by (rule glb_eqI[OF lattice_is_glb])
+
+lemma lattice_glb_greatest: "(\<And>y. y \<in> S \<Longrightarrow> b \<sqsubseteq> y) \<Longrightarrow> b \<sqsubseteq> glb (S :: 'a::lattice_complete set)"
+  unfolding lattice_glb_eq_lub by (rule lattice_lub_upper) simp
 
 theorem complete_lattice_below:
-  "class.complete_lattice Glb lub (\<sqinter>) (\<sqsubseteq>) (\<sqsubset>) (\<squnion>) \<bottom> (lattice_top :: 'a::lattice_complete)"
+  "class.complete_lattice glb lub (\<sqinter>) (\<sqsubseteq>) (\<sqsubset>) (\<squnion>) \<bottom> (lattice_top :: 'a::lattice_complete)"
 proof (rule class.complete_lattice.intro[OF class.lattice.intro[OF semilattice_meet]])
   show "class.semilattice_sup (\<squnion>) (\<sqsubseteq>) ((\<sqsubset>) :: 'a \<Rightarrow> _)"
     by (rule class.semilattice_sup.intro[OF below_order])
       (unfold_locales, simp_all add: joinableD join_belowI)
-  show "class.complete_lattice_axioms Glb lub (\<sqsubseteq>) \<bottom> (lattice_top :: 'a)"
+  show "class.complete_lattice_axioms glb lub (\<sqsubseteq>) \<bottom> (lattice_top :: 'a)"
   proof
     show "lub {} = (\<bottom> :: 'a)" by (rule lub_eqI) simp
-  qed (simp_all add: Glb_lower Glb_greatest lattice_lub_upper lattice_lub_least is_ub_def,
-       simp add: Glb_def lattice_top_def)
+  qed (simp_all add: glb_below lattice_glb_greatest lattice_lub_upper lattice_lub_least is_ub_def,
+       simp add: lattice_glb_eq_lub lattice_top_def)
 qed
 
 theorem distrib_lattice_below:
