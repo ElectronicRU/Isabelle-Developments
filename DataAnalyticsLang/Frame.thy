@@ -16,15 +16,19 @@ record ('l::type, 'f::type, 'r::pcpo) frame =
   slice :: 'f
 
 text \<open>The meaning of an expression: the LOD it decides at least; its \<^emph>\<open>dims\<close>, a finite set of
-  pairs of a \<^emph>\<open>natural\<close> LOD (the key of values read out of the dataset) and a \<^emph>\<open>mask\<close> (a transformer
-  for the part of a key's detail those values actually read; dropped detail is broadcast); and its
+  pairs of a \<^emph>\<open>natural\<close> LOD (the key of values read out of the dataset) and a \<^emph>\<open>mask\<close> (a truncation
+  to the part of a key's detail those values actually read; dropped detail is broadcast); and its
   values at each frame and key, \<open>\<bottom>\<close> for ``no entry''.  A pair per component keeps the dims law of a
   collection as weak as its components' laws; a broadcast needs none.\<close>
 
-record ('l::type, 'f::type, 'r::pcpo, 'k::type, 'v::type) expr =
+record ('l::distrib_lattice, 'f::type, 'r::pcpo, 'k::type, 'v::type) expr =
   emind :: 'l
-  edims :: "('l \<times> ('l \<Rightarrow> 'l)) fset"
+  edims :: "('l \<times> 'l trunc) fset"
   esem :: "('l, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v"
+
+text \<open>The record packages' own \<open>truncate\<close> operations would shadow the truncation action.\<close>
+
+hide_const (open) frame.truncate expr.truncate
 
 section \<open>Frame transformers\<close>
 
@@ -32,7 +36,7 @@ text \<open>The level-of-detail constructs act on the frame an inner expression 
   \<open>INCLUDE D\<close> adds detail \<open>D\<close>; \<open>RESTRICT \<phi>\<close> adds \<open>\<phi>\<close> to the ambient filter.  The others need the
   slicer: \<open>GROUP BY ONLY D\<close> replaces the LOD by \<open>D\<close> and coarsens the slice to it (\<open>TOTAL\<close> is
   \<open>GROUP BY ONLY \<bottom>\<close>); \<open>ISOLATE\<close> evaluates under the empty frame, with neither filter; \<open>E FOR \<tau> G\<close>
-  drops detail by a transformer \<open>\<tau>\<close>, from the frame and from the slice, and conjoins \<open>G\<close>
+  drops detail by a truncation \<open>\<tau>\<close>, from the frame and from the slice, and conjoins \<open>G\<close>
   (\<open>EXCLUDE\<close> is \<open>FOR \<tau> \<^bold>1\<close>).\<close>
 
 definition finclude :: "'l::sup \<Rightarrow> ('l, 'f::type, 'r::pcpo) frame \<Rightarrow> ('l, 'f, 'r) frame" where
@@ -89,8 +93,8 @@ definition fgroupby :: "'l \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, '
 definition fisolate :: "('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
   "fisolate F = \<lparr>flod = bot, amb = top, slice = \<^bold>1\<rparr>"
 
-definition ffor :: "('l \<Rightarrow> 'l) \<Rightarrow> 'f \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
-  "ffor \<tau> G F = F\<lparr>flod := \<tau> (flod F), slice := tf_slice \<tau> (slice F) \<^bold>* G\<rparr>"
+definition ffor :: "'l trunc \<Rightarrow> 'f \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
+  "ffor \<tau> G F = F\<lparr>flod := truncate \<tau> (flod F), slice := trunc_slice \<tau> (slice F) \<^bold>* G\<rparr>"
 
 definition peg :: "'k \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
   "peg K F = F\<lparr>slice := slice F \<^bold>* spin K\<rparr>"
@@ -125,19 +129,19 @@ lemma fisolate_peg: "fisolate (peg K F) = fisolate F"
   by (simp add: fisolate_def)
 
 lemma ffor_peg:
-  assumes tf: "lod_tf \<tau>" and K: "proj c\<cdot>K = K"
-  shows "ffor \<tau> G (peg K F) = peg (proj (\<tau> c)\<cdot>K) (ffor \<tau> G F)"
+  assumes K: "proj c\<cdot>K = K"
+  shows "ffor \<tau> G (peg K F) = peg (proj (truncate \<tau> c)\<cdot>K) (ffor \<tau> G F)"
 proof -
   let ?a = "slod (slice F)" and ?b = "slod (spin K)"
   have cK: "compact K" by (metis K proj_compact)
   have bK: "proj ?b\<cdot>K = K" by (rule slod_spin_lives[OF cK])
   have abK: "lives_at (sup ?a ?b) K"
     using lives_at_up[of ?b K "sup ?a ?b"] bK by (simp add: lives_at_def)
-  have c1: "coarsen (\<tau> (sup ?a ?b)) (slice F) = coarsen (\<tau> ?a) (slice F)"
-    by (subst (1 2) coarsen_slod) (simp add: tf_inf_sup[OF tf] inf_absorb1 tf_below[OF tf])
-  have "proj (\<tau> (sup ?a ?b))\<cdot>K = proj (\<tau> c)\<cdot>K"
-    by (rule tf_proj_irrelevant[OF tf abK]) (simp add: lives_at_def K)
-  then have c2: "coarsen (\<tau> (sup ?a ?b)) (spin K) = spin (proj (\<tau> c)\<cdot>K)"
+  have c1: "coarsen (truncate \<tau> (sup ?a ?b)) (slice F) = coarsen (truncate \<tau> ?a) (slice F)"
+    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup inf_absorb1 truncate_below)
+  have "proj (truncate \<tau> (sup ?a ?b))\<cdot>K = proj (truncate \<tau> c)\<cdot>K"
+    by (rule truncate_proj_irrelevant[OF abK]) (simp add: lives_at_def K)
+  then have c2: "coarsen (truncate \<tau> (sup ?a ?b)) (spin K) = spin (proj (truncate \<tau> c)\<cdot>K)"
     by (simp add: coarsen_spin[OF cK])
   show ?thesis
     by (simp add: ffor_def peg_def coarsen_conj c1 c2 conj.assoc conj.commute conj.left_commute)
@@ -254,8 +258,8 @@ text \<open>The data rows in an ambient filter, and among them those whose key p
 definition arows :: "'r sel \<Rightarrow> 'r set" where
   "arows \<phi> = {x \<in> pts S. selects \<phi> x}"
 
-definition mrows :: "('l \<Rightarrow> 'l) \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r set" where
-  "mrows \<rho> F = {x \<in> arows (amb F). holds (tf_slice \<rho> (slice F)) (rkey\<cdot>x)}"
+definition mrows :: "'l trunc \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r set" where
+  "mrows \<rho> F = {x \<in> arows (amb F). holds (trunc_slice \<rho> (slice F)) (rkey\<cdot>x)}"
 
 abbreviation rproj :: "'l \<Rightarrow> 'r \<Rightarrow> 'k" where
   "rproj L x \<equiv> proj L\<cdot>(rkey\<cdot>x)"
@@ -264,7 +268,7 @@ lemma mrows_cong: "amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrig
   by (simp add: mrows_def)
 
 lemma frows_mrows: "x \<in> pts S \<Longrightarrow> frows F x \<Longrightarrow> x \<in> mrows \<rho> F"
-  by (simp add: mrows_def arows_def frows_def holds_tf_slice)
+  by (simp add: mrows_def arows_def frows_def holds_trunc_slice)
 
 text \<open>Reading at a join of LODs is reading at both.\<close>
 
@@ -282,27 +286,28 @@ text \<open>Two LODs are \<^emph>\<open>equivalent at grain \<open>n\<close> thr
   relspace.equiv_mod}).  Being a condition on pairs of rows, it survives losing rows; it also
   survives adding the same detail to both sides.\<close>
 
-definition dims_equiv :: "'l \<Rightarrow> ('l \<Rightarrow> 'l) \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
+definition dims_equiv :: "'l \<Rightarrow> 'l trunc \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
   "dims_equiv n \<rho> F x a t \<longleftrightarrow>
-     relspace.equiv_mod (insert x (mrows \<rho> F)) (rproj n) (rproj (\<rho> a)) (rproj (\<rho> t))"
+     relspace.equiv_mod (insert x (mrows \<rho> F)) (rproj n) (rproj (truncate \<rho> a)) (rproj (truncate \<rho> t))"
 
 lemma dims_equiv_sub:
-  assumes "mrows \<rho>' F' \<subseteq> mrows \<rho> F" "dims_equiv n \<rho> F x a t" "\<rho>' a' = \<rho> a" "\<rho>' t' = \<rho> t"
+  assumes "mrows \<rho>' F' \<subseteq> mrows \<rho> F" "dims_equiv n \<rho> F x a t"
+    "truncate \<rho>' a' = truncate \<rho> a" "truncate \<rho>' t' = truncate \<rho> t"
   shows "dims_equiv n \<rho>' F' x a' t'"
   using assms(2) unfolding dims_equiv_def assms(3,4)
   by (rule equiv_mod_subset[rotated]) (use assms(1) in blast)
 
 lemma dims_equiv_sup:
   assumes "mrows \<rho>' F' \<subseteq> mrows \<rho> F" "dims_equiv n \<rho> F x a t"
-    and "\<rho>' a' = sup (\<rho> a) c" "\<rho>' t' = sup (\<rho> t) c"
+    and "truncate \<rho>' a' = sup (truncate \<rho> a) c" "truncate \<rho>' t' = sup (truncate \<rho> t) c"
   shows "dims_equiv n \<rho>' F' x a' t'"
 proof -
   let ?D = "insert x (mrows \<rho>' F')"
-  have "relspace.equiv_mod ?D (rproj n) (rproj (\<rho> a)) (rproj (\<rho> t))"
+  have "relspace.equiv_mod ?D (rproj n) (rproj (truncate \<rho> a)) (rproj (truncate \<rho> t))"
     using assms(2) unfolding dims_equiv_def
     by (rule equiv_mod_subset[rotated]) (use assms(1) in blast)
   then have "relspace.equiv_mod ?D (rproj n)
-      (\<lambda>x. (rproj (\<rho> a) x, rproj c x)) (\<lambda>x. (rproj (\<rho> t) x, rproj c x))"
+      (\<lambda>x. (rproj (truncate \<rho> a) x, rproj c x)) (\<lambda>x. (rproj (truncate \<rho> t) x, rproj c x))"
     by (rule relspace.equiv_mod_pair)
   then show ?thesis unfolding dims_equiv_def assms(3,4)
     by (rule relspace.equiv_mod_fequiv[OF rproj_sup_fequiv rproj_sup_fequiv])
@@ -320,7 +325,7 @@ qed
 
 text \<open>An expression's dims hypothesis holds at every pair of its dims.\<close>
 
-definition dims_equivs :: "('l \<times> ('l \<Rightarrow> 'l)) fset \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
+definition dims_equivs :: "('l \<times> 'l trunc) fset \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
   "dims_equivs \<Delta> F x a t \<longleftrightarrow> (\<forall>(n, \<rho>) |\<in>| \<Delta>. dims_equiv n \<rho> F x a t)"
 
 lemma dims_equivsD: "dims_equivs \<Delta> F x a t \<Longrightarrow> (n, \<rho>) |\<in>| \<Delta> \<Longrightarrow> dims_equiv n \<rho> F x a t"
@@ -346,8 +351,7 @@ text \<open>A fixed expression has a minimal LOD \<^term>\<open>mind\<close>, di
 
 locale expr_sem = dataspace +
   fixes mind dims sem
-  assumes masks_tf: "(n, \<rho>) |\<in>| dims \<Longrightarrow> lod_tf \<rho>"
-    and key_slicer: "sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
+  assumes key_slicer: "sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
     and key_lives: "sem F k \<noteq> \<bottom> \<Longrightarrow> proj (sup mind (flod F))\<cdot>k = k"
     and key_data: "sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (sup mind (flod F)) k"
     and peg_law: "compact K \<Longrightarrow> sem (peg K F) K = sem F K"
@@ -409,16 +413,18 @@ qed
 text \<open>Through a mask, a pin still fixes the masked truncation of the key.\<close>
 
 lemma masked_pin:
-  assumes \<rho>: "lod_tf \<rho>" and K: "maximal_at c K" and h: "holds (tf_slice \<rho> (spin K)) k"
-  shows "proj (\<rho> c)\<cdot>k = proj (\<rho> c)\<cdot>K"
+  assumes K: "maximal_at c K" and h: "holds (trunc_slice \<rho> (spin K)) k"
+  shows "proj (truncate \<rho> c)\<cdot>k = proj (truncate \<rho> c)\<cdot>K"
 proof -
   have cK: "compact K" by (rule maximal_at_compact[OF K])
-  have "proj (\<rho> (slod (spin K)))\<cdot>K = proj (\<rho> c)\<cdot>K"
-    by (rule tf_proj_irrelevant[OF \<rho>])
+  have "proj (truncate \<rho> (slod (spin K)))\<cdot>K = proj (truncate \<rho> c)\<cdot>K"
+    by (rule truncate_proj_irrelevant)
       (simp_all add: lives_at_def slod_spin_lives[OF cK] maximal_at_lives[OF K])
-  then have "proj (\<rho> c)\<cdot>K \<sqsubseteq> k" using h by (simp add: coarsen_spin[OF cK] holds_spin[OF proj_compact])
-  then have "proj (\<rho> c)\<cdot>K \<sqsubseteq> proj (\<rho> c)\<cdot>k" by (metis monofun_cfun_arg proj_idem)
-  then show ?thesis by (rule maximal_at_eq[OF maximal_at_proj[OF tf_below[OF \<rho>] K] proj_idem])
+  then have "proj (truncate \<rho> c)\<cdot>K \<sqsubseteq> k"
+    using h by (simp add: coarsen_spin[OF cK] holds_spin[OF proj_compact])
+  then have "proj (truncate \<rho> c)\<cdot>K \<sqsubseteq> proj (truncate \<rho> c)\<cdot>k" by (metis monofun_cfun_arg proj_idem)
+  then show ?thesis
+    by (rule maximal_at_eq[OF maximal_at_proj[OF truncate_below K] proj_idem])
 qed
 
 text \<open>Values at different levels of detail: an entry of a frame pegged to a finer key sits at
@@ -447,23 +453,21 @@ proof -
   qed
   have f: "amb (peg K2 F2) = amb (peg K2 F1)" "slice (peg K2 F2) = slice (peg K2 F1)"
     by (simp_all add: assms(1,2))
-  have eq1: "dims_equiv n \<rho> (peg K2 F2) x (kd (peg K2 F2)) (kd (peg K2 F1))"
-    if n\<rho>: "(n, \<rho>) |\<in>| dims" for n \<rho>
+  have eq1: "dims_equiv n \<rho> (peg K2 F2) x (kd (peg K2 F2)) (kd (peg K2 F1))" for n \<rho>
   proof -
-    have \<rho>: "lod_tf \<rho>" by (rule masks_tf[OF n\<rho>])
-    have pin: "rproj (\<rho> (kd F2)) y = proj (\<rho> (kd F2))\<cdot>K2"
+    have pin: "rproj (truncate \<rho> (kd F2)) y = proj (truncate \<rho> (kd F2))\<cdot>K2"
       if "y \<in> insert x (mrows \<rho> (peg K2 F2))" for y
     proof -
-      from that tf_slice_conj[OF \<rho>, of "slice F2" "spin K2"]
-      consider "y = x" | "holds (tf_slice \<rho> (spin K2)) (rkey\<cdot>y)"
+      from that trunc_slice_conj[of \<rho> "slice F2" "spin K2"]
+      consider "y = x" | "holds (trunc_slice \<rho> (spin K2)) (rkey\<cdot>y)"
         by (auto simp: mrows_def)
       then show ?thesis
       proof cases
         case 1
-        then show ?thesis using proj_le[OF tf_below[OF \<rho>], of "kd F2" "rkey\<cdot>x"] x2 by simp
+        then show ?thesis using proj_le[OF truncate_below, of \<rho> "kd F2" "rkey\<cdot>x"] x2 by simp
       next
         case 2
-        then show ?thesis by (rule masked_pin[OF \<rho> K2m])
+        then show ?thesis by (rule masked_pin[OF K2m])
       qed
     qed
     show ?thesis
@@ -471,11 +475,12 @@ proof -
     proof (intro ballI impI)
       fix y y' assume y: "y \<in> insert x (mrows \<rho> (peg K2 F2))"
         and y': "y' \<in> insert x (mrows \<rho> (peg K2 F2))"
-      have e2: "rproj (\<rho> (kd F2)) y = rproj (\<rho> (kd F2)) y'" using pin[OF y] pin[OF y'] by simp
-      then have "rproj (\<rho> (kd F1)) y = rproj (\<rho> (kd F1)) y'"
-        by (metis proj_le[OF tf_mono[OF \<rho> sub]])
-      with e2 show "(rproj (\<rho> (kd (peg K2 F2))) y = rproj (\<rho> (kd (peg K2 F2))) y') =
-                    (rproj (\<rho> (kd (peg K2 F1))) y = rproj (\<rho> (kd (peg K2 F1))) y')"
+      have e2: "rproj (truncate \<rho> (kd F2)) y = rproj (truncate \<rho> (kd F2)) y'"
+        using pin[OF y] pin[OF y'] by simp
+      then have "rproj (truncate \<rho> (kd F1)) y = rproj (truncate \<rho> (kd F1)) y'"
+        by (metis proj_le[OF truncate_mono[OF sub]])
+      with e2 show "(rproj (truncate \<rho> (kd (peg K2 F2))) y = rproj (truncate \<rho> (kd (peg K2 F2))) y') =
+                    (rproj (truncate \<rho> (kd (peg K2 F1))) y = rproj (truncate \<rho> (kd (peg K2 F1))) y')"
         by simp
     qed
   qed
@@ -497,8 +502,7 @@ begin
 abbreviation lawful where "lawful \<equiv> expr_sem proj conj sunit slod sopen coarsen spin rkey S"
 
 lemma lawfulI:
-  assumes "\<And>n \<rho>. (n, \<rho>) |\<in>| dims \<Longrightarrow> lod_tf \<rho>"
-    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
+  assumes "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
     and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> proj (sup mind (flod F))\<cdot>k = k"
     and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (sup mind (flod F)) k"
     and "\<And>F K. compact K \<Longrightarrow> sem (peg K F) K = sem F K"
@@ -563,8 +567,6 @@ proof -
     using that assms(2) by auto
   show ?thesis
   proof (rule lawfulI, simp_all only: smap_simps)
-    show "lod_tf \<rho>" if "(n, \<rho>) |\<in>| edims E" for n \<rho> by (rule E.masks_tf[OF that])
-  next
     fix F :: "('l, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
     then show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" by (rule E.key_slicer[OF nb])
   next
@@ -612,7 +614,6 @@ theorem (in expr_sem) lawful_group_by:
   "lawful (sup mind D) dims (group_by D sem)"
 proof (rule lawfulI)
   have kd: "sup (sup mind D) X = sup mind (sup X D)" for X by (simp only: ac_simps)
-  show "lod_tf \<rho>" if "(n, \<rho>) |\<in>| dims" for n \<rho> by (rule masks_tf[OF that])
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "group_by D sem F k \<noteq> \<bottom>" for F k
     using key_slicer[of "finclude D F" k] that by (simp add: group_by_def)
   show "proj (sup (sup mind D) (flod F))\<cdot>k = k" if "group_by D sem F k \<noteq> \<bottom>" for F k
@@ -665,7 +666,6 @@ theorem lawful_fixed:
     and "\<And>F F'. amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> T F = T F'"
   shows "lawful E {||} (fixed E T sem)"
 proof (rule lawfulI)
-  show "lod_tf \<rho>" if "(n, \<rho>) |\<in>| {||}" for n :: 'l and \<rho> :: "'l \<Rightarrow> 'l" using that by simp
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "fixed E T sem F k \<noteq> \<bottom>" for F k
     using that by (auto simp: fixed_def fkeys_def split: if_splits dest: keyimg_slicer)
   show "proj (sup E (flod F))\<cdot>k = k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
@@ -729,7 +729,7 @@ end
 subsection \<open>\<open>FOR\<close> and \<open>EXCLUDE\<close>\<close>
 
 text \<open>\<open>E FOR \<tau> G\<close> is evaluated at the incoming frame's keys, truncated to the key LOD of the inner
-  frame.  The key LOD of the inner frame is the expression's own detail plus the transformed key
+  frame.  The key LOD of the inner frame is the expression's own detail plus the truncated key
   LOD of the outer one.\<close>
 
 context expr_sem
@@ -742,56 +742,51 @@ definition filtfor where
 abbreviation exclude where
   "exclude \<tau> \<equiv> filtfor \<tau> \<^bold>1"
 
-lemma flod_ffor [simp]: "flod (ffor \<tau> G F) = \<tau> (flod F)"
+lemma flod_ffor [simp]: "flod (ffor \<tau> G F) = truncate \<tau> (flod F)"
   by (simp add: ffor_def)
 
 lemma amb_ffor [simp]: "amb (ffor \<tau> G F) = amb F"
   by (simp add: ffor_def)
 
-lemma kd_ffor:
-  assumes tf: "lod_tf \<tau>" shows "sup mind (\<tau> (flod F)) = sup mind (\<tau> (kd F))"
-  using tf_below[OF tf, of mind] by (simp add: tf_sup[OF tf] sup_absorb1 sup_assoc[symmetric])
+lemma kd_ffor: "sup mind (truncate \<tau> (flod F)) = sup mind (truncate \<tau> (kd F))"
+  using truncate_below[of \<tau> mind]
+  by (simp add: truncate_sup sup_absorb1 sup_assoc[symmetric])
 
-lemma kd_ffor_le: assumes tf: "lod_tf \<tau>" shows "kd (ffor \<tau> G F) \<le> kd F"
-  by (simp only: flod_ffor) (intro sup_mono order_refl tf_below[OF tf])
+lemma kd_ffor_le: "kd (ffor \<tau> G F) \<le> kd F"
+  by (simp only: flod_ffor) (intro sup_mono order_refl truncate_below)
 
-lemma kd_ffor_tf: assumes tf: "lod_tf \<tau>" shows "\<tau> (kd F) \<le> kd (ffor \<tau> G F)"
-  by (simp only: flod_ffor kd_ffor[OF tf]) (rule sup_ge2)
+lemma kd_ffor_trunc: "truncate \<tau> (kd F) \<le> kd (ffor \<tau> G F)"
+  by (simp only: flod_ffor kd_ffor) (rule sup_ge2)
 
 text \<open>Through any mask, the inner frame's masked rows are among the outer frame's rows masked by
   the composite, and its masked key LOD is the composite's, plus the masked detail of the
-  expression itself.  \<open>FOR\<close> composes every mask of the dims with \<open>\<tau>\<close>.\<close>
+  expression itself.  \<open>FOR\<close> meets every mask of the dims with \<open>\<tau>\<close>.\<close>
 
-lemma mrows_ffor:
-  assumes \<rho>: "lod_tf \<rho>" and tf: "lod_tf \<tau>" shows "mrows \<rho> (ffor \<tau> G F) \<subseteq> mrows (\<rho> \<circ> \<tau>) F"
-  using tf_slice_conj[OF \<rho>, of "tf_slice \<tau> (slice F)" G] tf_slice_comp[OF \<rho> tf, of "slice F"]
+lemma mrows_ffor: "mrows \<rho> (ffor \<tau> G F) \<subseteq> mrows (inf \<rho> \<tau>) F"
+  using trunc_slice_conj[of \<rho> "trunc_slice \<tau> (slice F)" G] trunc_slice_comp[of \<rho> \<tau> "slice F"]
   by (auto simp: mrows_def ffor_def)
 
 lemma mask_kd_ffor:
-  assumes \<rho>: "lod_tf \<rho>" and tf: "lod_tf \<tau>"
-  shows "\<rho> (kd (ffor \<tau> G F)) = sup ((\<rho> \<circ> \<tau>) (kd F)) (\<rho> mind)"
+  "truncate \<rho> (kd (ffor \<tau> G F)) = sup (truncate (inf \<rho> \<tau>) (kd F)) (truncate \<rho> mind)"
 proof -
-  have le: "\<rho> (\<tau> mind) \<le> \<rho> mind" by (rule tf_mono[OF \<rho> tf_below[OF tf]])
-  have "\<rho> (kd (ffor \<tau> G F)) = sup (\<rho> mind) (\<rho> (\<tau> (flod F)))"
-    by (simp add: tf_sup[OF \<rho>])
-  also have "\<dots> = sup (\<rho> mind) (sup (\<rho> (\<tau> mind)) (\<rho> (\<tau> (flod F))))"
+  have le: "truncate \<rho> (truncate \<tau> mind) \<le> truncate \<rho> mind"
+    by (rule truncate_mono[OF truncate_below])
+  have "truncate \<rho> (kd (ffor \<tau> G F)) = sup (truncate \<rho> mind) (truncate \<rho> (truncate \<tau> (flod F)))"
+    by (simp add: truncate_sup)
+  also have "\<dots> = sup (truncate \<rho> mind)
+      (sup (truncate \<rho> (truncate \<tau> mind)) (truncate \<rho> (truncate \<tau> (flod F))))"
     by (simp only: sup_assoc[symmetric] sup_absorb1[OF le])
-  also have "\<dots> = sup ((\<rho> \<circ> \<tau>) (kd F)) (\<rho> mind)"
-    by (simp add: tf_sup[OF \<rho>] tf_sup[OF tf] sup_commute)
+  also have "\<dots> = sup (truncate (inf \<rho> \<tau>) (kd F)) (truncate \<rho> mind)"
+    by (simp add: truncate_inf_comp truncate_sup sup_commute)
   finally show ?thesis .
 qed
 
-lemma lod_tf_comp: "lod_tf \<rho> \<Longrightarrow> lod_tf \<tau> \<Longrightarrow> lod_tf (\<rho> \<circ> \<tau>)"
-  unfolding lod_tf_def by simp
+abbreviation for_dims ::
+    "'l::{distrib_lattice, bounded_lattice_bot} trunc \<Rightarrow> ('l \<times> 'l trunc) fset \<Rightarrow> ('l \<times> 'l trunc) fset" where
+  "for_dims \<tau> \<Delta> \<equiv> (\<lambda>(n, \<rho>). (n, inf \<rho> \<tau>)) |`| \<Delta>"
 
-abbreviation for_dims :: "('l \<Rightarrow> 'l) \<Rightarrow> ('l \<times> ('l \<Rightarrow> 'l)) fset \<Rightarrow> ('l \<times> ('l \<Rightarrow> 'l)) fset" where
-  "for_dims \<tau> \<Delta> \<equiv> (\<lambda>(n, \<rho>). (n, \<rho> \<circ> \<tau>)) |`| \<Delta>"
-
-theorem lawful_filtfor:
-  assumes tf: "lod_tf \<tau>" shows "lawful mind (for_dims \<tau> dims) (filtfor \<tau> G)"
+theorem lawful_filtfor: "lawful mind (for_dims \<tau> dims) (filtfor \<tau> G)"
 proof (rule lawfulI)
-  show "lod_tf \<rho>'" if "(n, \<rho>') |\<in>| for_dims \<tau> dims" for n \<rho>'
-    using that by (auto intro: lod_tf_comp[OF masks_tf tf])
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "filtfor \<tau> G F k \<noteq> \<bottom>" for F k
     using that by (auto simp: filtfor_def fkeys_def split: if_splits dest: keyimg_slicer)
   show "proj (kd F)\<cdot>k = k" if "filtfor \<tau> G F k \<noteq> \<bottom>" for F k
@@ -804,13 +799,13 @@ proof (rule lawfulI)
     then show ?thesis by (simp add: filtfor_def fkeys_peg_iff[OF cK])
   next
     case True
-    let ?H = "ffor \<tau> G F" and ?K' = "proj (\<tau> (kd F))\<cdot>K"
+    let ?H = "ffor \<tau> G F" and ?K' = "proj (truncate \<tau> (kd F))\<cdot>K"
     have Kl: "proj (kd F)\<cdot>K = K" using True by (simp add: fkeys_def maximal_at_lives)
-    have "?K' \<sqsubseteq> proj (kd ?H)\<cdot>K" by (rule proj_mono[OF kd_ffor_tf[OF tf]])
+    have "?K' \<sqsubseteq> proj (kd ?H)\<cdot>K" by (rule proj_mono[OF kd_ffor_trunc])
     then have "sem (peg ?K' ?H) (proj (kd ?H)\<cdot>K) = sem ?H (proj (kd ?H)\<cdot>K)"
       by (rule peg_below[OF proj_compact proj_compact])
     then show ?thesis
-      using True by (simp add: filtfor_def fkeys_peg_iff[OF cK] ffor_peg[OF tf Kl])
+      using True by (simp add: filtfor_def fkeys_peg_iff[OF cK] ffor_peg[OF Kl])
   qed
   show "filtfor \<tau> G F (rproj (kd F) x) = filtfor \<tau> G F' (rproj (kd F') x)"
     if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
@@ -820,16 +815,15 @@ proof (rule lawfulI)
     let ?H = "ffor \<tau> G F" and ?H' = "ffor \<tau> G F'"
     have v: "filtfor \<tau> G F0 (rproj (kd F0) x) = sem (ffor \<tau> G F0) (rproj (kd (ffor \<tau> G F0)) x)"
       if "filtfor \<tau> G F0 (rproj (kd F0) x) \<noteq> \<bottom>" for F0
-      using that proj_le[OF kd_ffor_le[OF tf, of G F0]] by (simp add: filtfor_def split: if_splits)
+      using that proj_le[OF kd_ffor_le[of \<tau> G F0]] by (simp add: filtfor_def split: if_splits)
     have fH: "amb ?H = amb ?H'" "slice ?H = slice ?H'" by (simp_all add: ffor_def that(1,2))
     have eq: "dims_equivs dims ?H x (kd ?H) (kd ?H')"
     proof (rule dims_equivsI)
       fix n \<rho> assume n\<rho>: "(n, \<rho>) |\<in>| dims"
-      have \<rho>: "lod_tf \<rho>" by (rule masks_tf[OF n\<rho>])
-      have "dims_equiv n (\<rho> \<circ> \<tau>) F x (kd F) (kd F')"
+      have "dims_equiv n (inf \<rho> \<tau>) F x (kd F) (kd F')"
         by (rule dims_equivsD[OF that(4)]) (use n\<rho> in force)
       then show "dims_equiv n \<rho> ?H x (kd ?H) (kd ?H')"
-        by (rule dims_equiv_sup[OF mrows_ffor[OF \<rho> tf] _ mask_kd_ffor[OF \<rho> tf] mask_kd_ffor[OF \<rho> tf]])
+        by (rule dims_equiv_sup[OF mrows_ffor _ mask_kd_ffor mask_kd_ffor])
     qed
     have "sem ?H (rproj (kd ?H) x) = sem ?H' (rproj (kd ?H') x)"
       by (rule dims_law[OF fH that(3) eq]) (use that(5,6) v in simp_all)
@@ -840,7 +834,7 @@ proof (rule lawfulI)
   proof -
     have k: "fkeys S F (kd F) = fkeys S F' (kd F')"
       using fkeys_cong[OF frows_cong[OF that(1,2)]] that(3) by simp
-    have kH: "kd (ffor \<tau> G F) = kd (ffor \<tau> G F')" by (simp only: flod_ffor kd_ffor[OF tf] that(3))
+    have kH: "kd (ffor \<tau> G F) = kd (ffor \<tau> G F')" by (simp only: flod_ffor kd_ffor that(3))
     have "sem (ffor \<tau> G F) = sem (ffor \<tau> G F')"
       by (rule eff_law) (use that kH in \<open>simp_all add: ffor_def\<close>)
     then show ?thesis using k kH by (simp add: filtfor_def fun_eq_iff)
@@ -856,7 +850,6 @@ definition restrict where
 
 theorem (in expr_sem) lawful_restrict: "lawful mind dims (restrict \<phi> sem)"
 proof (rule lawfulI)
-  show "lod_tf \<rho>" if "(n, \<rho>) |\<in>| dims" for n \<rho> by (rule masks_tf[OF that])
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "restrict \<phi> sem F k \<noteq> \<bottom>" for F k
     using key_slicer[of "frestrict \<phi> F" k] that by (simp add: restrict_def)
   show "proj (kd F)\<cdot>k = k" if "restrict \<phi> sem F k \<noteq> \<bottom>" for F k

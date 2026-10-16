@@ -196,142 +196,208 @@ qed
 
 end
 
-subsection \<open>LOD transformers\<close>
+subsection \<open>Truncations\<close>
 
-text \<open>A \<^emph>\<open>transformer\<close> is the action of meeting with a (possibly non-compact) LOD.  It is
+text \<open>A \<^emph>\<open>truncation\<close> is the action of meeting with a (possibly non-compact) LOD.  It is
   captured by a single module law; everything else follows in a distributive lattice.  Its
-  fixed points form an ideal, and the transformer takes each LOD to the largest fixed point
+  fixed points form an ideal, and the truncation takes each LOD to the largest fixed point
   below it.\<close>
 
-definition lod_tf :: "('l::distrib_lattice \<Rightarrow> 'l) \<Rightarrow> bool" where
-  "lod_tf \<tau> \<longleftrightarrow> (\<forall>x y. \<tau> (inf x y) = inf x (\<tau> y))"
+typedef ('l::distrib_lattice) trunc = "{\<tau> :: 'l \<Rightarrow> 'l. \<forall>x y. \<tau> (inf x y) = inf x (\<tau> y)}"
+  morphisms truncate Abs_trunc
+  by (rule exI[of _ id]) simp
+
+setup_lifting type_definition_trunc
+
+lemma truncate_inf: "truncate \<tau> (inf x y) = inf x (truncate \<tau> y)"
+  using truncate[of \<tau>] by simp
 
 context
-  fixes \<tau> :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'l"
-  assumes tf: "lod_tf \<tau>"
+  fixes \<tau> :: "'l::{distrib_lattice, bounded_lattice_bot} trunc"
 begin
 
-lemma tf_module: "\<tau> (inf x y) = inf x (\<tau> y)"
-  using tf by (simp add: lod_tf_def)
+lemma truncate_below: "truncate \<tau> x \<le> x"
+  by (metis truncate_inf inf_idem inf_le1)
 
-lemma tf_below: "\<tau> x \<le> x"
-  by (metis tf_module inf_idem inf_le1)
+lemma truncate_idem [simp]: "truncate \<tau> (truncate \<tau> x) = truncate \<tau> x"
+  by (metis truncate_inf truncate_below inf_absorb1 inf_idem)
 
-lemma tf_idem [simp]: "\<tau> (\<tau> x) = \<tau> x"
-  by (metis tf_module tf_below inf_absorb1 inf_idem)
+lemma truncate_mono: "x \<le> y \<Longrightarrow> truncate \<tau> x \<le> truncate \<tau> y"
+  by (metis truncate_inf inf_absorb1 inf_le2)
 
-lemma tf_mono: "x \<le> y \<Longrightarrow> \<tau> x \<le> \<tau> y"
-  by (metis tf_module inf_absorb1 inf_le2)
+lemma truncate_inf_hom: "truncate \<tau> (inf x y) = inf (truncate \<tau> x) (truncate \<tau> y)"
+  by (metis truncate_inf truncate_idem inf_commute)
 
-lemma tf_inf: "\<tau> (inf x y) = inf (\<tau> x) (\<tau> y)"
-  by (metis tf_module tf_idem inf_commute)
-
-lemma tf_sup: "\<tau> (sup x y) = sup (\<tau> x) (\<tau> y)"
+lemma truncate_sup: "truncate \<tau> (sup x y) = sup (truncate \<tau> x) (truncate \<tau> y)"
 proof -
-  have a: "inf x (\<tau> (sup x y)) = \<tau> x" by (simp only: tf_module[symmetric] inf_sup_absorb)
-  have b: "inf y (\<tau> (sup x y)) = \<tau> y" by (simp only: sup_commute[of x y] tf_module[symmetric] inf_sup_absorb)
-  have "\<tau> (sup x y) = inf (sup x y) (\<tau> (sup x y))" by (simp add: inf_absorb2 tf_below)
-  also have "\<dots> = sup (\<tau> x) (\<tau> y)" by (simp only: inf_sup_distrib2 a b)
+  have a: "inf x (truncate \<tau> (sup x y)) = truncate \<tau> x"
+    by (simp only: truncate_inf[symmetric] inf_sup_absorb)
+  have b: "inf y (truncate \<tau> (sup x y)) = truncate \<tau> y"
+    by (simp only: sup_commute[of x y] truncate_inf[symmetric] inf_sup_absorb)
+  have "truncate \<tau> (sup x y) = inf (sup x y) (truncate \<tau> (sup x y))"
+    by (simp add: inf_absorb2 truncate_below)
+  also have "\<dots> = sup (truncate \<tau> x) (truncate \<tau> y)" by (simp only: inf_sup_distrib2 a b)
   finally show ?thesis .
 qed
 
-lemma tf_bot [simp]: "\<tau> bot = bot"
-  using tf_below[of bot] by (simp add: bot_unique)
+lemma truncate_bot [simp]: "truncate \<tau> bot = bot"
+  using truncate_below[of bot] by (simp add: bot_unique)
 
-lemma tf_fix_down: "\<tau> c = c \<Longrightarrow> d \<le> c \<Longrightarrow> \<tau> d = d"
-  by (metis tf_module inf_absorb1)
+lemma truncate_fix_down: "truncate \<tau> c = c \<Longrightarrow> d \<le> c \<Longrightarrow> truncate \<tau> d = d"
+  by (metis truncate_inf inf_absorb1)
 
-lemma tf_fix_sup: "\<tau> c = c \<Longrightarrow> \<tau> d = d \<Longrightarrow> \<tau> (sup c d) = sup c d"
-  by (simp add: tf_sup)
+lemma truncate_fix_sup: "truncate \<tau> c = c \<Longrightarrow> truncate \<tau> d = d \<Longrightarrow> truncate \<tau> (sup c d) = sup c d"
+  by (simp add: truncate_sup)
 
-lemma tf_greatest: "\<tau> c = c \<Longrightarrow> c \<le> x \<Longrightarrow> c \<le> \<tau> x"
-  by (metis tf_mono)
+lemma truncate_greatest: "truncate \<tau> c = c \<Longrightarrow> c \<le> x \<Longrightarrow> c \<le> truncate \<tau> x"
+  by (metis truncate_mono)
 
-text \<open>Within \<open>a\<close>, transforming more than \<open>a\<close> is transforming \<open>a\<close>.\<close>
+text \<open>Within \<open>a\<close>, truncating more than \<open>a\<close> is truncating \<open>a\<close>.\<close>
 
-lemma tf_inf_sup: "inf (\<tau> (sup a b)) a = \<tau> a"
+lemma truncate_inf_sup: "inf (truncate \<tau> (sup a b)) a = truncate \<tau> a"
 proof -
-  have "inf (\<tau> (sup a b)) a = sup (inf (\<tau> a) a) (inf (\<tau> b) a)"
-    by (simp add: tf_sup inf_sup_distrib2)
-  also have "inf (\<tau> a) a = \<tau> a" by (simp add: inf_absorb1 tf_below)
-  also have "inf (\<tau> b) a = \<tau> (inf a b)" by (simp add: tf_module inf_commute)
-  also have "sup (\<tau> a) (\<tau> (inf a b)) = \<tau> a" by (simp add: sup_absorb1 tf_mono)
+  have "inf (truncate \<tau> (sup a b)) a = sup (inf (truncate \<tau> a) a) (inf (truncate \<tau> b) a)"
+    by (simp add: truncate_sup inf_sup_distrib2)
+  also have "inf (truncate \<tau> a) a = truncate \<tau> a" by (simp add: inf_absorb1 truncate_below)
+  also have "inf (truncate \<tau> b) a = truncate \<tau> (inf a b)" by (simp add: truncate_inf inf_commute)
+  also have "sup (truncate \<tau> a) (truncate \<tau> (inf a b)) = truncate \<tau> a"
+    by (simp add: sup_absorb1 truncate_mono)
   finally show ?thesis .
 qed
 
 end
 
-lemma lod_tf_inf: "lod_tf (inf g)"
-  unfolding lod_tf_def by (simp add: inf_left_commute)
+text \<open>Meeting with any LOD is a truncation.\<close>
 
-lemma lod_tf_id: "lod_tf id"
-  unfolding lod_tf_def by simp
+lift_definition trunc_at :: "'l::distrib_lattice \<Rightarrow> 'l trunc" is inf
+  by (simp add: inf_left_commute)
 
-subsection \<open>Transformers acting on keys\<close>
+lemma truncate_trunc_at [simp]: "truncate (trunc_at g) x = inf g x"
+  by transfer simp
+
+text \<open>Truncations form a distributive lattice under the pointwise order; meet is composition,
+  the identity is the top and the constant \<open>\<bottom>\<close> the bottom.\<close>
+
+instantiation trunc :: ("{distrib_lattice, bounded_lattice_bot}") "{distrib_lattice, bounded_lattice}"
+begin
+
+lift_definition less_eq_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> bool" is "\<lambda>f g. \<forall>x. f x \<le> g x" .
+
+definition less_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> bool" where
+  "less_trunc \<rho> \<tau> \<longleftrightarrow> \<rho> \<le> \<tau> \<and> \<not> \<tau> \<le> \<rho>"
+
+lift_definition inf_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> 'a trunc" is "\<lambda>f g x. inf (f x) (g x)"
+  by (simp add: inf_aci)
+
+lift_definition sup_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> 'a trunc" is "\<lambda>f g x. sup (f x) (g x)"
+  by (simp add: inf_sup_distrib1)
+
+lift_definition bot_trunc :: "'a trunc" is "\<lambda>_. bot"
+  by simp
+
+lift_definition top_trunc :: "'a trunc" is id
+  by simp
+
+instance
+proof
+  show "\<rho> < \<tau> \<longleftrightarrow> \<rho> \<le> \<tau> \<and> \<not> \<tau> \<le> \<rho>" for \<rho> \<tau> :: "'a trunc" by (fact less_trunc_def)
+  show "\<rho> \<le> \<rho>" for \<rho> :: "'a trunc" by transfer simp
+  show "\<rho> \<le> \<sigma> \<Longrightarrow> \<sigma> \<le> \<tau> \<Longrightarrow> \<rho> \<le> \<tau>" for \<rho> \<sigma> \<tau> :: "'a trunc" by transfer (blast intro: order_trans)
+  show "\<rho> \<le> \<tau> \<Longrightarrow> \<tau> \<le> \<rho> \<Longrightarrow> \<rho> = \<tau>" for \<rho> \<tau> :: "'a trunc"
+    by transfer (blast intro: antisym)
+  show "inf \<rho> \<tau> \<le> \<rho>" "inf \<rho> \<tau> \<le> \<tau>" for \<rho> \<tau> :: "'a trunc" by (transfer, simp)+
+  show "\<rho> \<le> \<sigma> \<Longrightarrow> \<rho> \<le> \<tau> \<Longrightarrow> \<rho> \<le> inf \<sigma> \<tau>" for \<rho> \<sigma> \<tau> :: "'a trunc" by transfer simp
+  show "\<rho> \<le> sup \<rho> \<tau>" "\<tau> \<le> sup \<rho> \<tau>" for \<rho> \<tau> :: "'a trunc" by (transfer, simp)+
+  show "\<sigma> \<le> \<rho> \<Longrightarrow> \<tau> \<le> \<rho> \<Longrightarrow> sup \<sigma> \<tau> \<le> \<rho>" for \<rho> \<sigma> \<tau> :: "'a trunc" by transfer simp
+  show "sup \<rho> (inf \<sigma> \<tau>) = inf (sup \<rho> \<sigma>) (sup \<rho> \<tau>)" for \<rho> \<sigma> \<tau> :: "'a trunc"
+    by transfer (simp add: sup_inf_distrib1)
+  show "bot \<le> \<rho>" for \<rho> :: "'a trunc" by transfer simp
+  show "\<rho> \<le> top" for \<rho> :: "'a trunc"
+    by transfer (metis id_apply inf_idem inf_le1)
+qed
+
+end
+
+lemma truncate_inf_comp: "truncate (inf \<rho> \<tau>) x = truncate \<rho> (truncate \<tau> x)"
+proof -
+  have "truncate \<rho> (truncate \<tau> x) = truncate \<rho> (inf (truncate \<tau> x) x)"
+    by (simp add: inf_absorb1 truncate_below)
+  also have "\<dots> = inf (truncate \<tau> x) (truncate \<rho> x)" by (rule truncate_inf)
+  finally show ?thesis by transfer (simp add: inf_commute)
+qed
+
+lemma truncate_top [simp]: "truncate top x = x"
+  by transfer simp
+
+lemma truncate_bot_trunc [simp]: "truncate bot x = bot"
+  by transfer simp
+
+subsection \<open>Truncations acting on keys\<close>
 
 context lod_space
 begin
 
-text \<open>A transformer acts on a key through any LOD the key lives at; the choice is irrelevant.\<close>
+text \<open>A truncation acts on a key through any LOD the key lives at; the choice is irrelevant.\<close>
 
-lemma tf_proj_irrelevant:
-  assumes tf: "lod_tf \<tau>" and c: "lives_at c k" and c': "lives_at c' k"
-  shows "proj (\<tau> c)\<cdot>k = proj (\<tau> c')\<cdot>k"
+lemma truncate_proj_irrelevant:
+  assumes c: "lives_at c k" and c': "lives_at c' k"
+  shows "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c')\<cdot>k"
 proof -
-  have e: "inf (\<tau> c) c' = inf (\<tau> c') c" by (metis tf_module[OF tf] inf_commute)
-  have "proj (\<tau> c)\<cdot>k = proj (\<tau> c)\<cdot>(proj c'\<cdot>k)" using c' by (simp add: lives_at_def)
-  also have "\<dots> = proj (inf (\<tau> c) c')\<cdot>k" by (simp only: proj_inf)
-  also have "\<dots> = proj (inf (\<tau> c') c)\<cdot>k" by (simp only: e)
-  also have "\<dots> = proj (\<tau> c')\<cdot>(proj c\<cdot>k)" by (simp only: proj_inf)
-  also have "\<dots> = proj (\<tau> c')\<cdot>k" using c by (simp add: lives_at_def)
+  have e: "inf (truncate \<tau> c) c' = inf (truncate \<tau> c') c" by (metis truncate_inf inf_commute)
+  have "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c)\<cdot>(proj c'\<cdot>k)" using c' by (simp add: lives_at_def)
+  also have "\<dots> = proj (inf (truncate \<tau> c) c')\<cdot>k" by (simp only: proj_inf)
+  also have "\<dots> = proj (inf (truncate \<tau> c') c)\<cdot>k" by (simp only: e)
+  also have "\<dots> = proj (truncate \<tau> c')\<cdot>(proj c\<cdot>k)" by (simp only: proj_inf)
+  also have "\<dots> = proj (truncate \<tau> c')\<cdot>k" using c by (simp add: lives_at_def)
   finally show ?thesis .
 qed
 
-definition tf_key :: "('l \<Rightarrow> 'l) \<Rightarrow> 'k \<Rightarrow> 'k" where
-  "tf_key \<tau> k = (THE k'. \<exists>c. lives_at c k \<and> k' = proj (\<tau> c)\<cdot>k)"
+definition truncate_key :: "'l trunc \<Rightarrow> 'k \<Rightarrow> 'k" where
+  "truncate_key \<tau> k = (THE k'. \<exists>c. lives_at c k \<and> k' = proj (truncate \<tau> c)\<cdot>k)"
 
-lemma tf_key_eq:
-  assumes tf: "lod_tf \<tau>" and c: "lives_at c k"
-  shows "tf_key \<tau> k = proj (\<tau> c)\<cdot>k"
-  unfolding tf_key_def
+lemma truncate_key_eq:
+  assumes c: "lives_at c k"
+  shows "truncate_key \<tau> k = proj (truncate \<tau> c)\<cdot>k"
+  unfolding truncate_key_def
 proof (rule the_equality)
-  show "\<exists>c'. lives_at c' k \<and> proj (\<tau> c)\<cdot>k = proj (\<tau> c')\<cdot>k" using c by blast
-  show "k' = proj (\<tau> c)\<cdot>k" if "\<exists>c'. lives_at c' k \<and> k' = proj (\<tau> c')\<cdot>k" for k'
-    using that tf_proj_irrelevant[OF tf _ c] by blast
+  show "\<exists>c'. lives_at c' k \<and> proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c')\<cdot>k" using c by blast
+  show "k' = proj (truncate \<tau> c)\<cdot>k" if "\<exists>c'. lives_at c' k \<and> k' = proj (truncate \<tau> c')\<cdot>k" for k'
+    using that truncate_proj_irrelevant[OF _ c] by blast
 qed
 
 end
 
 subsection \<open>Dropping dimensions\<close>
 
-text \<open>On tuples, an LOD can drop a set of dimensions.  Dropping is a transformer, not a meet with
+text \<open>On tuples, an LOD can drop a set of dimensions.  Dropping is a truncation, not a meet with
   an LOD: what is left after dropping is the meet with a non-finitary "negative" level, which is
   not itself an LOD.  Its action on keys is cutting away the dropped dimensions after projecting,
   which continues the dimension-set interpretation below.\<close>
 
 locale lod_tuple_space = lod_space proj
   for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> ('d, 'v::bounded_complete) tuple \<rightarrow> ('d, 'v) tuple" +
-  fixes drop :: "'d set \<Rightarrow> 'l \<Rightarrow> 'l"
-  assumes drop_tf: "lod_tf (drop D)"
-    and proj_drop: "proj (drop D c)\<cdot>k = tcut (- D)\<cdot>(proj c\<cdot>k)"
+  fixes drop :: "'d set \<Rightarrow> 'l trunc"
+  assumes proj_drop: "proj (truncate (drop D) c)\<cdot>k = tcut (- D)\<cdot>(proj c\<cdot>k)"
 begin
 
-lemma drop_below: "drop D c \<le> c"
-  by (rule tf_below[OF drop_tf])
+lemma drop_below: "truncate (drop D) c \<le> c"
+  by (rule truncate_below)
 
-lemma drop_mono: "c \<le> c' \<Longrightarrow> drop D c \<le> drop D c'"
-  by (rule tf_mono[OF drop_tf])
+lemma drop_mono: "c \<le> c' \<Longrightarrow> truncate (drop D) c \<le> truncate (drop D) c'"
+  by (rule truncate_mono)
 
-lemma proj_drop_empty: "proj (drop {} c)\<cdot>k = proj c\<cdot>k"
+lemma proj_drop_empty: "proj (truncate (drop {}) c)\<cdot>k = proj c\<cdot>k"
   by (simp add: proj_drop tcut_beta tget_inverse)
 
-lemma proj_drop_Un: "proj (drop (D \<union> E) c)\<cdot>k = proj (drop D (drop E c))\<cdot>k"
+lemma proj_drop_Un:
+  "proj (truncate (drop (D \<union> E)) c)\<cdot>k = proj (truncate (drop D) (truncate (drop E) c))\<cdot>k"
   by (simp add: proj_drop tcut_compose Int_commute)
 
-lemma proj_drop_antimono: "D \<subseteq> E \<Longrightarrow> proj (drop E c)\<cdot>k \<sqsubseteq> proj (drop D c)\<cdot>k"
+lemma proj_drop_antimono: "D \<subseteq> E \<Longrightarrow> proj (truncate (drop E) c)\<cdot>k \<sqsubseteq> proj (truncate (drop D) c)\<cdot>k"
   by (simp add: proj_drop tcut_mono_set)
 
-lemma proj_drop_commute: "proj (drop D (drop E c))\<cdot>k = proj (drop E (drop D c))\<cdot>k"
+lemma proj_drop_commute:
+  "proj (truncate (drop D) (truncate (drop E) c))\<cdot>k = proj (truncate (drop E) (truncate (drop D) c))\<cdot>k"
   by (simp add: proj_drop tcut_compose Int_commute)
 
 end
@@ -414,11 +480,14 @@ interpretation dims: lod_space "\<lambda>A. tcut (fset A) :: ('d, 'v::{bounded_c
 
 text \<open>Dropping from a dimension set is set difference.\<close>
 
-lemma lod_tf_fminus: "lod_tf (\<lambda>A. ffilter (\<lambda>d. d \<notin> D) A)"
-  unfolding lod_tf_def by auto
+lift_definition fdrop :: "'d set \<Rightarrow> 'd fset trunc" is "\<lambda>D A. ffilter (\<lambda>d. d \<notin> D) A"
+  by auto
+
+lemma truncate_fdrop [simp]: "truncate (fdrop D) A = ffilter (\<lambda>d. d \<notin> D) A"
+  by transfer simp
 
 interpretation dims: lod_tuple_space "\<lambda>A. tcut (fset A) :: ('d, 'v::{bounded_complete, chfin}) tuple \<rightarrow> _"
-  "\<lambda>D A. ffilter (\<lambda>d. d \<notin> D) A"
-  by unfold_locales (simp_all add: lod_tf_fminus tcut_compose Int_commute Collect_conj_eq Compl_eq)
+  fdrop
+  by unfold_locales (simp_all add: tcut_compose Int_commute Collect_conj_eq Compl_eq)
 
 end

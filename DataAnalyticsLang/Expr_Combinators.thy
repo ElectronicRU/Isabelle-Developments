@@ -95,16 +95,6 @@ proof -
     by (rule law[OF E0])
   show ?thesis
   proof (rule lawfulI)
-    show "lod_tf \<rho>" if "(n, \<rho>) |\<in>| edims (collect Es)" for n \<rho>
-    proof -
-      note n\<rho> = that
-      obtain E where E: "E \<in> set Es" "(n, \<rho>) |\<in>| edims E"
-        using n\<rho> by (auto simp: fmember_edims_collect)
-      interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
-        "emind E" "edims E" "esem E"
-        by (rule law[OF E(1)])
-      show ?thesis by (rule E.masks_tf[OF E(2)])
-    qed
     show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "esem (collect Es) F k \<noteq> \<bottom>" for F k
       using E0.key_slicer[OF nb[OF that E0]] by simp
     show "proj (sup ?M (flod F))\<cdot>k = k" if "esem (collect Es) F k \<noteq> \<bottom>" for F k

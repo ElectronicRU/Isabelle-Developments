@@ -369,42 +369,39 @@ proof -
   then show ?thesis using holds_coarsen[OF assms(2)] by simp
 qed
 
-subsection \<open>Transforming slices\<close>
+subsection \<open>Truncating slices\<close>
 
-text \<open>A LOD transformer acts on a slice by coarsening it to the transformed LOD the slice is
-  written at.  This commutes with conjunction and composes.\<close>
+text \<open>A truncation acts on a slice by coarsening it to the truncated LOD the slice is written
+  at.  This commutes with conjunction and composes, composition being meet.\<close>
 
-abbreviation tf_slice :: "('l \<Rightarrow> 'l) \<Rightarrow> 'f \<Rightarrow> 'f" where
-  "tf_slice \<tau> f \<equiv> coarsen (\<tau> (slod f)) f"
+abbreviation trunc_slice :: "'l trunc \<Rightarrow> 'f \<Rightarrow> 'f" where
+  "trunc_slice \<tau> f \<equiv> coarsen (truncate \<tau> (slod f)) f"
 
-lemma tf_slice_id [simp]: "tf_slice id f = f"
+lemma trunc_slice_top [simp]: "trunc_slice top f = f"
   by (simp add: coarsen_inside)
 
-lemma holds_tf_slice: "holds f k \<Longrightarrow> holds (tf_slice \<tau> f) k"
+lemma holds_trunc_slice: "holds f k \<Longrightarrow> holds (trunc_slice \<tau> f) k"
   by (rule holds_coarsen)
 
-lemma tf_slice_conj:
-  assumes tf: "lod_tf \<tau>" shows "tf_slice \<tau> (a \<^bold>* b) = tf_slice \<tau> a \<^bold>* tf_slice \<tau> b"
+lemma trunc_slice_conj: "trunc_slice \<tau> (a \<^bold>* b) = trunc_slice \<tau> a \<^bold>* trunc_slice \<tau> b"
 proof -
-  have "coarsen (\<tau> (sup (slod a) (slod b))) a = tf_slice \<tau> a"
-    by (subst (1 2) coarsen_slod) (simp add: tf_inf_sup[OF tf] inf_absorb1 tf_below[OF tf])
-  moreover have "coarsen (\<tau> (sup (slod a) (slod b))) b = tf_slice \<tau> b"
+  have "coarsen (truncate \<tau> (sup (slod a) (slod b))) a = trunc_slice \<tau> a"
+    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup inf_absorb1 truncate_below)
+  moreover have "coarsen (truncate \<tau> (sup (slod a) (slod b))) b = trunc_slice \<tau> b"
     by (subst (1 2) coarsen_slod)
-      (simp add: sup_commute[of "slod a"] tf_inf_sup[OF tf] inf_absorb1 tf_below[OF tf])
+      (simp add: sup_commute[of "slod a"] truncate_inf_sup inf_absorb1 truncate_below)
   ultimately show ?thesis by (simp add: coarsen_conj)
 qed
 
-lemma tf_slice_comp:
-  assumes \<rho>: "lod_tf \<rho>" and \<tau>: "lod_tf \<tau>"
-  shows "tf_slice \<rho> (tf_slice \<tau> f) = tf_slice (\<rho> \<circ> \<tau>) f"
+lemma trunc_slice_comp: "trunc_slice \<rho> (trunc_slice \<tau> f) = trunc_slice (inf \<rho> \<tau>) f"
 proof -
-  let ?c = "tf_slice \<tau> f"
-  have c: "slod ?c \<le> \<tau> (slod f)" using slod_coarsen_target .
-  have "tf_slice (\<rho> \<circ> \<tau>) f = coarsen (\<rho> (\<tau> (slod f))) ?c"
-    by (simp add: coarsen_coarsen inf_absorb1 tf_below[OF \<rho>])
-  also have "\<dots> = coarsen (inf (\<rho> (\<tau> (slod f))) (slod ?c)) ?c" by (rule coarsen_slod)
-  also have "inf (\<rho> (\<tau> (slod f))) (slod ?c) = \<rho> (slod ?c)"
-    by (metis inf_commute inf_absorb1[OF c] tf_module[OF \<rho>])
+  let ?c = "trunc_slice \<tau> f"
+  have c: "slod ?c \<le> truncate \<tau> (slod f)" using slod_coarsen_target .
+  have "trunc_slice (inf \<rho> \<tau>) f = coarsen (truncate \<rho> (truncate \<tau> (slod f))) ?c"
+    by (simp add: truncate_inf_comp coarsen_coarsen inf_absorb1 truncate_below)
+  also have "\<dots> = coarsen (inf (truncate \<rho> (truncate \<tau> (slod f))) (slod ?c)) ?c" by (rule coarsen_slod)
+  also have "inf (truncate \<rho> (truncate \<tau> (slod f))) (slod ?c) = truncate \<rho> (slod ?c)"
+    by (metis inf_commute inf_absorb1[OF c] truncate_inf)
   finally show ?thesis by simp
 qed
 
