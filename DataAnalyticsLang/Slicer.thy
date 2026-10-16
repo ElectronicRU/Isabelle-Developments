@@ -305,7 +305,8 @@ subsection \<open>Slicers\<close>
 text \<open>A slicer adds \<^emph>\<open>coarsening\<close> of a slice to a given LOD.  \<open>GROUP BY ONLY\<close> coarsens to the new
   frame LOD; \<open>FOR\<close> coarsens to the slice's own LOD with dimensions dropped by a transformer.
   Coarsening distributes over conjunction, leaves slices written inside the target alone, keeps
-  only what the target looks at, and holds at the truncation of every key the original holds at.
+  only what the target looks at, holds at the truncation of every key the original holds at, and
+  coarsening twice is coarsening once, to the meet of the targets.
   It only depends on the part of the target the slice is written at: coarsening is about what is
   cut away.
   It is \<^emph>\<open>not\<close> extensional: coarsening \<open>b = 2 \<and> b \<noteq> 2\<close> away from \<open>b\<close> gives \<open>True\<close>, coarsening
@@ -320,6 +321,7 @@ locale slicer = slice_eval proj conj sunit slod sopen
     and slod_coarsen: "slod (coarsen A f) \<le> inf (slod f) A"
     and coarsen_cut: "selects (sopen f) k \<Longrightarrow> selects (sopen (coarsen A f)) (proj A\<cdot>k)"
     and coarsen_slod: "coarsen A f = coarsen (inf A (slod f)) f"
+    and coarsen_coarsen: "coarsen A (coarsen B f) = coarsen (inf A B) f"
 begin
 
 lemma holds_coarsen_cut: "holds f k \<Longrightarrow> holds (coarsen A f) (proj A\<cdot>k)"
@@ -356,6 +358,54 @@ proof -
   have "holds (coarsen A f) (proj A\<cdot>t)" using assms(2) by (rule holds_coarsen_cut)
   then have "holds (coarsen A f) \<bottom>" using holds_bot_lod[OF lod, of "proj A\<cdot>t"] by blast
   then show ?thesis by (rule holds_up) simp
+qed
+
+text \<open>Coarsening to less is weaker.\<close>
+
+lemma holds_coarsen_le:
+  assumes "A \<le> B" and "holds (coarsen B f) k" shows "holds (coarsen A f) k"
+proof -
+  have "coarsen A f = coarsen A (coarsen B f)" by (simp add: coarsen_coarsen inf_absorb1[OF assms(1)])
+  then show ?thesis using holds_coarsen[OF assms(2)] by simp
+qed
+
+subsection \<open>Transforming slices\<close>
+
+text \<open>A LOD transformer acts on a slice by coarsening it to the transformed LOD the slice is
+  written at.  This commutes with conjunction and composes.\<close>
+
+abbreviation tf_slice :: "('l \<Rightarrow> 'l) \<Rightarrow> 'f \<Rightarrow> 'f" where
+  "tf_slice \<tau> f \<equiv> coarsen (\<tau> (slod f)) f"
+
+lemma tf_slice_id [simp]: "tf_slice id f = f"
+  by (simp add: coarsen_inside)
+
+lemma holds_tf_slice: "holds f k \<Longrightarrow> holds (tf_slice \<tau> f) k"
+  by (rule holds_coarsen)
+
+lemma tf_slice_conj:
+  assumes tf: "lod_tf \<tau>" shows "tf_slice \<tau> (a \<^bold>* b) = tf_slice \<tau> a \<^bold>* tf_slice \<tau> b"
+proof -
+  have "coarsen (\<tau> (sup (slod a) (slod b))) a = tf_slice \<tau> a"
+    by (subst (1 2) coarsen_slod) (simp add: tf_inf_sup[OF tf] inf_absorb1 tf_below[OF tf])
+  moreover have "coarsen (\<tau> (sup (slod a) (slod b))) b = tf_slice \<tau> b"
+    by (subst (1 2) coarsen_slod)
+      (simp add: sup_commute[of "slod a"] tf_inf_sup[OF tf] inf_absorb1 tf_below[OF tf])
+  ultimately show ?thesis by (simp add: coarsen_conj)
+qed
+
+lemma tf_slice_comp:
+  assumes \<rho>: "lod_tf \<rho>" and \<tau>: "lod_tf \<tau>"
+  shows "tf_slice \<rho> (tf_slice \<tau> f) = tf_slice (\<rho> \<circ> \<tau>) f"
+proof -
+  let ?c = "tf_slice \<tau> f"
+  have c: "slod ?c \<le> \<tau> (slod f)" using slod_coarsen_target .
+  have "tf_slice (\<rho> \<circ> \<tau>) f = coarsen (\<rho> (\<tau> (slod f))) ?c"
+    by (simp add: coarsen_coarsen inf_absorb1 tf_below[OF \<rho>])
+  also have "\<dots> = coarsen (inf (\<rho> (\<tau> (slod f))) (slod ?c)) ?c" by (rule coarsen_slod)
+  also have "inf (\<rho> (\<tau> (slod f))) (slod ?c) = \<rho> (slod ?c)"
+    by (metis inf_commute inf_absorb1[OF c] tf_module[OF \<rho>])
+  finally show ?thesis by simp
 qed
 
 end

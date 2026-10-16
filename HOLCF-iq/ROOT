@@ -1,4 +1,4 @@
-session "HOLCF-iq" in "../../AutoCorrode/iq" = HOLCF +
+session "HOLCF-iq" in "../../AutoCorrode/iq" = "HOLCF-extra" +
   theories [document=false]
     iq
     Isar_Explore

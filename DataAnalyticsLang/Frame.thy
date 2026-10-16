@@ -1,5 +1,5 @@
 theory Frame
-  imports Slicer
+  imports Slicer Relspace
 begin
 
 section \<open>Frames\<close>
@@ -15,12 +15,15 @@ record ('l::type, 'f::type, 'r::pcpo) frame =
   amb :: "'r sel"
   slice :: 'f
 
-text \<open>The meaning of an expression: the LODs it decides at least and at most, and its values at
-  each frame and key, \<open>\<bottom>\<close> for ``no entry''.\<close>
+text \<open>The meaning of an expression: the LOD it decides at least; its \<^emph>\<open>natural\<close> LOD, the key of
+  all the values it reads out of the dataset; its \<^emph>\<open>mask\<close>, a transformer for the part of a key's
+  detail its values actually read (dropped detail is broadcast); and its values at each frame and
+  key, \<open>\<bottom>\<close> for ``no entry''.\<close>
 
 record ('l::type, 'f::type, 'r::pcpo, 'k::type, 'v::type) expr =
   emind :: 'l
-  emaxd :: 'l
+  enatd :: 'l
+  emaskd :: "'l \<Rightarrow> 'l"
   esem :: "('l, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v"
 
 section \<open>Frame transformers\<close>
@@ -87,7 +90,7 @@ definition fisolate :: "('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" whe
   "fisolate F = \<lparr>flod = bot, amb = top, slice = \<^bold>1\<rparr>"
 
 definition ffor :: "('l \<Rightarrow> 'l) \<Rightarrow> 'f \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
-  "ffor \<tau> G F = F\<lparr>flod := \<tau> (flod F), slice := coarsen (\<tau> (slod (slice F))) (slice F) \<^bold>* G\<rparr>"
+  "ffor \<tau> G F = F\<lparr>flod := \<tau> (flod F), slice := tf_slice \<tau> (slice F) \<^bold>* G\<rparr>"
 
 definition peg :: "'k \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
   "peg K F = F\<lparr>slice := slice F \<^bold>* spin K\<rparr>"
@@ -235,43 +238,104 @@ end
 
 section \<open>Laws for an abstract semantics\<close>
 
-text \<open>A fixed expression has LODs \<^term>\<open>mind\<close> \<open>\<le>\<close> \<^term>\<open>maxd\<close> and a semantics: a map from frames
-  and keys to values, with \<^term>\<open>\<bottom>\<close> for ``no entry''.  Its key LOD under a frame is what it
-  decides itself plus what of the frame it can be evaluated up to.  The \<^emph>\<open>key laws\<close> say that keys
-  conform to the slice, live at the key LOD, and come from data points.  Keys need not be
-  maximal: a row missing data (\<open>\<bottom>\<close> in a column) gives a partial key, which no slice can pin.  The
-  \<^emph>\<open>peg law\<close> says that pegging the frame to a key does not change the value there; the
-  \<^emph>\<open>dims law\<close> says that in frames pinning a key \<open>K\<close> at \<open>L\<close>, varying the frame's LOD within \<open>L\<close>
-  moves each maximal entry to the corresponding key (the truncated join with \<open>K\<close>) without
-  changing its value; the
-  \<^emph>\<open>effective-LOD law\<close> says that the semantics depends on a frame's LOD only through the key
-  LOD.  The slice is compared syntactically, since coarsening is not extensional.  Combinators
-  are then maps from lawful semantics to lawful semantics.\<close>
-
 locale dataspace = frame_sem proj conj sunit slod sopen coarsen spin rkey
   for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
     and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
     and slod sopen coarsen spin and rkey :: "'r::pcpo \<rightarrow> 'k" +
   fixes S :: "'r set"
   assumes dataset_S: "dataset S"
+begin
+
+subsection \<open>Rows seen through a mask\<close>
+
+text \<open>The data rows in an ambient filter, and among them those whose key passes the slice
+  transformed by a mask.  An LOD is read on rows through their keys.\<close>
+
+definition arows :: "'r sel \<Rightarrow> 'r set" where
+  "arows \<phi> = {x \<in> pts S. selects \<phi> x}"
+
+definition mrows :: "('l \<Rightarrow> 'l) \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r set" where
+  "mrows \<rho> F = {x \<in> arows (amb F). holds (tf_slice \<rho> (slice F)) (rkey\<cdot>x)}"
+
+abbreviation rproj :: "'l \<Rightarrow> 'r \<Rightarrow> 'k" where
+  "rproj L x \<equiv> proj L\<cdot>(rkey\<cdot>x)"
+
+lemma mrows_cong: "amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> mrows \<rho> F = mrows \<rho> F'"
+  by (simp add: mrows_def)
+
+lemma frows_mrows: "x \<in> pts S \<Longrightarrow> frows F x \<Longrightarrow> x \<in> mrows \<rho> F"
+  by (simp add: mrows_def arows_def frows_def holds_tf_slice)
+
+text \<open>Reading at a join of LODs is reading at both.\<close>
+
+lemma rproj_sup_fequiv: "relspace.fequiv D (\<lambda>x. (rproj a x, rproj b x)) (rproj (sup a b))"
+  unfolding relspace.fequiv_def relspace.determines_rows
+  using proj_sup proj_le sup_ge1 sup_ge2 sorry (*doesnt go through with metis*)
+
+text \<open>Two LODs are \<^emph>\<open>equivalent at grain \<open>n\<close> through a mask \<open>\<rho>\<close>\<close> in a frame, together with a
+  further row \<open>x\<close>, when their masks are equivalent modulo \<open>n\<close> on those rows (@{const
+  relspace.equiv_mod}).  Being a condition on pairs of rows, it survives losing rows; it also
+  survives adding the same detail to both sides.\<close>
+
+definition dims_equiv :: "'l \<Rightarrow> ('l \<Rightarrow> 'l) \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
+  "dims_equiv n \<rho> F x a t \<longleftrightarrow>
+     relspace.equiv_mod (insert x (mrows \<rho> F)) (rproj n) (rproj (\<rho> a)) (rproj (\<rho> t))"
+
+lemma dims_equiv_sub:
+  assumes "mrows \<rho>' F' \<subseteq> mrows \<rho> F" "dims_equiv n \<rho> F x a t" "\<rho>' a' = \<rho> a" "\<rho>' t' = \<rho> t"
+  shows "dims_equiv n \<rho>' F' x a' t'"
+  using assms(2) unfolding dims_equiv_def assms(3,4)
+  by (rule equiv_mod_subset[rotated]) (use assms(1) in blast)
+
+lemma dims_equiv_sup:
+  assumes "mrows \<rho>' F' \<subseteq> mrows \<rho> F" "dims_equiv n \<rho> F x a t"
+    and "\<rho>' a' = sup (\<rho> a) c" "\<rho>' t' = sup (\<rho> t) c"
+  shows "dims_equiv n \<rho>' F' x a' t'"
+proof -
+  let ?D = "insert x (mrows \<rho>' F')"
+  have "relspace.equiv_mod ?D (rproj n) (rproj (\<rho> a)) (rproj (\<rho> t))"
+    using assms(2) unfolding dims_equiv_def
+    by (rule equiv_mod_subset[rotated]) (use assms(1) in blast)
+  then have "relspace.equiv_mod ?D (rproj n)
+      (\<lambda>x. (rproj (\<rho> a) x, rproj c x)) (\<lambda>x. (rproj (\<rho> t) x, rproj c x))"
+    by (rule relspace.equiv_mod_pair)
+  then show ?thesis unfolding dims_equiv_def assms(3,4)
+    by (rule relspace.equiv_mod_fequiv[OF rproj_sup_fequiv rproj_sup_fequiv])
+qed
+
+end
+
+text \<open>A fixed expression has a minimal LOD \<^term>\<open>mind\<close>, a natural LOD \<^term>\<open>natd\<close>, a mask
+  \<^term>\<open>maskd\<close> and a semantics: a map from frames and keys to values, with \<^term>\<open>\<bottom>\<close> for ``no
+  entry''.  Its key LOD under a frame is what it decides itself plus the frame's LOD.  The \<^emph>\<open>key
+  laws\<close> say that keys conform to the slice, live at the key LOD, and come from data points.  Keys
+  need not be maximal: a row missing data (\<open>\<bottom>\<close> in a column) gives a partial key, which no slice
+  can pin.  The \<^emph>\<open>peg law\<close> says that pegging the frame to a key does not change the value there;
+  the \<^emph>\<open>dims law\<close> says that in frames with the same filters, entries present at the keys a row
+  has at two key LODs agree, when the masked key LODs are equivalent at the natural grain on the
+  masked rows of the frame and that row.  It says nothing about presence.  The \<^emph>\<open>effective-LOD
+  law\<close> says that the semantics depends on a frame's LOD only through the key LOD.  The slice is
+  compared syntactically, since coarsening is not extensional.  Combinators are then maps from
+  lawful semantics to lawful semantics.\<close>
 
 locale expr_sem = dataspace +
-  fixes mind maxd sem
-  assumes mind_maxd: "mind \<le> maxd"
+  fixes mind natd maskd sem
+  assumes maskd_tf: "lod_tf maskd"
     and key_slicer: "sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
-    and key_lives: "sem F k \<noteq> \<bottom> \<Longrightarrow> proj (inf (sup mind (flod F)) maxd)\<cdot>k = k"
-    and key_data: "sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (inf (sup mind (flod F)) maxd) k"
+    and key_lives: "sem F k \<noteq> \<bottom> \<Longrightarrow> proj (sup mind (flod F))\<cdot>k = k"
+    and key_data: "sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (sup mind (flod F)) k"
     and peg_law: "compact K \<Longrightarrow> sem (peg K F) K = sem F K"
-    and dims_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; pins F L K;
-                    sup (flod F) L = sup (flod F') L; sem F K1 \<noteq> \<bottom>;
-                    maximal_at (inf (sup mind (flod F)) maxd) K1\<rbrakk>
-                   \<Longrightarrow> sem F' (proj (inf (sup mind (flod F')) maxd)\<cdot>(K1 \<squnion> K)) = sem F K1"
-    and eff_law: "\<lbrakk>amb F = amb F'; slice F = slice F';
-                   inf (sup mind (flod F)) maxd = inf (sup mind (flod F')) maxd\<rbrakk>
+    and dims_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; x \<in> pts S;
+                    dims_equiv natd maskd F x (sup mind (flod F)) (sup mind (flod F'));
+                    sem F (rproj (sup mind (flod F)) x) \<noteq> \<bottom>;
+                    sem F' (rproj (sup mind (flod F')) x) \<noteq> \<bottom>\<rbrakk>
+                   \<Longrightarrow> sem F (rproj (sup mind (flod F)) x) = sem F' (rproj (sup mind (flod F')) x)"
+    and eff_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
                   \<Longrightarrow> sem F = sem F'"
 begin
 
-abbreviation "kd F \<equiv> inf (sup mind (flod F)) maxd"
+abbreviation "kd F \<equiv> sup mind (flod F)"
+
 
 text \<open>The compatibility the dims law relies on is automatic: an entry's key is the projection of
   a selected row, and the pin lies below that row's key.\<close>
@@ -316,60 +380,77 @@ next
   qed
 qed
 
-text \<open>Values at different levels of detail: the value at a finer key is the value at its
-  truncation, once the finer key is pinned by the slice.  The finer frame is first trimmed to
-  detail the expression can see (effective-LOD law), so that the extra detail lies within the
-  finer key's LOD; then the dims law moves the entry.\<close>
+text \<open>Through a mask, a pin still fixes the masked truncation of the key.\<close>
+
+lemma masked_pin:
+  assumes \<rho>: "lod_tf \<rho>" and K: "maximal_at c K" and h: "holds (tf_slice \<rho> (spin K)) k"
+  shows "proj (\<rho> c)\<cdot>k = proj (\<rho> c)\<cdot>K"
+proof -
+  have cK: "compact K" by (rule maximal_at_compact[OF K])
+  have "proj (\<rho> (slod (spin K)))\<cdot>K = proj (\<rho> c)\<cdot>K"
+    by (rule tf_proj_irrelevant[OF \<rho>])
+      (simp_all add: lives_at_def slod_spin_lives[OF cK] maximal_at_lives[OF K])
+  then have "proj (\<rho> c)\<cdot>K \<sqsubseteq> k" using h by (simp add: coarsen_spin[OF cK] holds_spin[OF proj_compact])
+  then have "proj (\<rho> c)\<cdot>K \<sqsubseteq> proj (\<rho> c)\<cdot>k" by (metis monofun_cfun_arg proj_idem)
+  then show ?thesis by (rule maximal_at_eq[OF maximal_at_proj[OF tf_below[OF \<rho>] K] proj_idem])
+qed
+
+text \<open>Values at different levels of detail: an entry of a frame pegged to a finer key sits at
+  the truncation of that key and has the finer key's value.  Through the mask, the rows the
+  pegged frame sees all have the pinned key's truncation, so the dims law applies.  (Presence
+  at the coarser key is not claimed.)\<close>
 
 theorem lod_shift:
   assumes "amb F1 = amb F2" "slice F1 = slice F2" "flod F1 \<le> flod F2" "sem F2 K2 \<noteq> \<bottom>"
-    and K2m: "maximal_at (kd F2) K2"
-  shows "sem (peg K2 F1) k = (if k = proj (kd F1)\<cdot>K2 then sem F2 K2 else \<bottom>)"
+    and K2m: "maximal_at (kd F2) K2" and nb: "sem (peg K2 F1) k \<noteq> \<bottom>"
+  shows "k = proj (kd F1)\<cdot>K2" "sem (peg K2 F1) k = sem F2 K2"
 proof -
-  define F2' where "F2' = F2\<lparr>flod := sup (flod F1) (inf (flod F2) maxd)\<rparr>"
-  let ?L = "kd F2" and ?k = "proj (kd F1)\<cdot>K2"
-  have mm: "inf mind maxd = mind" using mind_maxd by (rule inf_absorb1)
-  have kdF2: "kd F2 = sup mind (inf (flod F2) maxd)"
-    by (simp add: inf_sup_distrib2 mm)
-  have "kd F2' = sup mind (sup (inf (flod F1) maxd) (inf (flod F2) maxd))"
-    by (simp add: F2'_def inf_sup_distrib2 mm)
-  also have "sup (inf (flod F1) maxd) (inf (flod F2) maxd) = inf (flod F2) maxd"
-    by (rule sup_absorb2) (rule inf_mono[OF assms(3) order_refl])
-  finally have kd2: "kd F2' = kd F2" by (simp only: kdF2)
-  then have same: "sem F2' = sem F2" by (intro eff_law) (simp_all add: F2'_def)
   have cK2: "compact K2" by (rule maximal_at_compact[OF K2m])
-  have sp: "sem (peg K2 F2') K2 = sem F2 K2" using peg_law[OF cK2] same by simp
-  have f1: "amb (peg K2 F2') = amb (peg K2 F1)" "slice (peg K2 F2') = slice (peg K2 F1)"
-    by (simp_all add: F2'_def assms(1,2))
-  have f2: "sup (flod (peg K2 F2')) ?L = sup (flod (peg K2 F1)) ?L"
+  obtain x where xS: "x \<in> pts S" and x: "frows (peg K2 F1) x" and kx: "k = rproj (kd F1) x"
+    using key_data[OF nb] by (auto simp: keyimg_def)
+  have Kx: "K2 \<sqsubseteq> rkey\<cdot>x" using x by (simp add: frows_peg cK2)
+  have sub: "kd F1 \<le> kd F2" using assms(3) by (rule sup_mono[OF order_refl])
+  have km1: "maximal_at (kd F1) (proj (kd F1)\<cdot>K2)" by (rule maximal_at_proj[OF sub K2m])
+  have "proj (kd F1)\<cdot>K2 \<sqsubseteq> k" unfolding kx using Kx by (rule monofun_cfun_arg)
+  then show "k = proj (kd F1)\<cdot>K2" using key_lives[OF nb] by (intro maximal_at_eq[OF km1]) simp_all
+  have x2: "rproj (kd F2) x = K2"
   proof -
-    have "inf (flod F2) maxd \<le> ?L" by (simp add: kdF2)
-    then show ?thesis by (simp add: F2'_def sup_assoc sup_absorb2)
+    have "proj (kd F2)\<cdot>K2 \<sqsubseteq> rproj (kd F2) x" using Kx by (rule monofun_cfun_arg)
+    then have "K2 \<sqsubseteq> rproj (kd F2) x" by (simp only: maximal_at_lives[OF K2m])
+    then show ?thesis by (rule maximal_at_eq[OF K2m proj_idem])
   qed
-  have f3: "sem (peg K2 F2') K2 \<noteq> \<bottom>" using assms(4) sp by simp
-  have f4: "maximal_at (kd (peg K2 F2')) K2" using K2m kd2 by simp
-  have v: "sem (peg K2 F1) ?k = sem F2 K2"
-    using dims_law[OF f1 pins_peg[OF K2m] f2 f3 f4] by (simp add: sp)
-  have sub: "kd F1 \<le> ?L" using assms(3) by (intro inf_mono sup_mono) simp_all
-  have km1: "maximal_at (kd F1) ?k" by (rule maximal_at_proj[OF sub K2m])
-  show ?thesis
-  proof (cases "k = ?k")
-    case True with v show ?thesis by simp
-  next
-    case False
-    show ?thesis
-    proof (rule ccontr)
-      assume "sem (peg K2 F1) k \<noteq> (if k = ?k then sem F2 K2 else \<bottom>)"
-      with False have nb: "sem (peg K2 F1) k \<noteq> \<bottom>" by simp
-      obtain x where x: "frows (peg K2 F1) x" and kx: "k = proj (kd F1)\<cdot>(rkey\<cdot>x)"
-        using key_data[OF nb] by (auto simp: keyimg_def)
-      have "K2 \<sqsubseteq> rkey\<cdot>x" using x by (simp add: frows_peg cK2)
-      then have kk: "?k \<sqsubseteq> k" unfolding kx by (rule monofun_cfun_arg)
-      have lv: "proj (kd F1)\<cdot>k = k" using key_lives[OF nb] by simp
-      from kk have "k = ?k" by (rule maximal_at_eq[OF km1 lv])
-      with False show False ..
+  have f: "amb (peg K2 F2) = amb (peg K2 F1)" "slice (peg K2 F2) = slice (peg K2 F1)"
+    by (simp_all add: assms(1,2))
+  have pin: "rproj (maskd (kd F2)) y = proj (maskd (kd F2))\<cdot>K2"
+    if "y \<in> insert x (mrows maskd (peg K2 F2))" for y
+  proof -
+    from that tf_slice_conj[OF maskd_tf, of "slice F2" "spin K2"]
+    consider "y = x" | "holds (tf_slice maskd (spin K2)) (rkey\<cdot>y)"
+      by (auto simp: mrows_def)
+    then show ?thesis
+    proof cases
+      case 1
+      then show ?thesis using proj_le[OF tf_below[OF maskd_tf], of "kd F2" "rkey\<cdot>x"] x2 by simp
+    next
+      case 2
+      then show ?thesis by (rule masked_pin[OF maskd_tf K2m])
     qed
   qed
+  have eq: "dims_equiv natd maskd (peg K2 F2) x (kd (peg K2 F2)) (kd (peg K2 F1))"
+    unfolding dims_equiv_def relspace.equiv_mod_def
+  proof (intro ballI impI)
+    fix y y' assume y: "y \<in> insert x (mrows maskd (peg K2 F2))"
+      and y': "y' \<in> insert x (mrows maskd (peg K2 F2))"
+    have e2: "rproj (maskd (kd F2)) y = rproj (maskd (kd F2)) y'" using pin[OF y] pin[OF y'] by simp
+    then have "rproj (maskd (kd F1)) y = rproj (maskd (kd F1)) y'"
+      by (metis proj_le[OF tf_mono[OF maskd_tf sub]])
+    with e2 show "(rproj (maskd (kd (peg K2 F2))) y = rproj (maskd (kd (peg K2 F2))) y') =
+                  (rproj (maskd (kd (peg K2 F1))) y = rproj (maskd (kd (peg K2 F1))) y')"
+      by simp
+  qed
+  have "sem (peg K2 F2) (rproj (kd (peg K2 F2)) x) = sem (peg K2 F1) (rproj (kd (peg K2 F1)) x)"
+    by (rule dims_law[OF f xS eq]) (simp_all add: x2 peg_law[OF cK2] assms(4) kx[symmetric] nb)
+  then show "sem (peg K2 F1) k = sem F2 K2" by (simp add: x2 peg_law[OF cK2] kx)
 qed
 
 end
@@ -383,22 +464,22 @@ begin
 abbreviation lawful where "lawful \<equiv> expr_sem proj conj sunit slod sopen coarsen spin rkey S"
 
 lemma lawfulI:
-  assumes "mind \<le> maxd"
+  assumes "lod_tf msk"
     and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
-    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> proj (inf (sup mind (flod F)) maxd)\<cdot>k = k"
-    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (inf (sup mind (flod F)) maxd) k"
+    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> proj (sup mind (flod F))\<cdot>k = k"
+    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (sup mind (flod F)) k"
     and "\<And>F K. compact K \<Longrightarrow> sem (peg K F) K = sem F K"
-    and "\<And>F F' L K K1. \<lbrakk>amb F = amb F'; slice F = slice F'; pins F L K;
-                        sup (flod F) L = sup (flod F') L; sem F K1 \<noteq> \<bottom>;
-                        maximal_at (inf (sup mind (flod F)) maxd) K1\<rbrakk>
-                       \<Longrightarrow> sem F' (proj (inf (sup mind (flod F')) maxd)\<cdot>(K1 \<squnion> K)) = sem F K1"
-    and "\<And>F F'. \<lbrakk>amb F = amb F'; slice F = slice F';
-                 inf (sup mind (flod F)) maxd = inf (sup mind (flod F')) maxd\<rbrakk>
+    and "\<And>F F' x. \<lbrakk>amb F = amb F'; slice F = slice F'; x \<in> pts S;
+                    dims_equiv natd msk F x (sup mind (flod F)) (sup mind (flod F'));
+                    sem F (rproj (sup mind (flod F)) x) \<noteq> \<bottom>;
+                    sem F' (rproj (sup mind (flod F')) x) \<noteq> \<bottom>\<rbrakk>
+                   \<Longrightarrow> sem F (rproj (sup mind (flod F)) x) = sem F' (rproj (sup mind (flod F')) x)"
+    and "\<And>F F'. \<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
                  \<Longrightarrow> sem F = sem F'"
-  shows "lawful mind maxd sem"
+  shows "lawful mind natd msk sem"
   by (intro expr_sem.intro dataspace_axioms expr_sem_axioms.intro) (fact assms)+
 
-abbreviation lawfulE where "lawfulE E \<equiv> lawful (emind E) (emaxd E) (esem E)"
+abbreviation lawfulE where "lawfulE E \<equiv> lawful (emind E) (enatd E) (emaskd E) (esem E)"
 
 subsection \<open>Conforming to data\<close>
 
@@ -408,12 +489,11 @@ text \<open>The \<^emph>\<open>guard\<close> keeps an entry only at keys of the 
   output, restores the key-data law.\<close>
 
 definition guard :: "('l, 'f, 'r, 'k, 'v::pcpo) expr \<Rightarrow> ('l, 'f, 'r, 'k, 'v) expr" where
-  "guard E = E\<lparr>esem := \<lambda>F k. if keyimg S F (inf (sup (emind E) (flod F)) (emaxd E)) k
-                              then esem E F k else \<bottom>\<rparr>"
+  "guard E = E\<lparr>esem := \<lambda>F k. if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>\<rparr>"
 
 lemma guard_simps [simp]:
-  "emind (guard E) = emind E" "emaxd (guard E) = emaxd E"
-  "esem (guard E) F k = (if keyimg S F (inf (sup (emind E) (flod F)) (emaxd E)) k then esem E F k else \<bottom>)"
+  "emind (guard E) = emind E" "enatd (guard E) = enatd E" "emaskd (guard E) = emaskd E"
+  "esem (guard E) F k = (if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>)"
   by (simp_all add: guard_def)
 
 lemma guard_idem [simp]: "guard (guard E) = guard E"
@@ -422,8 +502,9 @@ lemma guard_idem [simp]: "guard (guard E) = guard E"
 lemma guard_lawful: "lawfulE E \<Longrightarrow> guard E = E"
 proof -
   assume "lawfulE E"
-  then interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S "emind E" "emaxd E" "esem E" .
-  have v: "(if keyimg S F (inf (sup (emind E) (flod F)) (emaxd E)) k then esem E F k else \<bottom>) = esem E F k"
+  then interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+    "emind E" "enatd E" "emaskd E" "esem E" .
+  have v: "(if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>) = esem E F k"
     for F k using E.key_data[of F k] by auto
   show "guard E = E" unfolding guard_def v by simp
 qed
@@ -433,43 +514,47 @@ subsection \<open>Maps\<close>
 text \<open>Applying a strict function to every entry.\<close>
 
 definition smap :: "('v::pcpo \<rightarrow> 'w::pcpo) \<Rightarrow> ('l, 'f, 'r, 'k, 'v) expr \<Rightarrow> ('l, 'f, 'r, 'k, 'w) expr"
-  where "smap g E = \<lparr>emind = emind E, emaxd = emaxd E, esem = \<lambda>F k. g\<cdot>(esem E F k)\<rparr>"
+  where "smap g E = \<lparr>emind = emind E, enatd = enatd E, emaskd = emaskd E, esem = \<lambda>F k. g\<cdot>(esem E F k)\<rparr>"
 
 lemma smap_simps [simp]:
-  "emind (smap g E) = emind E" "emaxd (smap g E) = emaxd E" "esem (smap g E) F k = g\<cdot>(esem E F k)"
+  "emind (smap g E) = emind E" "enatd (smap g E) = enatd E" "emaskd (smap g E) = emaskd E"
+  "esem (smap g E) F k = g\<cdot>(esem E F k)"
   by (simp_all add: smap_def)
 
 theorem lawful_smap: assumes "lawfulE E" "g\<cdot>\<bottom> = \<bottom>" shows "lawfulE (smap g E)"
 proof -
-  interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S "emind E" "emaxd E" "esem E"
+  interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+    "emind E" "enatd E" "emaskd E" "esem E"
     by (fact assms(1))
   have nb: "esem E F k \<noteq> \<bottom>" if "g\<cdot>(esem E F k) \<noteq> \<bottom>" for F k
     using that assms(2) by auto
   show ?thesis
   proof (rule lawfulI, simp_all only: smap_simps)
-    show "emind E \<le> emaxd E" by (rule E.mind_maxd)
+    show "lod_tf (emaskd E)" by (rule E.maskd_tf)
   next
     fix F :: "('l, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
     then show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" by (rule E.key_slicer[OF nb])
   next
     fix F :: "('l, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
-    then show "proj (inf (sup (emind E) (flod F)) (emaxd E))\<cdot>k = k" by (rule E.key_lives[OF nb])
+    then show "proj (sup (emind E) (flod F))\<cdot>k = k" by (rule E.key_lives[OF nb])
   next
     fix F :: "('l, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
-    then show "keyimg S F (inf (sup (emind E) (flod F)) (emaxd E)) k" by (rule E.key_data[OF nb])
+    then show "keyimg S F (sup (emind E) (flod F)) k" by (rule E.key_data[OF nb])
   next
     fix F :: "('l, 'f, 'r) frame" and K :: 'k assume "compact K"
     then show "g\<cdot>(esem E (peg K F) K) = g\<cdot>(esem E F K)" by (simp only: E.peg_law)
   next
-    fix F F' :: "('l, 'f, 'r) frame" and L and K K1 :: 'k
-    assume a: "amb F = amb F'" "slice F = slice F'" "pins F L K" "sup (flod F) L = sup (flod F') L"
-      "g\<cdot>(esem E F K1) \<noteq> \<bottom>" "maximal_at (inf (sup (emind E) (flod F)) (emaxd E)) K1"
-    show "g\<cdot>(esem E F' (proj (inf (sup (emind E) (flod F')) (emaxd E))\<cdot>(K1 \<squnion> K))) = g\<cdot>(esem E F K1)"
-      by (simp only: E.dims_law[OF a(1-4) nb[OF a(5)] a(6)])
+    fix F F' :: "('l, 'f, 'r) frame" and x :: 'r
+    assume a: "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
+      "dims_equiv (enatd E) (emaskd E) F x (sup (emind E) (flod F)) (sup (emind E) (flod F'))"
+      "g\<cdot>(esem E F (rproj (sup (emind E) (flod F)) x)) \<noteq> \<bottom>"
+      "g\<cdot>(esem E F' (rproj (sup (emind E) (flod F')) x)) \<noteq> \<bottom>"
+    show "g\<cdot>(esem E F (rproj (sup (emind E) (flod F)) x))
+        = g\<cdot>(esem E F' (rproj (sup (emind E) (flod F')) x))"
+      by (simp only: E.dims_law[OF a(1-4) nb[OF a(5)] nb[OF a(6)]])
   next
     fix F F' :: "('l, 'f, 'r) frame"
-    assume "amb F = amb F'" "slice F = slice F'"
-      "inf (sup (emind E) (flod F)) (emaxd E) = inf (sup (emind E) (flod F')) (emaxd E)"
+    assume "amb F = amb F'" "slice F = slice F'" "sup (emind E) (flod F) = sup (emind E) (flod F')"
     then have "esem E F = esem E F'" by (rule E.eff_law)
     then show "esem (smap g E) F = esem (smap g E) F'" by (simp add: fun_eq_iff)
   qed
@@ -491,48 +576,35 @@ definition group_by where
   "group_by D sem = (\<lambda>F. sem (finclude D F))"
 
 theorem (in expr_sem) lawful_group_by:
-  "lawful (sup mind (inf D maxd)) maxd (group_by D sem)"
+  "lawful (sup mind D) natd maskd (group_by D sem)"
 proof (rule lawfulI)
-  have mm: "inf mind maxd = mind" using mind_maxd by (rule inf_absorb1)
-  have kd: "inf (sup (sup mind (inf D maxd)) X) maxd = inf (sup mind (sup X D)) maxd" for X
-  proof -
-    have "inf (sup (sup mind (inf D maxd)) X) maxd = sup (sup mind (inf D maxd)) (inf X maxd)"
-      by (simp only: inf_sup_distrib2 mm inf_assoc inf_idem)
-    also have "\<dots> = sup mind (sup (inf X maxd) (inf D maxd))" by (simp only: ac_simps)
-    also have "\<dots> = inf (sup mind (sup X D)) maxd" by (simp only: inf_sup_distrib2 mm)
-    finally show ?thesis .
-  qed
-  show "sup mind (inf D maxd) \<le> maxd" using mind_maxd by simp
+  have kd: "sup (sup mind D) X = sup mind (sup X D)" for X by (simp only: ac_simps)
+  show "lod_tf maskd" by (rule maskd_tf)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "group_by D sem F k \<noteq> \<bottom>" for F k
     using key_slicer[of "finclude D F" k] that by (simp add: group_by_def)
-  show "proj (inf (sup (sup mind (inf D maxd)) (flod F)) maxd)\<cdot>k = k"
-    if "group_by D sem F k \<noteq> \<bottom>" for F k
+  show "proj (sup (sup mind D) (flod F))\<cdot>k = k" if "group_by D sem F k \<noteq> \<bottom>" for F k
     using key_lives[of "finclude D F" k] that by (simp add: group_by_def kd)
-  show "keyimg S F (inf (sup (sup mind (inf D maxd)) (flod F)) maxd) k"
-    if "group_by D sem F k \<noteq> \<bottom>" for F k
+  show "keyimg S F (sup (sup mind D) (flod F)) k" if "group_by D sem F k \<noteq> \<bottom>" for F k
     using key_data[of "finclude D F" k] that keyimg_cong[of "finclude D F" F S]
     by (simp add: group_by_def kd)
   show "group_by D sem (peg K F) K = group_by D sem F K" if "compact K" for F K
     by (simp add: group_by_def peg_finclude[symmetric] peg_law[OF that])
-  show "group_by D sem F' (proj (inf (sup (sup mind (inf D maxd)) (flod F')) maxd)\<cdot>(K1 \<squnion> K))
-          = group_by D sem F K1"
-    if "amb F = amb F'" "slice F = slice F'" "pins F L K" "sup (flod F) L = sup (flod F') L"
-       "group_by D sem F K1 \<noteq> \<bottom>" "maximal_at (inf (sup (sup mind (inf D maxd)) (flod F)) maxd) K1"
-    for F F' L K K1
+  show "group_by D sem F (rproj (sup (sup mind D) (flod F)) x)
+      = group_by D sem F' (rproj (sup (sup mind D) (flod F')) x)"
+    if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
+      "dims_equiv natd maskd F x (sup (sup mind D) (flod F)) (sup (sup mind D) (flod F'))"
+      "group_by D sem F (rproj (sup (sup mind D) (flod F)) x) \<noteq> \<bottom>"
+      "group_by D sem F' (rproj (sup (sup mind D) (flod F')) x) \<noteq> \<bottom>"
+    for F F' x
   proof -
-    have "pins (finclude D F) L K" using that(3) by (simp add: pins_def)
-    moreover have "sup (flod (finclude D F)) L = sup (flod (finclude D F')) L"
-    proof -
-      have e: "sup (sup a D) L = sup (sup a L) D" for a by (simp only: sup_assoc sup_commute[of D L])
-      show ?thesis by (simp only: flod_finclude e that(4))
-    qed
-    ultimately show ?thesis
-      using dims_law[of "finclude D F" "finclude D F'" L K K1] that(1,2,5,6)
+    have "dims_equiv natd maskd (finclude D F) x (kd (finclude D F)) (kd (finclude D F'))"
+      using that(4) by (simp add: dims_equiv_def mrows_def kd)
+    then show ?thesis
+      using dims_law[of "finclude D F" "finclude D F'" x] that(1-3,5,6)
       by (simp add: group_by_def kd)
   qed
   show "group_by D sem F = group_by D sem F'"
-    if "amb F = amb F'" "slice F = slice F'"
-       "inf (sup (sup mind (inf D maxd)) (flod F)) maxd = inf (sup (sup mind (inf D maxd)) (flod F')) maxd"
+    if "amb F = amb F'" "slice F = slice F'" "sup (sup mind D) (flod F) = sup (sup mind D) (flod F')"
     for F F'
   proof -
     have "sem (finclude D F) = sem (finclude D F')"
@@ -543,52 +615,49 @@ qed
 
 subsection \<open>Fixed-level constructs: \<open>GROUP BY ONLY\<close>, \<open>TOTAL\<close>, \<open>ISOLATE\<close>\<close>
 
-text \<open>A construct that evaluates its argument under a transformed frame at a fixed key LOD
-  \<^term>\<open>E\<close>, restricted back to the incoming frame's keys.  It is lawful whenever the transformer
-  sees the incoming frame only through its filters, and pegging the incoming frame does not
-  change the inner value at the key.  This needs nothing of the inner semantics.\<close>
+text \<open>A construct that evaluates its argument under a transformed frame at a fixed LOD
+  \<^term>\<open>E\<close>, broadcast back to the incoming frame's keys: it reads only the \<open>E\<close>-part of a key, which
+  is its mask.  It is lawful whenever the transformer sees the incoming frame only through its
+  filters, and pegging the incoming frame does not change the inner value at the truncated key.
+  This needs nothing of the inner semantics, and any natural LOD will do.\<close>
 
 context dataspace
 begin
 
 definition fixed where
-  "fixed E T sem F k = (if fkeys S F E k then sem (T F) k else \<bottom>)"
+  "fixed E T sem F k = (if fkeys S F (sup E (flod F)) k then sem (T F) (proj E\<cdot>k) else \<bottom>)"
 
 theorem lawful_fixed:
-  assumes "\<And>F K. compact K \<Longrightarrow> sem (T (peg K F)) K = sem (T F) K"
+  assumes "\<And>F K. compact K \<Longrightarrow> sem (T (peg K F)) (proj E\<cdot>K) = sem (T F) (proj E\<cdot>K)"
     and "\<And>F F'. amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> T F = T F'"
-  shows "lawful E E (fixed E T sem)"
+  shows "lawful E N (inf E) (fixed E T sem)"
 proof (rule lawfulI)
-  have E: "\<And>X. inf (sup E X) E = E" by (simp add: inf_absorb2)
-  show "E \<le> E" by simp
+  show "lod_tf (inf E)" by (rule lod_tf_inf)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "fixed E T sem F k \<noteq> \<bottom>" for F k
     using that by (auto simp: fixed_def fkeys_def split: if_splits dest: keyimg_slicer)
-  show "proj (inf (sup E (flod F)) E)\<cdot>k = k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
-    using that by (auto simp: fixed_def fkeys_def E split: if_splits dest: maximal_at_lives)
-  show "keyimg S F (inf (sup E (flod F)) E) k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
-    using that by (auto simp: fixed_def fkeys_def E split: if_splits)
+  show "proj (sup E (flod F))\<cdot>k = k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
+    using that by (auto simp: fixed_def fkeys_def split: if_splits dest: maximal_at_lives)
+  show "keyimg S F (sup E (flod F)) k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
+    using that by (auto simp: fixed_def fkeys_def split: if_splits)
   show "fixed E T sem (peg K F) K = fixed E T sem F K" if "compact K" for F K
     by (simp add: fixed_def fkeys_peg_iff[OF that] assms(1)[OF that])
-  show "fixed E T sem F' (proj (inf (sup E (flod F')) E)\<cdot>(K1 \<squnion> K)) = fixed E T sem F K1"
-    if "amb F = amb F'" "slice F = slice F'" "pins F L K" "sup (flod F) L = sup (flod F') L"
-       "fixed E T sem F K1 \<noteq> \<bottom>" "maximal_at (inf (sup E (flod F)) E) K1" for F F' L K K1
+  show "fixed E T sem F (rproj (sup E (flod F)) x) = fixed E T sem F' (rproj (sup E (flod F')) x)"
+    if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
+      "dims_equiv N (inf E) F x (sup E (flod F)) (sup E (flod F'))"
+      "fixed E T sem F (rproj (sup E (flod F)) x) \<noteq> \<bottom>"
+      "fixed E T sem F' (rproj (sup E (flod F')) x) \<noteq> \<bottom>" for F F' x
   proof -
-    have K1: "fkeys S F E K1" using that(5) by (auto simp: fixed_def split: if_splits)
-    then have m: "maximal_at E K1" and ki: "keyimg S F E K1" by (simp_all add: fkeys_def)
-    obtain k' where "K1 \<sqsubseteq> k'" "holds (slice F) k'" using keyimg_slicer[OF ki] by blast
-    then have le: "proj E\<cdot>K \<sqsubseteq> K1" and j: "K1 \<Up> K" using pin_below_key[OF that(3) m] by blast+
-    have "proj E\<cdot>(K1 \<squnion> K) = K1"
-      by (simp add: proj_join[OF j] maximal_at_lives[OF m] join_absorb2[OF le])
-    moreover have "fkeys S F' E = fkeys S F E"
-      by (rule fkeys_cong[OF frows_cong[OF that(1,2)], symmetric])
+    have "proj E\<cdot>(rproj (sup E (flod G)) x) = rproj E x" for G :: "('l, 'f, 'r) frame"
+      by (simp add: proj_le)
     moreover have "T F' = T F" using assms(2)[OF that(1,2)] by simp
-    ultimately show ?thesis by (simp add: fixed_def E)
+    ultimately show ?thesis using that(5,6) by (simp add: fixed_def split: if_splits)
   qed
   show "fixed E T sem F = fixed E T sem F'"
-    if "amb F = amb F'" "slice F = slice F'" "inf (sup E (flod F)) E = inf (sup E (flod F')) E"
+    if "amb F = amb F'" "slice F = slice F'" "sup E (flod F) = sup E (flod F')"
     for F F'
   proof -
-    have "fkeys S F E = fkeys S F' E" by (rule fkeys_cong[OF frows_cong[OF that(1,2)]])
+    have "fkeys S F (sup E (flod F)) = fkeys S F' (sup E (flod F'))"
+      using fkeys_cong[OF frows_cong[OF that(1,2)]] that(3) by simp
     then show ?thesis using assms(2)[OF that(1,2)] by (simp add: fixed_def fun_eq_iff)
   qed
 qed
@@ -599,17 +668,18 @@ context expr_sem
 begin
 
 definition group_by_only where
-  "group_by_only D = fixed (inf (sup mind D) maxd) (fgroupby D) sem"
+  "group_by_only D = fixed (sup mind D) (fgroupby D) sem"
 
 abbreviation total where
   "total \<equiv> group_by_only bot"
 
 theorem lawful_group_by_only:
-  "lawful (inf (sup mind D) maxd) (inf (sup mind D) maxd) (group_by_only D)"
+  "lawful (sup mind D) natd (inf (sup mind D)) (group_by_only D)"
   unfolding group_by_only_def
 proof (rule lawful_fixed)
-  show "sem (fgroupby D (peg K F)) K = sem (fgroupby D F) K" if "compact K" for F K
-    by (simp add: fgroupby_peg[OF that] peg_below[OF proj_compact that proj_below])
+  show "sem (fgroupby D (peg K F)) (proj (sup mind D)\<cdot>K) = sem (fgroupby D F) (proj (sup mind D)\<cdot>K)"
+    if "compact K" for F K
+    by (simp add: fgroupby_peg[OF that] peg_below[OF proj_compact proj_compact proj_mono])
   show "fgroupby D F = fgroupby D F'" if "amb F = amb F'" "slice F = slice F'" for F F'
     using that by (cases F, cases F') (simp add: fgroupby_def)
 qed
@@ -617,7 +687,7 @@ qed
 definition isolate where
   "isolate = fixed mind fisolate sem"
 
-theorem lawful_isolate: "lawful mind mind isolate"
+theorem lawful_isolate: "lawful mind natd (inf mind) isolate"
   unfolding isolate_def
   by (rule lawful_fixed) (simp_all add: fisolate_peg fisolate_def)
 
@@ -646,43 +716,42 @@ lemma amb_ffor [simp]: "amb (ffor \<tau> G F) = amb F"
   by (simp add: ffor_def)
 
 lemma kd_ffor:
-  assumes tf: "lod_tf \<tau>" shows "inf (sup mind (\<tau> (flod F))) maxd = sup mind (\<tau> (kd F))"
-proof -
-  have mm: "inf mind maxd = mind" using mind_maxd by (rule inf_absorb1)
-  have "\<tau> (kd F) = inf maxd (sup (\<tau> mind) (\<tau> (flod F)))"
-    by (simp add: inf_commute tf_module[OF tf] tf_sup[OF tf])
-  then have "sup mind (\<tau> (kd F)) = inf (sup mind maxd) (sup mind (sup (\<tau> mind) (\<tau> (flod F))))"
-    by (simp add: sup_inf_distrib1)
-  also have "sup mind maxd = maxd" using mind_maxd by (rule sup_absorb2)
-  also have "sup mind (sup (\<tau> mind) (\<tau> (flod F))) = sup mind (\<tau> (flod F))"
-    using tf_below[OF tf, of mind] by (simp add: sup_absorb1 sup_assoc[symmetric])
-  finally show ?thesis by (simp add: inf_commute)
-qed
+  assumes tf: "lod_tf \<tau>" shows "sup mind (\<tau> (flod F)) = sup mind (\<tau> (kd F))"
+  using tf_below[OF tf, of mind] by (simp add: tf_sup[OF tf] sup_absorb1 sup_assoc[symmetric])
 
 lemma kd_ffor_le: assumes tf: "lod_tf \<tau>" shows "kd (ffor \<tau> G F) \<le> kd F"
-  by (simp only: flod_ffor) (intro inf_mono sup_mono order_refl tf_below[OF tf])
+  by (simp only: flod_ffor) (intro sup_mono order_refl tf_below[OF tf])
 
 lemma kd_ffor_tf: assumes tf: "lod_tf \<tau>" shows "\<tau> (kd F) \<le> kd (ffor \<tau> G F)"
   by (simp only: flod_ffor kd_ffor[OF tf]) (rule sup_ge2)
 
-text \<open>Under a change of frame LOD within \<open>L\<close>, key LODs change within \<open>L\<close> too.\<close>
+text \<open>The inner frame's masked rows are among the outer frame's rows masked by the composite, and
+  its masked key LOD is the composite's, plus the masked detail of the expression itself.\<close>
 
-lemma kd_within:
-  assumes "sup (flod F) L = sup (flod F') L"
-  shows "kd F' \<le> sup (kd F) L"
+lemma mrows_ffor: assumes tf: "lod_tf \<tau>" shows "mrows maskd (ffor \<tau> G F) \<subseteq> mrows (maskd \<circ> \<tau>) F"
+  using tf_slice_conj[OF maskd_tf, of "tf_slice \<tau> (slice F)" G] tf_slice_comp[OF maskd_tf tf, of "slice F"]
+  by (auto simp: mrows_def ffor_def)
+
+lemma maskd_kd_ffor:
+  assumes tf: "lod_tf \<tau>" shows "maskd (kd (ffor \<tau> G F)) = sup ((maskd \<circ> \<tau>) (kd F)) (maskd mind)"
 proof -
-  have "kd F' \<le> inf (sup mind (sup (flod F') L)) maxd" by (intro inf_mono sup_mono) simp_all
-  also have "sup mind (sup (flod F') L) = sup (sup mind (flod F)) L"
-    by (simp only: assms[symmetric] sup_assoc)
-  also have "inf (sup (sup mind (flod F)) L) maxd \<le> sup (kd F) L"
-    by (simp only: inf_sup_distrib2) (rule sup_mono[OF order_refl inf_le1])
+  have le: "maskd (\<tau> mind) \<le> maskd mind" by (rule tf_mono[OF maskd_tf tf_below[OF tf]])
+  have "maskd (kd (ffor \<tau> G F)) = sup (maskd mind) (maskd (\<tau> (flod F)))"
+    by (simp add: tf_sup[OF maskd_tf])
+  also have "\<dots> = sup (maskd mind) (sup (maskd (\<tau> mind)) (maskd (\<tau> (flod F))))"
+    by (simp only: sup_assoc[symmetric] sup_absorb1[OF le])
+  also have "\<dots> = sup ((maskd \<circ> \<tau>) (kd F)) (maskd mind)"
+    by (simp add: tf_sup[OF maskd_tf] tf_sup[OF tf] sup_commute)
   finally show ?thesis .
 qed
 
+lemma lod_tf_comp: "lod_tf \<rho> \<Longrightarrow> lod_tf \<tau> \<Longrightarrow> lod_tf (\<rho> \<circ> \<tau>)"
+  unfolding lod_tf_def by simp
+
 theorem lawful_filtfor:
-  assumes tf: "lod_tf \<tau>" shows "lawful mind maxd (filtfor \<tau> G)"
+  assumes tf: "lod_tf \<tau>" shows "lawful mind natd (maskd \<circ> \<tau>) (filtfor \<tau> G)"
 proof (rule lawfulI)
-  show "mind \<le> maxd" by (rule mind_maxd)
+  show "lod_tf (maskd \<circ> \<tau>)" by (rule lod_tf_comp[OF maskd_tf tf])
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "filtfor \<tau> G F k \<noteq> \<bottom>" for F k
     using that by (auto simp: filtfor_def fkeys_def split: if_splits dest: keyimg_slicer)
   show "proj (kd F)\<cdot>k = k" if "filtfor \<tau> G F k \<noteq> \<bottom>" for F k
@@ -703,78 +772,21 @@ proof (rule lawfulI)
     then show ?thesis
       using True by (simp add: filtfor_def fkeys_peg_iff[OF cK] ffor_peg[OF tf Kl])
   qed
-  show "filtfor \<tau> G F' (proj (kd F')\<cdot>(K1 \<squnion> K)) = filtfor \<tau> G F K1"
-    if "amb F = amb F'" "slice F = slice F'" "pins F L K" "sup (flod F) L = sup (flod F') L"
-       "filtfor \<tau> G F K1 \<noteq> \<bottom>" "maximal_at (kd F) K1" for F F' L K K1
+  show "filtfor \<tau> G F (rproj (kd F) x) = filtfor \<tau> G F' (rproj (kd F') x)"
+    if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
+      "dims_equiv natd (maskd \<circ> \<tau>) F x (kd F) (kd F')"
+      "filtfor \<tau> G F (rproj (kd F) x) \<noteq> \<bottom>" "filtfor \<tau> G F' (rproj (kd F') x) \<noteq> \<bottom>" for F F' x
   proof -
-    note asm = that
-    let ?H = "ffor \<tau> G F" and ?H' = "ffor \<tau> G F'" and ?K'' = "proj (\<tau> L)\<cdot>K"
-    from asm(5) have K1: "fkeys S F (kd F) K1" and ni: "sem ?H (proj (kd ?H)\<cdot>K1) \<noteq> \<bottom>"
-      by (auto simp: filtfor_def split: if_splits)
-    then have K1m: "maximal_at (kd F) K1" and K1i: "keyimg S F (kd F) K1"
-      by (simp_all add: fkeys_def)
-    obtain x where x: "x \<in> pts S" "frows F x" and K1x: "K1 = proj (kd F)\<cdot>(rkey\<cdot>x)"
-      using K1i by (auto simp: keyimg_def)
-    have Km: "maximal_at L K" using asm(3) by (simp add: pins_def)
-    have cK: "compact K" by (rule pins_compact[OF asm(3)])
-    have Kx: "K = proj L\<cdot>(rkey\<cdot>x)" by (rule pinned_key[OF asm(3) x(2), symmetric])
-    have j: "K1 \<Up> K" by (rule joinableI[of _ "rkey\<cdot>x"]) (simp_all add: K1x Kx proj_below)
-    have jx: "K1 \<squnion> K = proj (sup (kd F) L)\<cdot>(rkey\<cdot>x)" by (simp add: proj_sup K1x Kx)
-    have sF': "kd F' \<le> sup (kd F) L" by (rule kd_within[OF asm(4)])
-    have K1'x: "proj (kd F')\<cdot>(K1 \<squnion> K) = proj (kd F')\<cdot>(rkey\<cdot>x)"
-      by (simp add: jx proj_le[OF sF'])
-    have xF': "frows F' x" using x(2) frows_cong[OF asm(1,2)] by simp
-    have K1'k: "fkeys S F' (kd F') (proj (kd F')\<cdot>(K1 \<squnion> K))"
-      unfolding fkeys_def
-    proof
-      show "keyimg S F' (kd F') (proj (kd F')\<cdot>(K1 \<squnion> K))"
-        unfolding keyimg_def K1'x using x(1) xF' by blast
-      show "maximal_at (kd F') (proj (kd F')\<cdot>(K1 \<squnion> K))"
-        by (rule maximal_at_proj[OF sF' maximal_at_join[OF K1m Km j]])
-    qed
-    text \<open>The inner frames pin the truncated key at the transformed LOD.\<close>
-    have pH: "pins ?H (\<tau> L) ?K''"
-      unfolding pins_def
-    proof
-      show "maximal_at (\<tau> L) ?K''" by (rule maximal_at_proj[OF tf_below[OF tf] Km])
-      have le: "slice F \<^bold>\<le> spin K" using asm(3) by (simp add: pins_def)
-      let ?A = "\<tau> (slod (slice F))"
-      have "slod (slice F) = sup (slod (slice F)) (slod (spin K))"
-        using le by (metis sle_def slod_conj)
-      then have "lives_at (slod (slice F)) K"
-        using lives_at_up[of "slod (spin K)" K] slod_spin_lives[OF cK]
-        by (metis lives_at_def sup_ge2)
-      then have eq: "proj ?A\<cdot>K = ?K''"
-        by (rule tf_proj_irrelevant[OF tf]) (simp add: lives_at_def maximal_at_lives[OF Km])
-      have "coarsen ?A (slice F) \<^bold>\<le> coarsen ?A (spin K)" by (rule coarsen_mono[OF le])
-      then have "coarsen ?A (slice F) \<^bold>\<le> spin ?K''" by (simp only: coarsen_spin[OF cK] eq)
-      moreover have "slice ?H \<^bold>\<le> coarsen ?A (slice F)" by (simp add: ffor_def)
-      ultimately show "slice ?H \<^bold>\<le> spin ?K''" by (rule sord.trans[rotated])
-    qed
-    have fH: "amb ?H = amb ?H'" "slice ?H = slice ?H'" by (simp_all add: ffor_def asm(1,2))
-    have dH: "sup (flod ?H) (\<tau> L) = sup (flod ?H') (\<tau> L)"
-      by (simp add: tf_sup[OF tf, symmetric] asm(4))
-    have IH: "sem ?H' (proj (kd ?H')\<cdot>(proj (kd ?H)\<cdot>K1 \<squnion> ?K'')) = sem ?H (proj (kd ?H)\<cdot>K1)"
-      by (rule dims_law[OF fH pH dH ni maximal_at_proj[OF kd_ffor_le[OF tf] K1m]])
-    text \<open>Both sides are the row's key at the inner key LOD.\<close>
-    have e1: "proj (kd ?H)\<cdot>K1 = proj (kd ?H)\<cdot>(rkey\<cdot>x)" by (simp only: K1x proj_le[OF kd_ffor_le[OF tf]])
-    have e2: "?K'' = proj (\<tau> L)\<cdot>(rkey\<cdot>x)" by (simp add: Kx proj_le[OF tf_below[OF tf]])
-    have sH': "kd ?H' \<le> sup (kd ?H) (\<tau> L)"
-    proof -
-      have "kd ?H' = sup mind (\<tau> (kd F'))" by (simp only: flod_ffor kd_ffor[OF tf])
-      also have "\<dots> \<le> sup mind (\<tau> (sup (kd F) L))" using sF' by (intro sup_mono tf_mono[OF tf]) simp_all
-      also have "\<dots> = sup (sup mind (\<tau> (kd F))) (\<tau> L)" by (simp add: tf_sup[OF tf] sup_assoc)
-      also have "\<dots> = sup (kd ?H) (\<tau> L)" by (simp only: flod_ffor kd_ffor[OF tf])
-      finally show ?thesis .
-    qed
-    have key: "proj (kd ?H')\<cdot>(proj (kd ?H)\<cdot>K1 \<squnion> ?K'') = proj (kd ?H')\<cdot>(proj (kd F')\<cdot>(K1 \<squnion> K))"
-      by (simp only: e1 e2 K1'x proj_sup[symmetric] proj_le[OF sH'] proj_le[OF kd_ffor_le[OF tf]])
-    have "filtfor \<tau> G F' (proj (kd F')\<cdot>(K1 \<squnion> K))
-          = sem ?H' (proj (kd ?H')\<cdot>(proj (kd F')\<cdot>(K1 \<squnion> K)))"
-      unfolding filtfor_def by (simp only: if_P[OF K1'k])
-    also have "\<dots> = sem ?H (proj (kd ?H)\<cdot>K1)" using IH unfolding key .
-    also have "\<dots> = filtfor \<tau> G F K1" unfolding filtfor_def by (simp only: if_P[OF K1])
-    finally show ?thesis .
+    let ?H = "ffor \<tau> G F" and ?H' = "ffor \<tau> G F'"
+    have v: "filtfor \<tau> G F0 (rproj (kd F0) x) = sem (ffor \<tau> G F0) (rproj (kd (ffor \<tau> G F0)) x)"
+      if "filtfor \<tau> G F0 (rproj (kd F0) x) \<noteq> \<bottom>" for F0
+      using that proj_le[OF kd_ffor_le[OF tf, of G F0]] by (simp add: filtfor_def split: if_splits)
+    have fH: "amb ?H = amb ?H'" "slice ?H = slice ?H'" by (simp_all add: ffor_def that(1,2))
+    have eq: "dims_equiv natd maskd ?H x (kd ?H) (kd ?H')"
+      by (rule dims_equiv_sup[OF mrows_ffor[OF tf] that(4) maskd_kd_ffor[OF tf] maskd_kd_ffor[OF tf]])
+    have "sem ?H (rproj (kd ?H) x) = sem ?H' (rproj (kd ?H') x)"
+      by (rule dims_law[OF fH that(3) eq]) (use that(5,6) v in simp_all)
+    then show ?thesis using v[OF that(5)] v[OF that(6)] by simp
   qed
   show "filtfor \<tau> G F = filtfor \<tau> G F'"
     if "amb F = amb F'" "slice F = slice F'" "kd F = kd F'" for F F'
@@ -795,9 +807,9 @@ subsection \<open>\<open>RESTRICT\<close>\<close>
 definition restrict where
   "restrict \<phi> sem = (\<lambda>F. sem (frestrict \<phi> F))"
 
-theorem (in expr_sem) lawful_restrict: "lawful mind maxd (restrict \<phi> sem)"
+theorem (in expr_sem) lawful_restrict: "lawful mind natd maskd (restrict \<phi> sem)"
 proof (rule lawfulI)
-  show "mind \<le> maxd" by (rule mind_maxd)
+  show "lod_tf maskd" by (rule maskd_tf)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "restrict \<phi> sem F k \<noteq> \<bottom>" for F k
     using key_slicer[of "frestrict \<phi> F" k] that by (simp add: restrict_def)
   show "proj (kd F)\<cdot>k = k" if "restrict \<phi> sem F k \<noteq> \<bottom>" for F k
@@ -807,14 +819,16 @@ proof (rule lawfulI)
     by (simp add: restrict_def frows_frestrict)
   show "restrict \<phi> sem (peg K F) K = restrict \<phi> sem F K" if "compact K" for F K
     by (simp add: restrict_def peg_frestrict[symmetric] peg_law[OF that])
-  show "restrict \<phi> sem F' (proj (kd F')\<cdot>(K1 \<squnion> K)) = restrict \<phi> sem F K1"
-    if "amb F = amb F'" "slice F = slice F'" "pins F L K" "sup (flod F) L = sup (flod F') L"
-       "restrict \<phi> sem F K1 \<noteq> \<bottom>" "maximal_at (kd F) K1" for F F' L K K1
+  show "restrict \<phi> sem F (rproj (kd F) x) = restrict \<phi> sem F' (rproj (kd F') x)"
+    if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
+      "dims_equiv natd maskd F x (kd F) (kd F')"
+      "restrict \<phi> sem F (rproj (kd F) x) \<noteq> \<bottom>" "restrict \<phi> sem F' (rproj (kd F') x) \<noteq> \<bottom>" for F F' x
   proof -
-    have "pins (frestrict \<phi> F) L K" using that(3) by (simp add: pins_def)
+    text \<open>Restricting loses rows, which the equivalence survives.\<close>
+    have "dims_equiv natd maskd (frestrict \<phi> F) x (kd (frestrict \<phi> F)) (kd (frestrict \<phi> F'))"
+      by (rule dims_equiv_sub[OF _ that(4)]) (auto simp: mrows_def arows_def)
     then show ?thesis
-      using dims_law[of "frestrict \<phi> F" "frestrict \<phi> F'" L K K1] that(1,2,4,5,6)
-      by (simp add: restrict_def)
+      using dims_law[of "frestrict \<phi> F" "frestrict \<phi> F'" x] that by (simp add: restrict_def)
   qed
   show "restrict \<phi> sem F = restrict \<phi> sem F'"
     if "amb F = amb F'" "slice F = slice F'" "kd F = kd F'" for F F'

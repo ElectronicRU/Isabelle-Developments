@@ -9,11 +9,13 @@ session DataAnalyticsLang = "HOLCF" +
     ValsetBase
     Congruence
     Slicer
+    Relspace
     Frame
     LOD
     LOD_Factor
     Domain_Transfer
     Value
+    Expr_Combinators
   document_files
     "root.tex"
     "root.bib"

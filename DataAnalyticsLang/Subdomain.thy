@@ -1562,12 +1562,15 @@ proof (rule order.antisym)
     have "(\<lambda>B. \<p>\<^bsub>B\<^esub>\<cdot>?y) ` \<B> <| \<p>\<^bsub>?C\<^esub>\<cdot>?y"
     proof (rule ub_imageI)
       fix B assume B: "B \<in> \<B>"
-      have "\<p>\<^bsub>B\<^esub>\<cdot>?y \<in> set_of_subdom (inf A B)"
+      have zS: "\<p>\<^bsub>B\<^esub>\<cdot>?y \<in> set_of_subdom (inf A B)"
         using subdom.downward[OF yA subdom.p_below] subdom.p_in_S by (simp add: set_of_subdom_inf)
-      moreover have "inf A B \<le> ?C" using B by (rule SUP_upper)
+      moreover have le: "inf A B \<le> ?C" using B by (rule SUP_upper)
       ultimately have "\<p>\<^bsub>?C\<^esub>\<cdot>(\<p>\<^bsub>B\<^esub>\<cdot>?y) = \<p>\<^bsub>B\<^esub>\<cdot>?y"
-        by (metis p_below_of_le p_fixes deflation.belowD stable_defl.deflation
-            stable_defl_stable_subdom_p)
+      proof -
+        have "\<p>\<^bsub>B\<^esub>\<cdot>?y = \<p>\<^bsub>inf A B\<^esub>\<cdot>(\<p>\<^bsub>B\<^esub>\<cdot>?y)" using zS by (simp add: p_fixes[symmetric])
+        also have "\<dots> \<sqsubseteq> \<p>\<^bsub>?C\<^esub>\<cdot>(\<p>\<^bsub>B\<^esub>\<cdot>?y)" using le by (intro monofun_cfun_fun p_below_of_le)
+        finally show ?thesis by (rule below_antisym[OF subdom.p_below])
+      qed
       moreover have "\<p>\<^bsub>?C\<^esub>\<cdot>(\<p>\<^bsub>B\<^esub>\<cdot>?y) \<sqsubseteq> \<p>\<^bsub>?C\<^esub>\<cdot>?y" by (rule monofun_cfun_arg, rule subdom.p_below)
       ultimately show "\<p>\<^bsub>B\<^esub>\<cdot>?y \<sqsubseteq> \<p>\<^bsub>?C\<^esub>\<cdot>?y" by simp
     qed
