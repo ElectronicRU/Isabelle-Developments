@@ -9,8 +9,8 @@ tools (`Read`/`Edit`/`Write`/`Bash cat`). **ALWAYS** use the **Isabelle/Q (I/Q)
 MCP server** so edits go through the live jEdit instance and PIDE state stays in
 sync. Filesystem tools are fine for non-`.thy` files (`ROOT`, `.tex`, `.bib`, docs).
 
-- First call each session: `mcp__Isabelle_Q__authenticate`. Pass the **literal
-  value** of `$IQ_AUTH_TOKEN` (shell `$VAR` is NOT expanded inside MCP args).
+- No authentication needed: a hook applies the I/Q token. If I/Q hangs or the
+  connection closes, ask the user to run `/mcp reconnect Isabelle_Q`.
 - REPL tools (`repl_*`) require `repl_connect` first.
 - Proof-engineering workflow & style: follow
   `~/Isabelle/AutoCorrode/iq/iq_guidance.md` (surgical, structured, incremental
