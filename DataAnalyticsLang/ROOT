@@ -6,6 +6,7 @@ session DataAnalyticsLang = "HOLCF" +
     Domain
     Interp
     Subdomain
+    Semi_Factor_DI
     ValsetBase
     Congruence
     Slicer
