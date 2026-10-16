@@ -3,10 +3,11 @@ theory Lattice_Complete imports Distributive begin
 section ‹Bounded-complete domains with a top›
 
 text ‹A bounded-complete pcpo with a top element is a complete lattice under its information
-  order: every set is bounded, hence has a lub.  The lattice laws are stated as facts and then
-  interpreted globally, rather than as a sublocale (see @{thm [source] below_order}), so that the
-  join and meet of @{class bounded_complete} serve as the lattice operations, without joinability
-  side conditions.›
+  order: every set is bounded, hence has a lub.  The lattice laws are stated as facts, with the
+  join and meet of @{class bounded_complete} as the lattice operations and no joinability side
+  conditions.  They are deliberately not interpreted globally: that would put HOL's classical
+  lattice rules on ‹⊑› into the global claset, and @{method blast}, which ignores sort
+  constraints during search, then tries them at every type.  Interpret them locally instead.›
 
 class lattice_complete = bounded_complete +
   assumes ex_top: "∃t. ∀x. x ⊑ t"
@@ -28,23 +29,23 @@ qed
 lemma is_ub_lattice_top [simp]: "S <| (lattice_top :: 'a::lattice_complete)"
   by (simp add: is_ub_def)
 
-lemma lub_is_lub: "S <<| lub (S :: 'a::lattice_complete set)"
+lemma lattice_is_lub: "S <<| lub (S :: 'a::lattice_complete set)"
   by (rule ex_bound_lub[OF is_ub_lattice_top])
 
 lemma joinable_lattice [simp]: "(a :: 'a::lattice_complete) ⇑ b"
   by (rule joinableI[OF below_lattice_top below_lattice_top])
 
-lemma below_lub: "x ∈ S ⟹ x ⊑ lub (S :: 'a::lattice_complete set)"
-  by (rule is_ubD[OF is_lubD1[OF lub_is_lub]])
+lemma lattice_lub_upper: "x ∈ S ⟹ x ⊑ lub (S :: 'a::lattice_complete set)"
+  by (rule is_ubD[OF is_lubD1[OF lattice_is_lub]])
 
-lemma lub_below: "S <| b ⟹ lub (S :: 'a::lattice_complete set) ⊑ b"
-  by (rule is_lubD2[OF lub_is_lub])
+lemma lattice_lub_least: "S <| b ⟹ lub (S :: 'a::lattice_complete set) ⊑ b"
+  by (rule is_lubD2[OF lattice_is_lub])
 
 lemma Glb_lower: "x ∈ S ⟹ Glb (S :: 'a::lattice_complete set) ⊑ x"
-  unfolding Glb_def by (rule lub_below) (auto simp: is_ub_def)
+  unfolding Glb_def by (rule lattice_lub_least) (auto simp: is_ub_def)
 
 lemma Glb_greatest: "(⋀y. y ∈ S ⟹ b ⊑ y) ⟹ b ⊑ Glb (S :: 'a::lattice_complete set)"
-  unfolding Glb_def by (rule below_lub) simp
+  unfolding Glb_def by (rule lattice_lub_upper) simp
 
 theorem complete_lattice_below:
   "class.complete_lattice Glb lub (⊓) (⊑) (⊏) (⊔) ⊥ (lattice_top :: 'a::lattice_complete)"
@@ -55,21 +56,18 @@ proof (rule class.complete_lattice.intro[OF class.lattice.intro[OF semilattice_m
   show "class.complete_lattice_axioms Glb lub (⊑) ⊥ (lattice_top :: 'a)"
   proof
     show "lub {} = (⊥ :: 'a)" by (rule lub_eqI) simp
-  qed (simp_all add: Glb_lower Glb_greatest below_lub lub_below is_ub_def,
+  qed (simp_all add: Glb_lower Glb_greatest lattice_lub_upper lattice_lub_least is_ub_def,
        simp add: Glb_def lattice_top_def)
 qed
-
-global_interpretation lattice_complete: complete_lattice
-  "Glb :: 'a::lattice_complete set ⇒ 'a" lub "(⊓)" "(⊑)" "(⊏)" "(⊔)" ⊥ lattice_top
-  by (fact complete_lattice_below)
 
 theorem distrib_lattice_below:
   "class.distrib_lattice (⊓) (⊑) (⊏) ((⊔) :: 'a::{lattice_complete, distributive_cpo} ⇒ _)"
   by (rule class.distrib_lattice.intro[OF class.complete_lattice.axioms(1)[OF complete_lattice_below]])
     (unfold_locales, simp add: join_meet_distrib)
 
-global_interpretation lattice_complete_distrib: distrib_lattice
-  "(⊓) :: 'a::{lattice_complete, distributive_cpo} ⇒ _" "(⊑)" "(⊏)" "(⊔)"
-  by (fact distrib_lattice_below)
+text ‹Adjoining a top to a bounded-complete domain makes it a complete lattice.›
+
+instance top :: (bounded_complete) lattice_complete
+  by intro_classes (rule exI[of _ Top], simp)
 
 end

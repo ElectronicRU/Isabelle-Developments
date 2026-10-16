@@ -1,5 +1,5 @@
 theory Subdomain 
-  imports HOLCF "HOLCF-extra.Directed" "HOLCF-extra.Distributive"
+  imports HOLCF "HOLCF-extra.Directed" "HOLCF-extra.Lattice_Complete"
   abbrevs ",," = "\<downharpoonright>"
 begin
 
@@ -934,6 +934,9 @@ lemma stable_subdom_is_lub: "\<A> <<| Sup \<A>" for \<A> :: "'a stable_subdom se
 instance stable_subdom :: ("{bifinite, bounded_complete}") bounded_complete
   by standard (blast intro: stable_subdom_is_lub)
 
+instance stable_subdom :: ("{bifinite, bounded_complete}") lattice_complete
+  by intro_classes (rule exI[of _ top], simp add: below_stable_subdom_iff_le)
+
 lemma p_below_iff_le: "\<p>\<^bsub>A\<^esub> \<sqsubseteq> \<p>\<^bsub>B\<^esub> \<longleftrightarrow> A \<le> B"
   by (simp add: less_eq_stable_subdom.rep_eq)
 
@@ -1591,9 +1594,22 @@ text \<open>Following Jung, the semi-factors (stable subdomains satisfying the s
   intersection of semi-factors need not be one.  The meet of a family is therefore recovered
   as the sup of its semi-factor lower bounds.\<close>
 
-typedef 'a semi_factor = "{A :: 'a stable_subdom. is_semi_factor A}"
+text \<open>Semi-factors are closed under arbitrary sups, in particular under lubs of chains: they form
+  a sub-pcpo of the stable subdomains.\<close>
+
+pcpodef 'a semi_factor = "{A :: 'a stable_subdom. is_semi_factor A}"
   morphisms subdom_of_semi_factor semi_factor_of_subdom
-  using is_semi_factor_bot by blast
+proof -
+  have b: "bot = (\<bottom> :: 'a stable_subdom)" by (rule bottomI) (simp add: below_stable_subdom_iff_le)
+  show "\<bottom> \<in> {A :: 'a stable_subdom. is_semi_factor A}" using is_semi_factor_bot by (simp add: b[symmetric])
+next
+  show "adm (\<lambda>A. A \<in> {A :: 'a stable_subdom. is_semi_factor A})"
+  proof (rule admI, simp)
+    fix Y :: "nat \<Rightarrow> 'a stable_subdom" assume Y: "chain Y" "\<forall>i. is_semi_factor (Y i)"
+    have "(\<Squnion>i. Y i) = Sup (range Y)" by (rule lub_eqI) (rule stable_subdom_is_lub)
+    then show "is_semi_factor (\<Squnion>i. Y i)" using Y(2) by (auto intro: is_semi_factor_Sup)
+  qed
+qed
 
 setup_lifting type_definition_semi_factor
 
@@ -1636,6 +1652,21 @@ end
 
 instance semi_factor ::  ("{bifinite,distributive_cpo}") distrib_lattice
   by (intro_classes, transfer', rule sup_inf_distrib1)
+
+text \<open>As for stable subdomains, the domain order is the lattice order.\<close>
+
+lemma below_semi_factor_iff_le: "F \<sqsubseteq> G \<longleftrightarrow> F \<le> G" for F G :: "'a semi_factor"
+  by (simp add: below_semi_factor_def less_eq_semi_factor.rep_eq below_stable_subdom_iff_le)
+
+lemma semi_factor_is_lub: "\<A> <<| Sup \<A>" for \<A> :: "'a semi_factor set"
+  by (auto intro!: is_lubI is_ubI Sup_upper Sup_least
+      simp: below_semi_factor_iff_le is_ub_def)
+
+instance semi_factor :: ("{bifinite,distributive_cpo}") bounded_complete
+  by standard (blast intro: semi_factor_is_lub)
+
+instance semi_factor :: ("{bifinite,distributive_cpo}") lattice_complete
+  by intro_classes (rule exI[of _ top], simp add: below_semi_factor_iff_le)
 
 lift_definition semi_factor_p :: "'a semi_factor \<Rightarrow> 'a \<rightarrow> 'a"
 is "stable_subdom_p" .
