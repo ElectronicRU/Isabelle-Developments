@@ -11,6 +11,7 @@ session "HOLCF-extra" = HOLCF +
     Distributive
     Filter_Sum
     DI
+    Lattice_Complete
     Domain_Order
     Domain_Order_Derive
     Directed
