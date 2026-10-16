@@ -270,7 +270,12 @@ text \<open>Reading at a join of LODs is reading at both.\<close>
 
 lemma rproj_sup_fequiv: "relspace.fequiv D (\<lambda>x. (rproj a x, rproj b x)) (rproj (sup a b))"
   unfolding relspace.fequiv_def relspace.determines_rows
-  using proj_sup proj_le sup_ge1 sup_ge2 sorry (*doesnt go through with metis*)
+proof (intro conjI ballI impI)
+  fix d d' assume "rproj (sup a b) d = rproj (sup a b) d'"
+  then have "proj a\<cdot>(rproj (sup a b) d) = proj a\<cdot>(rproj (sup a b) d')"
+    "proj b\<cdot>(rproj (sup a b) d) = proj b\<cdot>(rproj (sup a b) d')" by simp_all
+  then show "(rproj a d, rproj b d) = (rproj a d', rproj b d')" by (simp add: proj_le)
+qed (simp add: proj_sup)
 
 text \<open>Two LODs are \<^emph>\<open>equivalent at grain \<open>n\<close> through a mask \<open>\<rho>\<close>\<close> in a frame, together with a
   further row \<open>x\<close>, when their masks are equivalent modulo \<open>n\<close> on those rows (@{const
@@ -301,6 +306,16 @@ proof -
     by (rule relspace.equiv_mod_pair)
   then show ?thesis unfolding dims_equiv_def assms(3,4)
     by (rule relspace.equiv_mod_fequiv[OF rproj_sup_fequiv rproj_sup_fequiv])
+qed
+
+text \<open>A finer grain constrains more pairs of rows, so the equivalence survives coarsening it.\<close>
+
+lemma dims_equiv_natd_le: "n \<le> n' \<Longrightarrow> dims_equiv n' \<rho> F x a t \<Longrightarrow> dims_equiv n \<rho> F x a t"
+proof -
+  assume le: "n \<le> n'" and e: "dims_equiv n' \<rho> F x a t"
+  have "rproj n' d \<noteq> rproj n' d'" if "rproj n d \<noteq> rproj n d'" for d d'
+    using that proj_le[OF le, of "rkey\<cdot>d"] proj_le[OF le, of "rkey\<cdot>d'"] by force
+  with e show ?thesis unfolding dims_equiv_def relspace.equiv_mod_def by blast
 qed
 
 end
