@@ -1,5 +1,5 @@
 theory LOD
-  imports ValsetBase "HOL-Library.FSet"
+  imports LOD_Factor "HOL-Library.FSet"
 begin
 
 section \<open>Level-of-detail spaces\<close>
@@ -489,5 +489,74 @@ lemma truncate_fdrop [simp]: "truncate (fdrop D) A = ffilter (\<lambda>d. d \<no
 interpretation dims: lod_tuple_space "\<lambda>A. tcut (fset A) :: ('d, 'v::{bounded_complete, chfin}) tuple \<rightarrow> _"
   fdrop
   by unfold_locales (simp_all add: tcut_compose Int_commute Collect_conj_eq Compl_eq)
+
+section \<open>The type of levels of detail\<close>
+
+text \<open>Levels of detail are the finitary semi-factors.  They are closed under meets (composition
+  of a compact-valued deflation), binary joins (joins of compacts) and \<open>\<bottom>\<close>.\<close>
+
+lemma finitary_semi_factor_inf:
+  "finitary_semi_factor F \<Longrightarrow> finitary_semi_factor G \<Longrightarrow> finitary_semi_factor (inf F G)"
+  by (simp add: finitary_semi_factor_def finitary_def semi_factor_p.rep_eq inf_semi_factor.rep_eq
+      p_inf)
+
+lemma finitary_semi_factor_sup:
+  "finitary_semi_factor F \<Longrightarrow> finitary_semi_factor G \<Longrightarrow> finitary_semi_factor (sup F G)"
+  by (simp add: finitary_semi_factor_def finitary_def semi_factor_p.rep_eq sup_semi_factor.rep_eq
+      p_sup_join compact_join)
+
+lemma finitary_semi_factor_bot: "finitary_semi_factor bot"
+  by (simp add: finitary_semi_factor_def finitary_def semi_factor_p.rep_eq bot_semi_factor.rep_eq
+      p_bot_stable_subdom)
+
+typedef (overloaded) 'a lod =
+  "{F :: 'a::{bifinite, distributive_cpo} semi_factor. finitary_semi_factor F}"
+  morphisms semi_factor_of_lod lod_of_semi_factor
+  using finitary_semi_factor_bot by blast
+
+setup_lifting type_definition_lod
+
+instantiation lod :: ("{bifinite, distributive_cpo}") "{distrib_lattice, bounded_lattice_bot}"
+begin
+
+lift_definition less_eq_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> bool" is "(\<le>)" .
+lift_definition less_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> bool" is "(<)" .
+lift_definition inf_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> 'a lod" is inf by (rule finitary_semi_factor_inf)
+lift_definition sup_lod :: "'a lod \<Rightarrow> 'a lod \<Rightarrow> 'a lod" is sup by (rule finitary_semi_factor_sup)
+lift_definition bot_lod :: "'a lod" is bot by (rule finitary_semi_factor_bot)
+
+instance
+  apply (standard; transfer; simp add: less_le_not_le)
+  apply (standard; transfer)
+  apply (simp_all add: less_le_not_le)
+  by (rule sup_inf_distrib1)
+
+end
+
+interpretation lod: lod_space "\<lambda>L. semi_factor_p (semi_factor_of_lod L) :: 'a::locally_finitely_detailed \<rightarrow> 'a"
+proof unfold_locales
+  fix a b :: "'a lod" and k x y :: 'a
+  note sf = semi_factor_defl_semi_factor_p[of "semi_factor_of_lod a"]
+  show "k \<downharpoonright> semi_factor_of_lod (inf a b) = k \<downharpoonright> semi_factor_of_lod b \<downharpoonright> semi_factor_of_lod a"
+    by (simp add: inf_lod.rep_eq semi_factor_proj_comp inf_commute)
+  show "k \<downharpoonright> semi_factor_of_lod (sup a b) = k \<downharpoonright> semi_factor_of_lod a \<squnion> k \<downharpoonright> semi_factor_of_lod b"
+    by (simp add: sup_lod.rep_eq semi_factor_p_sup)
+  show "semi_factor_p (semi_factor_of_lod bot) = \<bottom>"
+    by (simp add: bot_lod.rep_eq semi_factor_p_bot)
+  show "x \<Up> y" if "y \<downharpoonright> semi_factor_of_lod a = y" "x \<downharpoonright> semi_factor_of_lod a \<sqsubseteq> y"
+    using that by (rule semi_factor_defl.slide[OF sf])
+  show "compact (k \<downharpoonright> semi_factor_of_lod a)"
+    using semi_factor_of_lod[of a] by (simp add: finitary_semi_factor_def finitary_def)
+  show "(x \<squnion> y) \<downharpoonright> semi_factor_of_lod a = x \<downharpoonright> semi_factor_of_lod a \<squnion> y \<downharpoonright> semi_factor_of_lod a"
+    if "x \<Up> y"
+    using semi_factor_defl.axioms(1)[OF sf] that by (rule stable_defl_image_join)
+  show "x \<downharpoonright> semi_factor_of_lod a = x" if "y \<downharpoonright> semi_factor_of_lod a = y" "x \<sqsubseteq> y"
+    using that by (rule stable_defl.downclosed[OF semi_factor_defl.axioms(1)[OF sf]])
+next
+  fix k :: 'a assume "compact k"
+  then obtain F where F: "finitary_semi_factor F" "k \<downharpoonright> F = k" using compact_level by blast
+  then show "\<exists>c. k \<downharpoonright> semi_factor_of_lod c = k"
+    by (intro exI[of _ "lod_of_semi_factor F"]) (simp add: lod_of_semi_factor_inverse)
+qed
 
 end
