@@ -73,15 +73,14 @@ lemma compact_fun_fold_sup:
     \<Longrightarrow> compact (fold sup fs b :: 'a \<Rightarrow> 'c::{bifinite, distributive_cpo} semi_factor)"
   by (induct fs arbitrary: b) (simp_all add: compact_fun_sup)
 
-lemma fold_sup_apply_bot:
-  "(\<And>f. f \<in> set fs \<Longrightarrow> f x = bot) \<Longrightarrow> fold sup fs b x = (b x :: 'b::bounded_lattice_bot)"
+lemma fold_sup_apply_le:
+  "(\<And>f. f \<in> set fs \<Longrightarrow> f x \<le> f y) \<Longrightarrow> b x \<le> b y
+    \<Longrightarrow> fold sup fs b x \<le> (fold sup fs b y :: 'b::semilattice_sup)"
 proof (induct fs arbitrary: b)
   case (Cons a fs)
-  have ax: "a x = bot" by (rule Cons.prems) simp
-  have "fold sup (a # fs) b x = fold sup fs (sup a b) x" by (simp only: fold_Cons o_apply)
-  also have "\<dots> = sup a b x" by (rule Cons.hyps) (use Cons.prems in auto)
-  also have "\<dots> = b x" by (simp add: ax)
-  finally show ?case .
+  have "a x \<le> a y" by (rule Cons.prems(1)) simp
+  then have "sup a b x \<le> sup a b y" using Cons.prems(2) by (simp add: le_supI1 le_supI2)
+  then show ?case unfolding fold_Cons o_apply by (rule Cons.hyps[rotated]) (rule Cons.prems(1), simp)
 qed simp
 
 definition collect :: "('k semi_factor, 'f, 'r, 'k, 'a::domain) expr list \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'a stuple) expr"
@@ -200,8 +199,8 @@ proof -
       by (rule compact_fold_sup) (auto intro: expr_sem.mind_compact[OF law])
     show "compact (edims (collect Es))" unfolding collect_simps(2)
       by (rule compact_fun_fold_sup) (auto intro: expr_sem.dims_compact[OF law])
-    show "edims (collect Es) bot = bot" unfolding collect_simps(2)
-      by (subst fold_sup_apply_bot) (auto intro: expr_sem.dims_bot[OF law])
+    show "edims (collect Es) \<rho> \<le> edims (collect Es) bot" for \<rho> unfolding collect_simps(2)
+      by (rule fold_sup_apply_le) (auto intro: expr_sem.dims_bot[OF law])
   qed
 qed
 
