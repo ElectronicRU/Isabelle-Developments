@@ -41,7 +41,7 @@ begin
 
 subsection \<open>Key LODs\<close>
 
-definition ekd :: "('l, 'f, 'r, 'k, 'v) expr \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'l" where
+definition ekd :: "('k semi_factor, 'f, 'r, 'k, 'v) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
   "ekd E F = sup (emind E) (flod F)"
 
 subsection \<open>Collect\<close>
@@ -50,7 +50,7 @@ text \<open>The components are evaluated at the frame extended by all their mind
   the collected key LOD; the collected minimal LOD is the join, and the dims are the union: the
   collected dims law needs each component's own hypothesis, and no more.\<close>
 
-definition collect :: "('l, 'f, 'r, 'k, 'a::domain) expr list \<Rightarrow> ('l, 'f, 'r, 'k, 'a stuple) expr"
+definition collect :: "('k semi_factor, 'f, 'r, 'k, 'a::domain) expr list \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'a stuple) expr"
   where "collect Es =
     (let M = fold sup (map emind Es) bot in
      \<lparr>emind = M, edims = fold sup (map edims Es) bot,
@@ -85,12 +85,12 @@ theorem lawful_collect:
 proof -
   let ?M = "emind (collect Es)"
   have kd: "sup (emind E) (flod (finclude ?M F)) = sup ?M (flod F)"
-    if "E \<in> set Es" for E and F :: "('l, 'f, 'r) frame"
+    if "E \<in> set Es" for E and F :: "('k semi_factor, 'f, 'r) frame"
     using ekd_collect[OF that, of F] by (simp only: ekd_def)
   obtain E0 where E0: "E0 \<in> set Es" using ne by (cases Es) auto
   have nb: "esem E (finclude ?M F) k \<noteq> \<bottom>" if "esem (collect Es) F k \<noteq> \<bottom>" "E \<in> set Es" for E F k
     using that by (auto simp: collect_simps stuple_of_bottom_iff)
-  interpret E0: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+  interpret E0: expr_sem conj sunit slod sopen coarsen spin rkey S
     "emind E0" "edims E0" "esem E0"
     by (rule law[OF E0])
   show ?thesis
@@ -107,7 +107,7 @@ proof -
       note cK = that
       have e: "esem E (finclude ?M (peg K F)) K = esem E (finclude ?M F) K" if "E \<in> set Es" for E
       proof -
-        interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
           "emind E" "edims E" "esem E"
           by (rule law[OF that])
         show ?thesis by (simp only: peg_finclude[symmetric] E.peg_law[OF cK])
@@ -126,7 +126,7 @@ proof -
       have e: "esem E (finclude ?M F) (rproj (sup ?M (flod F)) x)
           = esem E (finclude ?M F') (rproj (sup ?M (flod F')) x)" if E: "E \<in> set Es" for E
       proof -
-        interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
           "emind E" "edims E" "esem E"
           by (rule law[OF E])
         have eq: "dims_equivs (edims E) (finclude ?M F) x
@@ -151,12 +151,12 @@ proof -
     qed
     show "esem (collect Es) F = esem (collect Es) F'"
       if "amb F = amb F'" "slice F = slice F'" "sup ?M (flod F) = sup ?M (flod F')"
-      for F F' :: "('l, 'f, 'r) frame"
+      for F F' :: "('k semi_factor, 'f, 'r) frame"
     proof -
       note a = that
       have e: "esem E (finclude ?M F) = esem E (finclude ?M F')" if "E \<in> set Es" for E
       proof -
-        interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
           "emind E" "edims E" "esem E"
           by (rule law[OF that])
         show ?thesis by (rule E.eff_law) (simp_all only: amb_finclude slice_finclude kd[OF that] a)
@@ -164,6 +164,8 @@ proof -
       show ?thesis unfolding collect_simps(3)
         by (intro ext arg_cong[where f = stuple_of] map_cong[OF refl]) (simp only: e)
     qed
+    show "compact ?M" unfolding collect_simps(1)
+      by (rule compact_fold_sup) (auto intro: expr_sem.mind_compact[OF law])
   qed
 qed
 

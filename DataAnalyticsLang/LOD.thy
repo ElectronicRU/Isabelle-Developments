@@ -84,6 +84,21 @@ lemma proj_sup: "proj (sup a b)\<cdot>k = proj a\<cdot>k \<squnion> proj b\<cdot
 lemma proj_bot: "proj bot = \<bottom>"
   by (simp add: semi_factor_p_bot)
 
+lemma semi_factor_bot_bottom: "(bot :: 'k::{bifinite, distributive_cpo} semi_factor) = \<bottom>"
+  by (rule bottomI) (simp add: below_semi_factor_iff_le)
+
+lemma compact_semi_factor_bot [simp]: "compact (bot :: 'k::{bifinite, distributive_cpo} semi_factor)"
+  by (simp add: semi_factor_bot_bottom)
+
+lemma compact_semi_factor_sup:
+  "compact a \<Longrightarrow> compact b \<Longrightarrow> compact (sup a b :: 'k::{bifinite, distributive_cpo} semi_factor)"
+  by (simp add: join_semi_factor[symmetric] compact_join)
+
+lemma compact_fold_sup:
+  "(\<And>x. x \<in> set xs \<Longrightarrow> compact x) \<Longrightarrow> compact b
+    \<Longrightarrow> compact (fold sup xs b :: 'k::{bifinite, distributive_cpo} semi_factor)"
+  by (induct xs arbitrary: b) (simp_all add: compact_semi_factor_sup)
+
 lemma proj_defl: "deflation (proj a)"
   by (rule deflation_semi_factor_p)
 
@@ -608,7 +623,45 @@ lemma truncate_top [simp]: "truncate top x = x"
 lemma truncate_bot_trunc [simp]: "truncate bot x = bot"
   by transfer simp
 
+text \<open>In a bounded lattice a truncation is the meet with its value at the top.\<close>
+
+lemma truncate_eq_inf_top: "truncate \<tau> x = inf x (truncate \<tau> top)"
+  for \<tau> :: "'l::{distrib_lattice, bounded_lattice} trunc"
+  using truncate_inf[of \<tau> x top] by simp
+
 subsection \<open>Truncations acting on keys\<close>
+
+text \<open>On semi-factors a truncation acts on keys by projecting onto its value at the top.  (These
+  are the top-level versions of the facts in the locale below.)\<close>
+
+lemma truncate_proj_irrelevant:
+  assumes c: "lives_at c k" and c': "lives_at c' k"
+  shows "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c')\<cdot>k"
+proof -
+  have e: "inf (truncate \<tau> c) c' = inf (truncate \<tau> c') c" by (metis truncate_inf inf_commute)
+  have "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c)\<cdot>(proj c'\<cdot>k)" using c' by (simp add: lives_at_def)
+  also have "\<dots> = proj (inf (truncate \<tau> c) c')\<cdot>k" by (simp only: proj_inf)
+  also have "\<dots> = proj (inf (truncate \<tau> c') c)\<cdot>k" by (simp only: e)
+  also have "\<dots> = proj (truncate \<tau> c')\<cdot>(proj c\<cdot>k)" by (simp only: proj_inf)
+  also have "\<dots> = proj (truncate \<tau> c')\<cdot>k" using c by (simp add: lives_at_def)
+  finally show ?thesis .
+qed
+
+definition truncate_key :: "'k::{bifinite, distributive_cpo} semi_factor trunc \<Rightarrow> 'k \<Rightarrow> 'k" where
+  "truncate_key \<tau> k = proj (truncate \<tau> top)\<cdot>k"
+
+lemma truncate_key_eq:
+  assumes c: "lives_at c k"
+  shows "truncate_key \<tau> k = proj (truncate \<tau> c)\<cdot>k"
+proof -
+  have "proj (truncate \<tau> c)\<cdot>k = proj c\<cdot>(proj (truncate \<tau> top)\<cdot>k)"
+    by (simp add: truncate_eq_inf_top[of \<tau> c] proj_inf)
+  also have "\<dots> = proj (truncate \<tau> top)\<cdot>(proj c\<cdot>k)" by (rule proj_commute)
+  also have "\<dots> = truncate_key \<tau> k" using c by (simp add: lives_at_def truncate_key_def)
+  finally show ?thesis by simp
+qed
+
+subsection \<open>Truncations acting on keys: the locale version\<close>
 
 context lod_space
 begin

@@ -68,14 +68,14 @@ section \<open>Frame semantics\<close>
 text \<open>Rows have keys, via \<open>rkey\<close>; a frame selects the rows in its ambient filter whose key its
   slice holds at.\<close>
 
-locale frame_sem = pin_slicer proj conj sunit slod sopen coarsen spin
-  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
-    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and slod sopen coarsen spin +
+locale frame_sem = pin_slicer conj sunit slod sopen coarsen spin
+  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
+    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel"
+    and coarsen spin +
   fixes rkey :: "'r::pcpo \<rightarrow> 'k"
 begin
 
-definition frows :: "('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> bool" where
+definition frows :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> bool" where
   "frows F r \<longleftrightarrow> selects (amb F) r \<and> holds (slice F) (rkey\<cdot>r)"
 
 lemma frows_cong: "amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> frows F = frows F'"
@@ -87,16 +87,16 @@ lemma frows_finclude [simp]: "frows (finclude D F) = frows F"
 lemma frows_frestrict: "frows (frestrict \<phi> F) r \<longleftrightarrow> frows F r \<and> selects \<phi> r"
   by (auto simp: frows_def)
 
-definition fgroupby :: "'l \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
+definition fgroupby :: "'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "fgroupby D F = F\<lparr>flod := D, slice := coarsen D (slice F)\<rparr>"
 
-definition fisolate :: "('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
+definition fisolate :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "fisolate F = \<lparr>flod = bot, amb = top, slice = \<^bold>1\<rparr>"
 
-definition ffor :: "'l trunc \<Rightarrow> 'f \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
+definition ffor :: "'k semi_factor trunc \<Rightarrow> 'f \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "ffor \<tau> G F = F\<lparr>flod := truncate \<tau> (flod F), slice := trunc_slice \<tau> (slice F) \<^bold>* G\<rparr>"
 
-definition peg :: "'k \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> ('l, 'f, 'r) frame" where
+definition peg :: "'k \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "peg K F = F\<lparr>slice := slice F \<^bold>* spin K\<rparr>"
 
 lemma flod_peg [simp]: "flod (peg K F) = flod F"
@@ -129,11 +129,10 @@ lemma fisolate_peg: "fisolate (peg K F) = fisolate F"
   by (simp add: fisolate_def)
 
 lemma ffor_peg:
-  assumes K: "proj c\<cdot>K = K"
+  assumes cK: "compact K" and K: "proj c\<cdot>K = K"
   shows "ffor \<tau> G (peg K F) = peg (proj (truncate \<tau> c)\<cdot>K) (ffor \<tau> G F)"
 proof -
   let ?a = "slod (slice F)" and ?b = "slod (spin K)"
-  have cK: "compact K" by (metis K proj_compact)
   have bK: "proj ?b\<cdot>K = K" by (rule slod_spin_lives[OF cK])
   have abK: "lives_at (sup ?a ?b) K"
     using lives_at_up[of ?b K "sup ?a ?b"] bK by (simp add: lives_at_def)
@@ -170,10 +169,10 @@ text \<open>The keys a frame has at an LOD are the projections of the data point
 context frame_sem
 begin
 
-definition keyimg :: "'r set \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'l \<Rightarrow> 'k \<Rightarrow> bool" where
+definition keyimg :: "'r set \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> bool" where
   "keyimg S F c k \<longleftrightarrow> (\<exists>x\<in>pts S. frows F x \<and> k = proj c\<cdot>(rkey\<cdot>x))"
 
-definition fkeys :: "'r set \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'l \<Rightarrow> 'k \<Rightarrow> bool" where
+definition fkeys :: "'r set \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> bool" where
   "fkeys S F c k \<longleftrightarrow> keyimg S F c k \<and> maximal_at c k"
 
 lemma keyimg_cong: "frows F = frows F' \<Longrightarrow> keyimg S F c = keyimg S F' c"
@@ -202,17 +201,17 @@ text \<open>A frame \<^emph>\<open>pins\<close> a key at an LOD when its slice s
   survives coarsening: a slice may pin a key semantically through a condition that coarsening
   loses.)\<close>
 
-definition pins :: "('l, 'f, 'r) frame \<Rightarrow> 'l \<Rightarrow> 'k \<Rightarrow> bool" where
-  "pins F L K \<longleftrightarrow> slice F \<^bold>\<le> spin K \<and> maximal_at L K"
+definition pins :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> bool" where
+  "pins F L K \<longleftrightarrow> slice F \<^bold>\<le> spin K \<and> maximal_at L K \<and> compact K"
 
 lemma pins_compact: "pins F L K \<Longrightarrow> compact K"
-  unfolding pins_def by (blast intro: maximal_at_compact)
+  unfolding pins_def by blast
 
-lemma pins_peg: "maximal_at L K \<Longrightarrow> pins (peg K F) L K"
+lemma pins_peg: "compact K \<Longrightarrow> maximal_at L K \<Longrightarrow> pins (peg K F) L K"
   by (simp add: pins_def)
 
 lemma frows_pinned: "pins F L K \<Longrightarrow> frows F r \<Longrightarrow> K \<sqsubseteq> rkey\<cdot>r"
-  unfolding frows_def pins_def by (blast intro: holds_pinned maximal_at_compact)
+  unfolding frows_def pins_def by (blast intro: holds_pinned)
 
 text \<open>On a row of a pinning frame, the pinned key is the row's key at the pin's LOD.\<close>
 
@@ -233,7 +232,7 @@ lemma pin_below_key:
   assumes "pins F L K" "maximal_at c K1" "K1 \<sqsubseteq> k'" "holds (slice F) k'"
   shows "proj c\<cdot>K \<sqsubseteq> K1" "K1 \<Up> K"
 proof -
-  have "K \<sqsubseteq> k'" using assms(1,4) unfolding pins_def by (blast intro: holds_pinned maximal_at_compact)
+  have "K \<sqsubseteq> k'" using assms(1,4) unfolding pins_def by (blast intro: holds_pinned)
   show "proj c\<cdot>K \<sqsubseteq> K1" by (rule proj_below_maximal[OF assms(2) \<open>K \<sqsubseteq> k'\<close> assms(3)])
   show "K1 \<Up> K" using assms(3) \<open>K \<sqsubseteq> k'\<close> by (rule joinableI)
 qed
@@ -242,10 +241,10 @@ end
 
 section \<open>Laws for an abstract semantics\<close>
 
-locale dataspace = frame_sem proj conj sunit slod sopen coarsen spin rkey
-  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
-    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and slod sopen coarsen spin and rkey :: "'r::pcpo \<rightarrow> 'k" +
+locale dataspace = frame_sem conj sunit slod sopen coarsen spin rkey
+  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
+    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel"
+    and coarsen spin and rkey :: "'r::pcpo \<rightarrow> 'k" +
   fixes S :: "'r set"
   assumes dataset_S: "dataset S"
 begin
@@ -258,10 +257,10 @@ text \<open>The data rows in an ambient filter, and among them those whose key p
 definition arows :: "'r sel \<Rightarrow> 'r set" where
   "arows \<phi> = {x \<in> pts S. selects \<phi> x}"
 
-definition mrows :: "'l trunc \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r set" where
+definition mrows :: "'k semi_factor trunc \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r set" where
   "mrows \<rho> F = {x \<in> arows (amb F). holds (trunc_slice \<rho> (slice F)) (rkey\<cdot>x)}"
 
-abbreviation rproj :: "'l \<Rightarrow> 'r \<Rightarrow> 'k" where
+abbreviation rproj :: "'k semi_factor \<Rightarrow> 'r \<Rightarrow> 'k" where
   "rproj L x \<equiv> proj L\<cdot>(rkey\<cdot>x)"
 
 lemma mrows_cong: "amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> mrows \<rho> F = mrows \<rho> F'"
@@ -286,7 +285,7 @@ text \<open>Two LODs are \<^emph>\<open>equivalent at grain \<open>n\<close> thr
   relspace.equiv_mod}).  Being a condition on pairs of rows, it survives losing rows; it also
   survives adding the same detail to both sides.\<close>
 
-definition dims_equiv :: "'l \<Rightarrow> 'l trunc \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
+definition dims_equiv :: "'k semi_factor \<Rightarrow> 'k semi_factor trunc \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
   "dims_equiv n \<rho> F x a t \<longleftrightarrow>
      relspace.equiv_mod (insert x (mrows \<rho> F)) (rproj n) (rproj (truncate \<rho> a)) (rproj (truncate \<rho> t))"
 
@@ -347,7 +346,7 @@ qed
 
 text \<open>An expression's dims hypothesis holds at every pair of its dims.\<close>
 
-definition dims_equivs :: "('l \<times> 'l trunc) fset \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
+definition dims_equivs :: "('k semi_factor \<times> 'k semi_factor trunc) fset \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
   "dims_equivs \<Delta> F x a t \<longleftrightarrow> (\<forall>(n, \<rho>) |\<in>| \<Delta>. dims_equiv n \<rho> F x a t)"
 
 lemma dims_equivsD: "dims_equivs \<Delta> F x a t \<Longrightarrow> (n, \<rho>) |\<in>| \<Delta> \<Longrightarrow> dims_equiv n \<rho> F x a t"
@@ -384,9 +383,13 @@ locale expr_sem = dataspace +
                    \<Longrightarrow> sem F (rproj (sup mind (flod F)) x) = sem F' (rproj (sup mind (flod F')) x)"
     and eff_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
                   \<Longrightarrow> sem F = sem F'"
+    and mind_compact: "compact mind"
 begin
 
 abbreviation "kd F \<equiv> sup mind (flod F)"
+
+lemma kd_compact: "compact (flod F) \<Longrightarrow> compact (kd F)"
+  by (simp add: join_semi_factor[symmetric] compact_join mind_compact)
 
 
 text \<open>The compatibility the dims law relies on is automatic: an entry's key is the projection of
@@ -411,10 +414,10 @@ lemma peg_below: "compact K' \<Longrightarrow> compact K \<Longrightarrow> K' \<
 text \<open>Pegging to a key maximal at the key LOD leaves at most that key.\<close>
 
 theorem strong_peg:
-  assumes K: "maximal_at (kd F) K"
+  assumes F: "compact (flod F)" and K: "maximal_at (kd F) K"
   shows "sem (peg K F) k = (if k = K then sem F K else \<bottom>)"
 proof (cases "k = K")
-  case True then show ?thesis by (simp add: peg_law maximal_at_compact[OF K])
+  case True then show ?thesis by (simp add: peg_law maximal_at_compact[OF K kd_compact[OF F]])
 next
   case False
   show ?thesis
@@ -423,7 +426,7 @@ next
     with False have nb: "sem (peg K F) k \<noteq> \<bottom>" by simp
     obtain x where x: "frows (peg K F) x" and kx: "k = proj (kd F)\<cdot>(rkey\<cdot>x)"
       using key_data[OF nb] by (auto simp: keyimg_def)
-    have "K \<sqsubseteq> rkey\<cdot>x" using x by (simp add: frows_peg maximal_at_compact[OF K])
+    have "K \<sqsubseteq> rkey\<cdot>x" using x by (simp add: frows_peg maximal_at_compact[OF K kd_compact[OF F]])
     then have "proj (kd F)\<cdot>K \<sqsubseteq> k" unfolding kx by (rule monofun_cfun_arg)
     then have Kk: "K \<sqsubseteq> k" by (simp only: maximal_at_lives[OF K])
     have lv: "proj (kd F)\<cdot>k = k" using key_lives[OF nb] by simp
@@ -435,15 +438,14 @@ qed
 text \<open>Through a mask, a pin still fixes the masked truncation of the key.\<close>
 
 lemma masked_pin:
-  assumes K: "maximal_at c K" and h: "holds (trunc_slice \<rho> (spin K)) k"
+  assumes cK: "compact K" and K: "maximal_at c K" and h: "holds (trunc_slice \<rho> (spin K)) k"
   shows "proj (truncate \<rho> c)\<cdot>k = proj (truncate \<rho> c)\<cdot>K"
 proof -
-  have cK: "compact K" by (rule maximal_at_compact[OF K])
   have "proj (truncate \<rho> (slod (spin K)))\<cdot>K = proj (truncate \<rho> c)\<cdot>K"
     by (rule truncate_proj_irrelevant)
       (simp_all add: lives_at_def slod_spin_lives[OF cK] maximal_at_lives[OF K])
   then have "proj (truncate \<rho> c)\<cdot>K \<sqsubseteq> k"
-    using h by (simp add: coarsen_spin[OF cK] holds_spin[OF proj_compact])
+    using h by (simp add: coarsen_spin[OF cK] holds_spin[OF compact_proj_compact[OF cK]])
   then have "proj (truncate \<rho> c)\<cdot>K \<sqsubseteq> proj (truncate \<rho> c)\<cdot>k" by (metis monofun_cfun_arg proj_idem)
   then show ?thesis
     by (rule maximal_at_eq[OF maximal_at_proj[OF truncate_below K] proj_idem])
@@ -456,10 +458,11 @@ text \<open>Values at different levels of detail: an entry of a frame pegged to 
 
 theorem lod_shift:
   assumes "amb F1 = amb F2" "slice F1 = slice F2" "flod F1 \<le> flod F2" "sem F2 K2 \<noteq> \<bottom>"
+    and F2: "compact (flod F2)"
     and K2m: "maximal_at (kd F2) K2" and nb: "sem (peg K2 F1) k \<noteq> \<bottom>"
   shows "k = proj (kd F1)\<cdot>K2" "sem (peg K2 F1) k = sem F2 K2"
 proof -
-  have cK2: "compact K2" by (rule maximal_at_compact[OF K2m])
+  have cK2: "compact K2" by (rule maximal_at_compact[OF K2m kd_compact[OF F2]])
   obtain x where xS: "x \<in> pts S" and x: "frows (peg K2 F1) x" and kx: "k = rproj (kd F1) x"
     using key_data[OF nb] by (auto simp: keyimg_def)
   have Kx: "K2 \<sqsubseteq> rkey\<cdot>x" using x by (simp add: frows_peg cK2)
@@ -489,7 +492,7 @@ proof -
         then show ?thesis using proj_le[OF truncate_below, of \<rho> "kd F2" "rkey\<cdot>x"] x2 by simp
       next
         case 2
-        then show ?thesis by (rule masked_pin[OF K2m])
+        then show ?thesis by (rule masked_pin[OF cK2 K2m])
       qed
     qed
     show ?thesis
@@ -521,7 +524,7 @@ text \<open>Within a dataspace, a semantics is \<^emph>\<open>lawful\<close> whe
 context dataspace
 begin
 
-abbreviation lawful where "lawful \<equiv> expr_sem proj conj sunit slod sopen coarsen spin rkey S"
+abbreviation lawful where "lawful \<equiv> expr_sem conj sunit slod sopen coarsen spin rkey S"
 
 lemma lawfulI:
   assumes "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
@@ -535,6 +538,7 @@ lemma lawfulI:
                    \<Longrightarrow> sem F (rproj (sup mind (flod F)) x) = sem F' (rproj (sup mind (flod F')) x)"
     and "\<And>F F'. \<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
                  \<Longrightarrow> sem F = sem F'"
+    and "compact mind"
   shows "lawful mind dims sem"
   by (intro expr_sem.intro dataspace_axioms expr_sem_axioms.intro) (fact assms)+
 
@@ -547,7 +551,7 @@ text \<open>The \<^emph>\<open>guard\<close> keeps an entry only at keys of the 
   semantics at the data keys, and a single guard where they enter an aggregation, or the
   output, restores the key-data law.\<close>
 
-definition guard :: "('l, 'f, 'r, 'k, 'v::pcpo) expr \<Rightarrow> ('l, 'f, 'r, 'k, 'v) expr" where
+definition guard :: "('k semi_factor, 'f, 'r, 'k, 'v::pcpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'v) expr" where
   "guard E = E\<lparr>esem := \<lambda>F k. if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>\<rparr>"
 
 lemma guard_simps [simp]:
@@ -561,7 +565,7 @@ lemma guard_idem [simp]: "guard (guard E) = guard E"
 lemma guard_lawful: "lawfulE E \<Longrightarrow> guard E = E"
 proof -
   assume "lawfulE E"
-  then interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+  then interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
     "emind E" "edims E" "esem E" .
   have v: "(if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>) = esem E F k"
     for F k using E.key_data[of F k] by auto
@@ -572,7 +576,7 @@ subsection \<open>Maps\<close>
 
 text \<open>Applying a strict function to every entry.\<close>
 
-definition smap :: "('v::pcpo \<rightarrow> 'w::pcpo) \<Rightarrow> ('l, 'f, 'r, 'k, 'v) expr \<Rightarrow> ('l, 'f, 'r, 'k, 'w) expr"
+definition smap :: "('v::pcpo \<rightarrow> 'w::pcpo) \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'v) expr \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'w) expr"
   where "smap g E = \<lparr>emind = emind E, edims = edims E, esem = \<lambda>F k. g\<cdot>(esem E F k)\<rparr>"
 
 lemma smap_simps [simp]:
@@ -582,26 +586,26 @@ lemma smap_simps [simp]:
 
 theorem lawful_smap: assumes "lawfulE E" "g\<cdot>\<bottom> = \<bottom>" shows "lawfulE (smap g E)"
 proof -
-  interpret E: expr_sem proj conj sunit slod sopen coarsen spin rkey S
+  interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
     "emind E" "edims E" "esem E"
     by (fact assms(1))
   have nb: "esem E F k \<noteq> \<bottom>" if "g\<cdot>(esem E F k) \<noteq> \<bottom>" for F k
     using that assms(2) by auto
   show ?thesis
   proof (rule lawfulI, simp_all only: smap_simps)
-    fix F :: "('l, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
+    fix F :: "('k semi_factor, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
     then show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" by (rule E.key_slicer[OF nb])
   next
-    fix F :: "('l, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
+    fix F :: "('k semi_factor, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
     then show "proj (sup (emind E) (flod F))\<cdot>k = k" by (rule E.key_lives[OF nb])
   next
-    fix F :: "('l, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
+    fix F :: "('k semi_factor, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
     then show "keyimg S F (sup (emind E) (flod F)) k" by (rule E.key_data[OF nb])
   next
-    fix F :: "('l, 'f, 'r) frame" and K :: 'k assume "compact K"
+    fix F :: "('k semi_factor, 'f, 'r) frame" and K :: 'k assume "compact K"
     then show "g\<cdot>(esem E (peg K F) K) = g\<cdot>(esem E F K)" by (simp only: E.peg_law)
   next
-    fix F F' :: "('l, 'f, 'r) frame" and x :: 'r
+    fix F F' :: "('k semi_factor, 'f, 'r) frame" and x :: 'r
     assume a: "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
       "dims_equivs (edims E) F x (sup (emind E) (flod F)) (sup (emind E) (flod F'))"
       "g\<cdot>(esem E F (rproj (sup (emind E) (flod F)) x)) \<noteq> \<bottom>"
@@ -610,10 +614,12 @@ proof -
         = g\<cdot>(esem E F' (rproj (sup (emind E) (flod F')) x))"
       by (simp only: E.dims_law[OF a(1-4) nb[OF a(5)] nb[OF a(6)]])
   next
-    fix F F' :: "('l, 'f, 'r) frame"
+    fix F F' :: "('k semi_factor, 'f, 'r) frame"
     assume "amb F = amb F'" "slice F = slice F'" "sup (emind E) (flod F) = sup (emind E) (flod F')"
     then have "esem E F = esem E F'" by (rule E.eff_law)
     then show "esem (smap g E) F = esem (smap g E) F'" by (simp add: fun_eq_iff)
+  next
+    show "compact (emind E)" by (rule E.mind_compact)
   qed
 qed
 
@@ -633,7 +639,8 @@ definition group_by where
   "group_by D sem = (\<lambda>F. sem (finclude D F))"
 
 theorem (in expr_sem) lawful_group_by:
-  "lawful (sup mind D) dims (group_by D sem)"
+  assumes D: "compact D"
+  shows "lawful (sup mind D) dims (group_by D sem)"
 proof (rule lawfulI)
   have kd: "sup (sup mind D) X = sup mind (sup X D)" for X by (simp only: ac_simps)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "group_by D sem F k \<noteq> \<bottom>" for F k
@@ -667,6 +674,7 @@ proof (rule lawfulI)
       by (rule eff_law) (use that in \<open>simp_all add: kd\<close>)
     then show ?thesis by (simp add: group_by_def)
   qed
+  show "compact (sup mind D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
 qed
 
 subsection \<open>Fixed-level constructs: \<open>GROUP BY ONLY\<close>, \<open>TOTAL\<close>, \<open>ISOLATE\<close>\<close>
@@ -686,6 +694,7 @@ definition fixed where
 theorem lawful_fixed:
   assumes "\<And>F K. compact K \<Longrightarrow> sem (T (peg K F)) (proj E\<cdot>K) = sem (T F) (proj E\<cdot>K)"
     and "\<And>F F'. amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> T F = T F'"
+    and "compact E"
   shows "lawful E {||} (fixed E T sem)"
 proof (rule lawfulI)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "fixed E T sem F k \<noteq> \<bottom>" for F k
@@ -702,7 +711,7 @@ proof (rule lawfulI)
       "fixed E T sem F (rproj (sup E (flod F)) x) \<noteq> \<bottom>"
       "fixed E T sem F' (rproj (sup E (flod F')) x) \<noteq> \<bottom>" for F F' x
   proof -
-    have "proj E\<cdot>(rproj (sup E (flod G)) x) = rproj E x" for G :: "('l, 'f, 'r) frame"
+    have "proj E\<cdot>(rproj (sup E (flod G)) x) = rproj E x" for G :: "('k semi_factor, 'f, 'r) frame"
       by (simp add: proj_le)
     moreover have "T F' = T F" using assms(2)[OF that(1,2)] by simp
     ultimately show ?thesis using that(5,6) by (simp add: fixed_def split: if_splits)
@@ -715,6 +724,7 @@ proof (rule lawfulI)
       using fkeys_cong[OF frows_cong[OF that(1,2)]] that(3) by simp
     then show ?thesis using assms(2)[OF that(1,2)] by (simp add: fixed_def fun_eq_iff)
   qed
+  show "compact E" by (fact assms(3))
 qed
 
 end
@@ -729,14 +739,17 @@ abbreviation total where
   "total \<equiv> group_by_only bot"
 
 theorem lawful_group_by_only:
-  "lawful (sup mind D) {||} (group_by_only D)"
+  assumes D: "compact D"
+  shows "lawful (sup mind D) {||} (group_by_only D)"
   unfolding group_by_only_def
 proof (rule lawful_fixed)
   show "sem (fgroupby D (peg K F)) (proj (sup mind D)\<cdot>K) = sem (fgroupby D F) (proj (sup mind D)\<cdot>K)"
     if "compact K" for F K
-    by (simp add: fgroupby_peg[OF that] peg_below[OF proj_compact proj_compact proj_mono])
+    by (simp add: fgroupby_peg[OF that]
+        peg_below[OF compact_proj_compact[OF that] compact_proj_compact[OF that] proj_mono])
   show "fgroupby D F = fgroupby D F'" if "amb F = amb F'" "slice F = slice F'" for F F'
     using that by (cases F, cases F') (simp add: fgroupby_def)
+  show "compact (sup mind D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
 qed
 
 definition isolate where
@@ -744,7 +757,7 @@ definition isolate where
 
 theorem lawful_isolate: "lawful mind {||} isolate"
   unfolding isolate_def
-  by (rule lawful_fixed) (simp_all add: fisolate_peg fisolate_def)
+  by (rule lawful_fixed) (simp_all add: fisolate_peg fisolate_def mind_compact)
 
 end
 
@@ -804,7 +817,7 @@ proof -
 qed
 
 abbreviation for_dims ::
-    "'l::{distrib_lattice, bounded_lattice_bot} trunc \<Rightarrow> ('l \<times> 'l trunc) fset \<Rightarrow> ('l \<times> 'l trunc) fset" where
+    "'k::{bifinite, distributive_cpo} semi_factor trunc \<Rightarrow> ('k semi_factor \<times> 'k semi_factor trunc) fset \<Rightarrow> ('k semi_factor \<times> 'k semi_factor trunc) fset" where
   "for_dims \<tau> \<Delta> \<equiv> (\<lambda>(n, \<rho>). (n, inf \<rho> \<tau>)) |`| \<Delta>"
 
 theorem lawful_filtfor: "lawful mind (for_dims \<tau> dims) (filtfor \<tau> G)"
@@ -825,9 +838,9 @@ proof (rule lawfulI)
     have Kl: "proj (kd F)\<cdot>K = K" using True by (simp add: fkeys_def maximal_at_lives)
     have "?K' \<sqsubseteq> proj (kd ?H)\<cdot>K" by (rule proj_mono[OF kd_ffor_trunc])
     then have "sem (peg ?K' ?H) (proj (kd ?H)\<cdot>K) = sem ?H (proj (kd ?H)\<cdot>K)"
-      by (rule peg_below[OF proj_compact proj_compact])
+      by (rule peg_below[OF compact_proj_compact[OF cK] compact_proj_compact[OF cK]])
     then show ?thesis
-      using True by (simp add: filtfor_def fkeys_peg_iff[OF cK] ffor_peg[OF Kl])
+      using True by (simp add: filtfor_def fkeys_peg_iff[OF cK] ffor_peg[OF cK Kl])
   qed
   show "filtfor \<tau> G F (rproj (kd F) x) = filtfor \<tau> G F' (rproj (kd F') x)"
     if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
@@ -861,6 +874,7 @@ proof (rule lawfulI)
       by (rule eff_law) (use that kH in \<open>simp_all add: ffor_def\<close>)
     then show ?thesis using k kH by (simp add: filtfor_def fun_eq_iff)
   qed
+  show "compact mind" by (rule mind_compact)
 qed
 
 end
@@ -903,6 +917,7 @@ proof (rule lawfulI)
       by (rule eff_law) (use that in simp_all)
     then show ?thesis by (simp add: restrict_def)
   qed
+  show "compact mind" by (rule mind_compact)
 qed
 
 end

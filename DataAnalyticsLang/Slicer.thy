@@ -239,19 +239,20 @@ subsection \<open>Slice evaluation\<close>
 
 text \<open>Slices are given by their conjunction \<open>\<^bold>*\<close> and its unit \<open>\<^bold>1\<close>, nothing more: the slicer
   constructs only conjoin.  The order is the one conjunction induces.  Slices act on keys, which
-  carry levels of detail (an @{locale lod_space}).  Each slice comes with the LOD it is written
+  carry levels of detail (semi-factors of the keys, compact ones for LODs).  Each slice comes with the LOD it is written
   at, \<open>slod\<close>: what it \<^emph>\<open>looks at\<close>, not what it selects (an upper bound, not the least one).  Its
   meaning \<open>sopen\<close> is a Scott-open predicate on keys, and a meet-semilattice homomorphism.  A slice
   reads a key only through its truncation to the slice's LOD, so it applies to keys finer than its
   LOD as well.  \<open>holds\<close> is the plain predicate.\<close>
 
-locale slice_eval = lod_space proj + conj: semilattice_neutr conj sunit +
+locale slice_eval = conj: semilattice_neutr conj sunit +
   slod: semilattice_hom conj sunit sup bot slod +
   sopen: semilattice_hom conj sunit inf top sopen
-  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
-    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>) and slod :: "'f \<Rightarrow> 'l"
+  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
+    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor"
     and sopen :: "'f \<Rightarrow> 'k sel" +
   assumes sopen_lod: "selects (sopen f) (proj (slod f)\<cdot>k) \<longleftrightarrow> selects (sopen f) k"
+    and slod_compact: "compact (slod f)"
 begin
 
 lemmas slod_conj [simp] = slod.hom_f and slod_unit [simp] = slod.hom_z
@@ -312,10 +313,10 @@ text \<open>A slicer adds \<^emph>\<open>coarsening\<close> of a slice to a give
   It is \<^emph>\<open>not\<close> extensional: coarsening \<open>b = 2 \<and> b \<noteq> 2\<close> away from \<open>b\<close> gives \<open>True\<close>, coarsening
   \<open>False\<close> gives \<open>False\<close>.\<close>
 
-locale slicer = slice_eval proj conj sunit slod sopen
-  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
-    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>) and slod sopen +
-  fixes coarsen :: "'l \<Rightarrow> 'f \<Rightarrow> 'f"
+locale slicer = slice_eval conj sunit slod sopen
+  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
+    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel" +
+  fixes coarsen :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f"
   assumes coarsen_conj: "coarsen A (a \<^bold>* b) = coarsen A a \<^bold>* coarsen A b"
     and coarsen_inside: "slod f \<le> A \<Longrightarrow> coarsen A f = f"
     and slod_coarsen: "slod (coarsen A f) \<le> inf (slod f) A"
@@ -374,7 +375,7 @@ subsection \<open>Truncating slices\<close>
 text \<open>A truncation acts on a slice by coarsening it to the truncated LOD the slice is written
   at.  This commutes with conjunction and composes, composition being meet.\<close>
 
-abbreviation trunc_slice :: "'l trunc \<Rightarrow> 'f \<Rightarrow> 'f" where
+abbreviation trunc_slice :: "'k semi_factor trunc \<Rightarrow> 'f \<Rightarrow> 'f" where
   "trunc_slice \<tau> f \<equiv> coarsen (truncate \<tau> (slod f)) f"
 
 lemma trunc_slice_top [simp]: "trunc_slice top f = f"
@@ -414,9 +415,9 @@ text \<open>\<open>spin K\<close> is the slice pinning the key \<open>K\<close>:
   at; nothing is assumed about it, but it is always one the key lives at.  Pins coarsen by
   truncating the key, and compatible pins conjoin to the pin of the join.\<close>
 
-locale pin_slicer = slicer proj conj sunit slod sopen coarsen
-  for proj :: "'l::{distrib_lattice, bounded_lattice_bot} \<Rightarrow> 'k::bounded_complete \<rightarrow> 'k"
-    and conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>) and slod sopen coarsen +
+locale pin_slicer = slicer conj sunit slod sopen coarsen
+  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
+    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel" and coarsen +
   fixes spin :: "'k \<Rightarrow> 'f"
   assumes sopen_spin: "compact K \<Longrightarrow> selects (sopen (spin K)) k \<longleftrightarrow> K \<sqsubseteq> k"
     and coarsen_spin: "compact K \<Longrightarrow> coarsen A (spin K) = spin (proj A\<cdot>K)"
