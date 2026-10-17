@@ -23,7 +23,7 @@ text \<open>The meaning of an expression: the LOD it decides at least; its \<^em
 
 record ('l::distrib_lattice, 'f::type, 'r::pcpo, 'k::type, 'v::type) expr =
   emind :: 'l
-  edims :: "('l \<times> 'l trunc) fset"
+  edims :: "('l \<times> 'l) fset"
   esem :: "('l, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v"
 
 text \<open>The record packages' own \<open>truncate\<close> operations would shadow the truncation action.\<close>
@@ -93,7 +93,7 @@ definition fgroupby :: "'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) fr
 definition fisolate :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "fisolate F = \<lparr>flod = bot, amb = top, slice = \<^bold>1\<rparr>"
 
-definition ffor :: "'k semi_factor trunc \<Rightarrow> 'f \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
+definition ffor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "ffor \<tau> G F = F\<lparr>flod := truncate \<tau> (flod F), slice := trunc_slice \<tau> (slice F) \<^bold>* G\<rparr>"
 
 definition peg :: "'k \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
@@ -257,7 +257,7 @@ text \<open>The data rows in an ambient filter, and among them those whose key p
 definition arows :: "'r sel \<Rightarrow> 'r set" where
   "arows \<phi> = {x \<in> pts S. selects \<phi> x}"
 
-definition mrows :: "'k semi_factor trunc \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r set" where
+definition mrows :: "'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r set" where
   "mrows \<rho> F = {x \<in> arows (amb F). holds (trunc_slice \<rho> (slice F)) (rkey\<cdot>x)}"
 
 abbreviation rproj :: "'k semi_factor \<Rightarrow> 'r \<Rightarrow> 'k" where
@@ -285,7 +285,7 @@ text \<open>Two LODs are \<^emph>\<open>equivalent at grain \<open>n\<close> thr
   relspace.equiv_mod}).  Being a condition on pairs of rows, it survives losing rows; it also
   survives adding the same detail to both sides.\<close>
 
-definition dims_equiv :: "'k semi_factor \<Rightarrow> 'k semi_factor trunc \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
+definition dims_equiv :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
   "dims_equiv n \<rho> F x a t \<longleftrightarrow>
      relspace.equiv_mod (insert x (mrows \<rho> F)) (rproj n) (rproj (truncate \<rho> a)) (rproj (truncate \<rho> t))"
 
@@ -346,7 +346,7 @@ qed
 
 text \<open>An expression's dims hypothesis holds at every pair of its dims.\<close>
 
-definition dims_equivs :: "('k semi_factor \<times> 'k semi_factor trunc) fset \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
+definition dims_equivs :: "('k semi_factor \<times> 'k semi_factor) fset \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
   "dims_equivs \<Delta> F x a t \<longleftrightarrow> (\<forall>(n, \<rho>) |\<in>| \<Delta>. dims_equiv n \<rho> F x a t)"
 
 lemma dims_equivsD: "dims_equivs \<Delta> F x a t \<Longrightarrow> (n, \<rho>) |\<in>| \<Delta> \<Longrightarrow> dims_equiv n \<rho> F x a t"
@@ -817,7 +817,7 @@ proof -
 qed
 
 abbreviation for_dims ::
-    "'k::{bifinite, distributive_cpo} semi_factor trunc \<Rightarrow> ('k semi_factor \<times> 'k semi_factor trunc) fset \<Rightarrow> ('k semi_factor \<times> 'k semi_factor trunc) fset" where
+    "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> ('k semi_factor \<times> 'k semi_factor) fset \<Rightarrow> ('k semi_factor \<times> 'k semi_factor) fset" where
   "for_dims \<tau> \<Delta> \<equiv> (\<lambda>(n, \<rho>). (n, inf \<rho> \<tau>)) |`| \<Delta>"
 
 theorem lawful_filtfor: "lawful mind (for_dims \<tau> dims) (filtfor \<tau> G)"

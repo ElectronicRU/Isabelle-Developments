@@ -375,7 +375,7 @@ subsection \<open>Truncating slices\<close>
 text \<open>A truncation acts on a slice by coarsening it to the truncated LOD the slice is written
   at.  This commutes with conjunction and composes, composition being meet.\<close>
 
-abbreviation trunc_slice :: "'k semi_factor trunc \<Rightarrow> 'f \<Rightarrow> 'f" where
+abbreviation trunc_slice :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f" where
   "trunc_slice \<tau> f \<equiv> coarsen (truncate \<tau> (slod f)) f"
 
 lemma trunc_slice_top [simp]: "trunc_slice top f = f"

@@ -292,55 +292,43 @@ proof -
 qed
 
 
-subsection \<open>Truncations\<close>
+subsection \<open>Masks\<close>
 
-text \<open>A \<^emph>\<open>truncation\<close> is the action of meeting with a (possibly non-compact) LOD.  It is
-  captured by a single module law; everything else follows in a distributive lattice.  Its
-  fixed points form an ideal, and the truncation takes each LOD to the largest fixed point
-  below it.\<close>
+text \<open>A \<^emph>\<open>mask\<close> is a semi-factor, possibly non-compact, acting on LODs by meet: truncating an LOD
+  to a mask keeps the part of it within the mask.  (This replaces an abstract type of
+  truncations, i.e. of maps obeying \<open>\<tau> (inf x y) = inf x (\<tau> y)\<close>, which on a complete lattice
+  are exactly the meets with a fixed element.)\<close>
 
-typedef ('l::distrib_lattice) trunc = "{\<tau> :: 'l \<Rightarrow> 'l. \<forall>x y. \<tau> (inf x y) = inf x (\<tau> y)}"
-  morphisms truncate Abs_trunc
-  by (rule exI[of _ id]) simp
-
-setup_lifting type_definition_trunc
+abbreviation truncate :: "'l::lattice \<Rightarrow> 'l \<Rightarrow> 'l" where
+  "truncate m x \<equiv> inf m x"
 
 lemma truncate_inf: "truncate \<tau> (inf x y) = inf x (truncate \<tau> y)"
-  using truncate[of \<tau>] by simp
+  by (simp add: inf_left_commute)
 
 context
-  fixes \<tau> :: "'l::{distrib_lattice, bounded_lattice_bot} trunc"
+  fixes \<tau> :: "'l::{distrib_lattice, bounded_lattice_bot}"
 begin
 
 lemma truncate_below: "truncate \<tau> x \<le> x"
-  by (metis truncate_inf inf_idem inf_le1)
+  by simp
 
-lemma truncate_idem [simp]: "truncate \<tau> (truncate \<tau> x) = truncate \<tau> x"
-  by (metis truncate_inf truncate_below inf_absorb1 inf_idem)
+lemma truncate_idem: "truncate \<tau> (truncate \<tau> x) = truncate \<tau> x"
+  by simp
 
 lemma truncate_mono: "x \<le> y \<Longrightarrow> truncate \<tau> x \<le> truncate \<tau> y"
-  by (metis truncate_inf inf_absorb1 inf_le2)
+  by (rule inf_mono[OF order_refl])
 
 lemma truncate_inf_hom: "truncate \<tau> (inf x y) = inf (truncate \<tau> x) (truncate \<tau> y)"
-  by (metis truncate_inf truncate_idem inf_commute)
+  by (simp add: inf_aci)
 
 lemma truncate_sup: "truncate \<tau> (sup x y) = sup (truncate \<tau> x) (truncate \<tau> y)"
-proof -
-  have a: "inf x (truncate \<tau> (sup x y)) = truncate \<tau> x"
-    by (simp only: truncate_inf[symmetric] inf_sup_absorb)
-  have b: "inf y (truncate \<tau> (sup x y)) = truncate \<tau> y"
-    by (simp only: sup_commute[of x y] truncate_inf[symmetric] inf_sup_absorb)
-  have "truncate \<tau> (sup x y) = inf (sup x y) (truncate \<tau> (sup x y))"
-    by (simp add: inf_absorb2 truncate_below)
-  also have "\<dots> = sup (truncate \<tau> x) (truncate \<tau> y)" by (simp only: inf_sup_distrib2 a b)
-  finally show ?thesis .
-qed
+  by (rule inf_sup_distrib1)
 
-lemma truncate_bot [simp]: "truncate \<tau> bot = bot"
-  using truncate_below[of bot] by (simp add: bot_unique)
+lemma truncate_bot: "truncate \<tau> bot = bot"
+  by simp
 
 lemma truncate_fix_down: "truncate \<tau> c = c \<Longrightarrow> d \<le> c \<Longrightarrow> truncate \<tau> d = d"
-  by (metis truncate_inf inf_absorb1)
+  by (metis inf_absorb2 inf_le1 order_trans)
 
 lemma truncate_fix_sup: "truncate \<tau> c = c \<Longrightarrow> truncate \<tau> d = d \<Longrightarrow> truncate \<tau> (sup c d) = sup c d"
   by (simp add: truncate_sup)
@@ -351,93 +339,22 @@ lemma truncate_greatest: "truncate \<tau> c = c \<Longrightarrow> c \<le> x \<Lo
 text \<open>Within \<open>a\<close>, truncating more than \<open>a\<close> is truncating \<open>a\<close>.\<close>
 
 lemma truncate_inf_sup: "inf (truncate \<tau> (sup a b)) a = truncate \<tau> a"
-proof -
-  have "inf (truncate \<tau> (sup a b)) a = sup (inf (truncate \<tau> a) a) (inf (truncate \<tau> b) a)"
-    by (simp add: truncate_sup inf_sup_distrib2)
-  also have "inf (truncate \<tau> a) a = truncate \<tau> a" by (simp add: inf_absorb1 truncate_below)
-  also have "inf (truncate \<tau> b) a = truncate \<tau> (inf a b)" by (simp add: truncate_inf inf_commute)
-  also have "sup (truncate \<tau> a) (truncate \<tau> (inf a b)) = truncate \<tau> a"
-    by (simp add: sup_absorb1 truncate_mono)
-  finally show ?thesis .
-qed
-
-end
-
-text \<open>Meeting with any LOD is a truncation.\<close>
-
-lift_definition trunc_at :: "'l::distrib_lattice \<Rightarrow> 'l trunc" is inf
-  by (simp add: inf_left_commute)
-
-lemma truncate_trunc_at [simp]: "truncate (trunc_at g) x = inf g x"
-  by transfer simp
-
-text \<open>Truncations form a distributive lattice under the pointwise order; meet is composition,
-  the identity is the top and the constant \<open>\<bottom>\<close> the bottom.\<close>
-
-instantiation trunc :: ("{distrib_lattice, bounded_lattice_bot}") "{distrib_lattice, bounded_lattice}"
-begin
-
-lift_definition less_eq_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> bool" is "\<lambda>f g. \<forall>x. f x \<le> g x" .
-
-definition less_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> bool" where
-  "less_trunc \<rho> \<tau> \<longleftrightarrow> \<rho> \<le> \<tau> \<and> \<not> \<tau> \<le> \<rho>"
-
-lift_definition inf_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> 'a trunc" is "\<lambda>f g x. inf (f x) (g x)"
-  by (simp add: inf_aci)
-
-lift_definition sup_trunc :: "'a trunc \<Rightarrow> 'a trunc \<Rightarrow> 'a trunc" is "\<lambda>f g x. sup (f x) (g x)"
-  by (simp add: inf_sup_distrib1)
-
-lift_definition bot_trunc :: "'a trunc" is "\<lambda>_. bot"
-  by simp
-
-lift_definition top_trunc :: "'a trunc" is id
-  by simp
-
-instance
-proof
-  show "\<rho> < \<tau> \<longleftrightarrow> \<rho> \<le> \<tau> \<and> \<not> \<tau> \<le> \<rho>" for \<rho> \<tau> :: "'a trunc" by (fact less_trunc_def)
-  show "\<rho> \<le> \<rho>" for \<rho> :: "'a trunc" by transfer simp
-  show "\<rho> \<le> \<sigma> \<Longrightarrow> \<sigma> \<le> \<tau> \<Longrightarrow> \<rho> \<le> \<tau>" for \<rho> \<sigma> \<tau> :: "'a trunc" by transfer (blast intro: order_trans)
-  show "\<rho> \<le> \<tau> \<Longrightarrow> \<tau> \<le> \<rho> \<Longrightarrow> \<rho> = \<tau>" for \<rho> \<tau> :: "'a trunc"
-    by transfer (blast intro: antisym)
-  show "inf \<rho> \<tau> \<le> \<rho>" "inf \<rho> \<tau> \<le> \<tau>" for \<rho> \<tau> :: "'a trunc" by (transfer, simp)+
-  show "\<rho> \<le> \<sigma> \<Longrightarrow> \<rho> \<le> \<tau> \<Longrightarrow> \<rho> \<le> inf \<sigma> \<tau>" for \<rho> \<sigma> \<tau> :: "'a trunc" by transfer simp
-  show "\<rho> \<le> sup \<rho> \<tau>" "\<tau> \<le> sup \<rho> \<tau>" for \<rho> \<tau> :: "'a trunc" by (transfer, simp)+
-  show "\<sigma> \<le> \<rho> \<Longrightarrow> \<tau> \<le> \<rho> \<Longrightarrow> sup \<sigma> \<tau> \<le> \<rho>" for \<rho> \<sigma> \<tau> :: "'a trunc" by transfer simp
-  show "sup \<rho> (inf \<sigma> \<tau>) = inf (sup \<rho> \<sigma>) (sup \<rho> \<tau>)" for \<rho> \<sigma> \<tau> :: "'a trunc"
-    by transfer (simp add: sup_inf_distrib1)
-  show "bot \<le> \<rho>" for \<rho> :: "'a trunc" by transfer simp
-  show "\<rho> \<le> top" for \<rho> :: "'a trunc"
-    by transfer (metis id_apply inf_idem inf_le1)
-qed
+  by (metis inf_assoc inf_commute inf_sup_absorb)
 
 end
 
 lemma truncate_inf_comp: "truncate (inf \<rho> \<tau>) x = truncate \<rho> (truncate \<tau> x)"
-proof -
-  have "truncate \<rho> (truncate \<tau> x) = truncate \<rho> (inf (truncate \<tau> x) x)"
-    by (simp add: inf_absorb1 truncate_below)
-  also have "\<dots> = inf (truncate \<tau> x) (truncate \<rho> x)" by (rule truncate_inf)
-  finally show ?thesis by transfer (simp add: inf_commute)
-qed
+  by (simp add: inf_assoc)
 
-lemma truncate_top [simp]: "truncate top x = x"
-  by transfer simp
+lemma truncate_top: "truncate top x = x" for x :: "'l::bounded_lattice"
+  by simp
 
-lemma truncate_bot_trunc [simp]: "truncate bot x = bot"
-  by transfer simp
+lemma truncate_bot_trunc: "truncate bot x = bot" for x :: "'l::bounded_lattice_bot"
+  by simp
 
-text \<open>In a bounded lattice a truncation is the meet with its value at the top.\<close>
+subsection \<open>Masks acting on keys\<close>
 
-lemma truncate_eq_inf_top: "truncate \<tau> x = inf x (truncate \<tau> top)"
-  for \<tau> :: "'l::{distrib_lattice, bounded_lattice} trunc"
-  using truncate_inf[of \<tau> x top] by simp
-
-subsection \<open>Truncations acting on keys\<close>
-
-text \<open>On semi-factors a truncation acts on keys by projecting onto its value at the top.  (These
-  are the top-level versions of the facts in the locale below.)\<close>
+text \<open>A mask acts on keys by projection, through any LOD the key lives at.\<close>
 
 lemma truncate_proj_irrelevant:
   assumes c: "lives_at c k" and c': "lives_at c' k"
@@ -452,19 +369,13 @@ proof -
   finally show ?thesis .
 qed
 
-definition truncate_key :: "'k::{bifinite, distributive_cpo} semi_factor trunc \<Rightarrow> 'k \<Rightarrow> 'k" where
-  "truncate_key \<tau> k = proj (truncate \<tau> top)\<cdot>k"
+definition truncate_key :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> 'k \<Rightarrow> 'k" where
+  "truncate_key \<tau> k = proj \<tau>\<cdot>k"
 
 lemma truncate_key_eq:
   assumes c: "lives_at c k"
   shows "truncate_key \<tau> k = proj (truncate \<tau> c)\<cdot>k"
-proof -
-  have "proj (truncate \<tau> c)\<cdot>k = proj c\<cdot>(proj (truncate \<tau> top)\<cdot>k)"
-    by (simp add: truncate_eq_inf_top[of \<tau> c] proj_inf)
-  also have "\<dots> = proj (truncate \<tau> top)\<cdot>(proj c\<cdot>k)" by (rule proj_commute)
-  also have "\<dots> = truncate_key \<tau> k" using c by (simp add: lives_at_def truncate_key_def)
-  finally show ?thesis by simp
-qed
+  using c by (simp add: truncate_key_def proj_inf lives_at_def)
 
 subsection \<open>Levels of detail\<close>
 
