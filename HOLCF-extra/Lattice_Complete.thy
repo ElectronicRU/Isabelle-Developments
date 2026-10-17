@@ -5,9 +5,11 @@ section \<open>Bounded-complete domains with a top\<close>
 text \<open>A bounded-complete pcpo with a top element is a complete lattice under its information
   order: every set is bounded, hence has a lub.  The lattice laws are stated as facts, with the
   join and meet of @{class bounded_complete} as the lattice operations and no joinability side
-  conditions.  They are deliberately not interpreted globally: that would put HOL's classical
-  lattice rules on \<open>\<sqsubseteq>\<close> into the global claset, and @{method blast}, which ignores sort
-  constraints during search, then tries them at every type.  Interpret them locally instead.\<close>
+  conditions.  They are deliberately not interpreted globally: an interpretation copies HOL's
+  classical rules into the claset, restated at sort \<open>lattice_complete\<close>, and since
+  @{method blast} ignores sorts during search it then tries them at every type (the copy of
+  \<open>order_refl [iff]\<close> made an unrelated @{class pcpo}-level blast search for over 1400 s).
+  Interpret them in a \<open>context\<close> instead and re-export the lemmas needed.\<close>
 
 class lattice_complete = bounded_complete +
   assumes ex_top: "\<exists>t. \<forall>x. x \<sqsubseteq> t"
