@@ -1,5 +1,5 @@
 theory Domain_Transfer
-  imports LOD_Factor "HOLCF-extra.Domain_Order_Derive"
+  imports LOD "HOLCF-extra.Domain_Order_Derive"
 begin
 
 section \<open>Transferring the classes along domain isomorphisms\<close>

@@ -13,7 +13,6 @@ session DataAnalyticsLang = "HOLCF" +
     Relspace
     Frame
     LOD
-    LOD_Factor
     Domain_Transfer
     Value
     Expr_Combinators
