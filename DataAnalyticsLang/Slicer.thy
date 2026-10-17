@@ -246,7 +246,7 @@ text \<open>Slices are given by their conjunction \<open>\<^bold>*\<close> and i
   LOD as well.  \<open>holds\<close> is the plain predicate.\<close>
 
 locale slice_eval = conj: semilattice_neutr conj sunit +
-  slod: semilattice_hom conj sunit sup bot slod +
+  slod: semilattice_hom conj sunit "(\<squnion>)" \<bottom> slod +
   sopen: semilattice_hom conj sunit inf top sopen
   for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
     and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor"
@@ -292,11 +292,11 @@ lemma holds_lod: "holds f (proj (slod f)\<cdot>k) \<longleftrightarrow> holds f 
 
 text \<open>Truncating to any LOD the slice is written within does not change whether it holds.\<close>
 
-lemma holds_proj: "slod f \<le> c \<Longrightarrow> holds f (proj c\<cdot>k) \<longleftrightarrow> holds f k"
+lemma holds_proj: "slod f \<sqsubseteq> c \<Longrightarrow> holds f (proj c\<cdot>k) \<longleftrightarrow> holds f k"
   by (metis holds_lod proj_le)
 
 lemma holds_bot_lod:
-  assumes "slod f = bot" shows "holds f k \<longleftrightarrow> holds f \<bottom>"
+  assumes "slod f = \<bottom>" shows "holds f k \<longleftrightarrow> holds f \<bottom>"
   using holds_lod[of f k] by (simp add: assms proj_bot)
 
 end
@@ -318,11 +318,11 @@ locale slicer = slice_eval conj sunit slod sopen
     and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel" +
   fixes coarsen :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f"
   assumes coarsen_conj: "coarsen A (a \<^bold>* b) = coarsen A a \<^bold>* coarsen A b"
-    and coarsen_inside: "slod f \<le> A \<Longrightarrow> coarsen A f = f"
-    and slod_coarsen: "slod (coarsen A f) \<le> inf (slod f) A"
+    and coarsen_inside: "slod f \<sqsubseteq> A \<Longrightarrow> coarsen A f = f"
+    and slod_coarsen: "slod (coarsen A f) \<sqsubseteq> slod f \<sqinter> A"
     and coarsen_cut: "selects (sopen f) k \<Longrightarrow> selects (sopen (coarsen A f)) (proj A\<cdot>k)"
-    and coarsen_slod: "coarsen A f = coarsen (inf A (slod f)) f"
-    and coarsen_coarsen: "coarsen A (coarsen B f) = coarsen (inf A B) f"
+    and coarsen_slod: "coarsen A f = coarsen (A \<sqinter> slod f) f"
+    and coarsen_coarsen: "coarsen A (coarsen B f) = coarsen (A \<sqinter> B) f"
 begin
 
 lemma holds_coarsen_cut: "holds f k \<Longrightarrow> holds (coarsen A f) (proj A\<cdot>k)"
@@ -337,8 +337,8 @@ lemma coarsen_hom: "semilattice_hom conj sunit conj sunit (coarsen A)"
 lemma coarsen_mono: "a \<^bold>\<le> b \<Longrightarrow> coarsen A a \<^bold>\<le> coarsen A b"
   unfolding sle_def by (metis coarsen_conj)
 
-lemma slod_coarsen_target: "slod (coarsen A f) \<le> A"
-  using slod_coarsen[of A f] by simp
+lemma slod_coarsen_target: "slod (coarsen A f) \<sqsubseteq> A"
+  using slod_coarsen[of A f] by (rule below_trans[OF _ lattice_meet_le2])
 
 lemma holds_coarsen: "holds f k \<Longrightarrow> holds (coarsen A f) k"
   using holds_coarsen_cut proj_below by (rule holds_up)
@@ -351,11 +351,11 @@ text \<open>A slice written entirely outside the target coarsens to a constant, 
   away from \<open>a\<close>.\<close>
 
 lemma coarsen_outside:
-  assumes "inf (slod f) A = bot" and "holds f t"
+  assumes "slod f \<sqinter> A = \<bottom>" and "holds f t"
   shows "holds (coarsen A f) k"
 proof -
-  have lod: "slod (coarsen A f) = bot"
-    using slod_coarsen[of A f] assms(1) by (simp add: bot_unique)
+  have lod: "slod (coarsen A f) = \<bottom>"
+    using slod_coarsen[of A f] assms(1) by simp
   have "holds (coarsen A f) (proj A\<cdot>t)" using assms(2) by (rule holds_coarsen_cut)
   then have "holds (coarsen A f) \<bottom>" using holds_bot_lod[OF lod, of "proj A\<cdot>t"] by blast
   then show ?thesis by (rule holds_up) simp
@@ -364,9 +364,9 @@ qed
 text \<open>Coarsening to less is weaker.\<close>
 
 lemma holds_coarsen_le:
-  assumes "A \<le> B" and "holds (coarsen B f) k" shows "holds (coarsen A f) k"
+  assumes "A \<sqsubseteq> B" and "holds (coarsen B f) k" shows "holds (coarsen A f) k"
 proof -
-  have "coarsen A f = coarsen A (coarsen B f)" by (simp add: coarsen_coarsen inf_absorb1[OF assms(1)])
+  have "coarsen A f = coarsen A (coarsen B f)" by (simp add: coarsen_coarsen lattice_meet_absorb1[OF assms(1)])
   then show ?thesis using holds_coarsen[OF assms(2)] by simp
 qed
 
@@ -378,31 +378,31 @@ text \<open>A truncation acts on a slice by coarsening it to the truncated LOD t
 abbreviation trunc_slice :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f" where
   "trunc_slice \<tau> f \<equiv> coarsen (truncate \<tau> (slod f)) f"
 
-lemma trunc_slice_top [simp]: "trunc_slice top f = f"
-  by (simp add: coarsen_inside)
+lemma trunc_slice_top [simp]: "trunc_slice lattice_top f = f"
+  by (simp add: coarsen_inside lattice_meet_top_left)
 
 lemma holds_trunc_slice: "holds f k \<Longrightarrow> holds (trunc_slice \<tau> f) k"
   by (rule holds_coarsen)
 
 lemma trunc_slice_conj: "trunc_slice \<tau> (a \<^bold>* b) = trunc_slice \<tau> a \<^bold>* trunc_slice \<tau> b"
 proof -
-  have "coarsen (truncate \<tau> (sup (slod a) (slod b))) a = trunc_slice \<tau> a"
-    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup inf_absorb1 truncate_below)
-  moreover have "coarsen (truncate \<tau> (sup (slod a) (slod b))) b = trunc_slice \<tau> b"
+  have "coarsen (truncate \<tau> (slod a \<squnion> slod b)) a = trunc_slice \<tau> a"
+    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup lattice_meet_absorb1 truncate_below)
+  moreover have "coarsen (truncate \<tau> (slod a \<squnion> slod b)) b = trunc_slice \<tau> b"
     by (subst (1 2) coarsen_slod)
-      (simp add: sup_commute[of "slod a"] truncate_inf_sup inf_absorb1 truncate_below)
+      (simp add: lattice_join_commute[of "slod a"] truncate_inf_sup lattice_meet_absorb1 truncate_below)
   ultimately show ?thesis by (simp add: coarsen_conj)
 qed
 
-lemma trunc_slice_comp: "trunc_slice \<rho> (trunc_slice \<tau> f) = trunc_slice (inf \<rho> \<tau>) f"
+lemma trunc_slice_comp: "trunc_slice \<rho> (trunc_slice \<tau> f) = trunc_slice (\<rho> \<sqinter> \<tau>) f"
 proof -
   let ?c = "trunc_slice \<tau> f"
-  have c: "slod ?c \<le> truncate \<tau> (slod f)" using slod_coarsen_target .
-  have "trunc_slice (inf \<rho> \<tau>) f = coarsen (truncate \<rho> (truncate \<tau> (slod f))) ?c"
-    by (simp add: truncate_inf_comp coarsen_coarsen inf_absorb1 truncate_below)
-  also have "\<dots> = coarsen (inf (truncate \<rho> (truncate \<tau> (slod f))) (slod ?c)) ?c" by (rule coarsen_slod)
-  also have "inf (truncate \<rho> (truncate \<tau> (slod f))) (slod ?c) = truncate \<rho> (slod ?c)"
-    by (metis inf_commute inf_absorb1[OF c] truncate_inf)
+  have c: "slod ?c \<sqsubseteq> truncate \<tau> (slod f)" using slod_coarsen_target .
+  have "trunc_slice (\<rho> \<sqinter> \<tau>) f = coarsen (truncate \<rho> (truncate \<tau> (slod f))) ?c"
+    by (simp add: coarsen_coarsen lattice_meet_ac lattice_meet_idem)
+  also have "\<dots> = coarsen (truncate \<rho> (truncate \<tau> (slod f)) \<sqinter> slod ?c) ?c" by (rule coarsen_slod)
+  also have "truncate \<rho> (truncate \<tau> (slod f)) \<sqinter> slod ?c = truncate \<rho> (slod ?c)"
+    by (metis lattice_meet_commute lattice_meet_absorb1[OF c] truncate_inf)
   finally show ?thesis by simp
 qed
 

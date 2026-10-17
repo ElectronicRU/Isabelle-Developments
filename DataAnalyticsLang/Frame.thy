@@ -41,10 +41,10 @@ text \<open>The level-of-detail constructs act on the frame an inner expression 
   drops detail by a truncation \<open>\<tau>\<close>, from the frame and from the slice, and conjoins \<open>G\<close>
   (\<open>EXCLUDE\<close> is \<open>FOR \<tau> \<^bold>1\<close>).\<close>
 
-definition finclude :: "'l::sup \<Rightarrow> ('l, 'f::type, 'r::pcpo) frame \<Rightarrow> ('l, 'f, 'r) frame" where
-  "finclude D F = F\<lparr>flod := sup (flod F) D\<rparr>"
+definition finclude :: "'l::po \<Rightarrow> ('l, 'f::type, 'r::pcpo) frame \<Rightarrow> ('l, 'f, 'r) frame" where
+  "finclude D F = F\<lparr>flod := flod F \<squnion> D\<rparr>"
 
-lemma flod_finclude [simp]: "flod (finclude D F) = sup (flod F) D"
+lemma flod_finclude [simp]: "flod (finclude D F) = flod F \<squnion> D"
   by (simp add: finclude_def)
 
 lemma amb_finclude [simp]: "amb (finclude D F) = amb F"
@@ -93,7 +93,7 @@ definition fgroupby :: "'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) fr
   "fgroupby D F = F\<lparr>flod := D, slice := coarsen D (slice F)\<rparr>"
 
 definition fisolate :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
-  "fisolate F = \<lparr>flod = bot, amb = top, slice = \<^bold>1\<rparr>"
+  "fisolate F = \<lparr>flod = \<bottom>, amb = top, slice = \<^bold>1\<rparr>"
 
 definition ffor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "ffor \<tau> G F = F\<lparr>flod := truncate \<tau> (flod F), slice := trunc_slice \<tau> (slice F) \<^bold>* G\<rparr>"
@@ -136,13 +136,13 @@ lemma ffor_peg:
 proof -
   let ?a = "slod (slice F)" and ?b = "slod (spin K)"
   have bK: "proj ?b\<cdot>K = K" by (rule slod_spin_lives[OF cK])
-  have abK: "lives_at (sup ?a ?b) K"
-    using lives_at_up[of ?b K "sup ?a ?b"] bK by (simp add: lives_at_def)
-  have c1: "coarsen (truncate \<tau> (sup ?a ?b)) (slice F) = coarsen (truncate \<tau> ?a) (slice F)"
-    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup inf_absorb1 truncate_below)
-  have "proj (truncate \<tau> (sup ?a ?b))\<cdot>K = proj (truncate \<tau> c)\<cdot>K"
+  have abK: "lives_at (?a \<squnion> ?b) K"
+    using lives_at_up[of ?b K "(?a \<squnion> ?b)"] bK by (simp add: lives_at_def lattice_join_ge2)
+  have c1: "coarsen (truncate \<tau> (?a \<squnion> ?b)) (slice F) = coarsen (truncate \<tau> ?a) (slice F)"
+    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup lattice_meet_absorb1 truncate_below)
+  have "proj (truncate \<tau> (?a \<squnion> ?b))\<cdot>K = proj (truncate \<tau> c)\<cdot>K"
     by (rule truncate_proj_irrelevant[OF abK]) (simp add: lives_at_def K)
-  then have c2: "coarsen (truncate \<tau> (sup ?a ?b)) (spin K) = spin (proj (truncate \<tau> c)\<cdot>K)"
+  then have c2: "coarsen (truncate \<tau> (?a \<squnion> ?b)) (spin K) = spin (proj (truncate \<tau> c)\<cdot>K)"
     by (simp add: coarsen_spin[OF cK])
   show ?thesis
     by (simp add: ffor_def peg_def coarsen_conj c1 c2 conj.assoc conj.commute conj.left_commute)
@@ -273,13 +273,13 @@ lemma frows_mrows: "x \<in> pts S \<Longrightarrow> frows F x \<Longrightarrow> 
 
 text \<open>Reading at a join of LODs is reading at both.\<close>
 
-lemma rproj_sup_fequiv: "relspace.fequiv D (\<lambda>x. (rproj a x, rproj b x)) (rproj (sup a b))"
+lemma rproj_sup_fequiv: "relspace.fequiv D (\<lambda>x. (rproj a x, rproj b x)) (rproj (a \<squnion> b))"
   unfolding relspace.fequiv_def relspace.determines_rows
 proof (intro conjI ballI impI)
-  fix d d' assume "rproj (sup a b) d = rproj (sup a b) d'"
-  then have "proj a\<cdot>(rproj (sup a b) d) = proj a\<cdot>(rproj (sup a b) d')"
-    "proj b\<cdot>(rproj (sup a b) d) = proj b\<cdot>(rproj (sup a b) d')" by simp_all
-  then show "(rproj a d, rproj b d) = (rproj a d', rproj b d')" by (simp add: proj_le)
+  fix d d' assume "rproj (a \<squnion> b) d = rproj (a \<squnion> b) d'"
+  then have "proj a\<cdot>(rproj (a \<squnion> b) d) = proj a\<cdot>(rproj (a \<squnion> b) d')"
+    "proj b\<cdot>(rproj (a \<squnion> b) d) = proj b\<cdot>(rproj (a \<squnion> b) d')" by simp_all
+  then show "(rproj a d, rproj b d) = (rproj a d', rproj b d')" by (simp add: proj_le lattice_join_ge1 lattice_join_ge2)
 qed (simp add: proj_sup)
 
 text \<open>Two LODs are \<^emph>\<open>equivalent at grain \<open>n\<close> through a mask \<open>\<rho>\<close>\<close> in a frame, together with a
@@ -300,7 +300,7 @@ lemma dims_equiv_sub:
 
 lemma dims_equiv_sup:
   assumes "mrows \<rho>' F' \<subseteq> mrows \<rho> F" "dims_equiv n \<rho> F x a t"
-    and "truncate \<rho>' a' = sup (truncate \<rho> a) c" "truncate \<rho>' t' = sup (truncate \<rho> t) c"
+    and "truncate \<rho>' a' = (truncate \<rho> a \<squnion> c)" "truncate \<rho>' t' = (truncate \<rho> t \<squnion> c)"
   shows "dims_equiv n \<rho>' F' x a' t'"
 proof -
   let ?D = "insert x (mrows \<rho>' F')"
@@ -316,9 +316,9 @@ qed
 
 text \<open>A finer grain constrains more pairs of rows, so the equivalence survives coarsening it.\<close>
 
-lemma dims_equiv_natd_le: "n \<le> n' \<Longrightarrow> dims_equiv n' \<rho> F x a t \<Longrightarrow> dims_equiv n \<rho> F x a t"
+lemma dims_equiv_natd_le: "n \<sqsubseteq> n' \<Longrightarrow> dims_equiv n' \<rho> F x a t \<Longrightarrow> dims_equiv n \<rho> F x a t"
 proof -
-  assume le: "n \<le> n'" and e: "dims_equiv n' \<rho> F x a t"
+  assume le: "n \<sqsubseteq> n'" and e: "dims_equiv n' \<rho> F x a t"
   have "rproj n' d \<noteq> rproj n' d'" if "rproj n d \<noteq> rproj n d'" for d d'
     using that proj_le[OF le, of "rkey\<cdot>d"] proj_le[OF le, of "rkey\<cdot>d'"] by force
   with e show ?thesis unfolding dims_equiv_def relspace.equiv_mod_def by blast
@@ -328,27 +328,27 @@ text \<open>The grains of one mask combine: the equivalence at a join of grains 
   both, and the bottom grain imposes nothing.  So the dims are a map from masks to grains, a
   collection joins those maps, and two pairs with the same mask collapse into one.\<close>
 
-lemma dims_equiv_bot: "dims_equiv bot \<rho> F x a t"
+lemma dims_equiv_bot: "dims_equiv \<bottom> \<rho> F x a t"
   unfolding dims_equiv_def relspace.equiv_mod_def by (simp add: proj_bot)
 
 lemma dims_equiv_sup_natd:
-  "dims_equiv (sup n n') \<rho> F x a t \<longleftrightarrow> dims_equiv n \<rho> F x a t \<and> dims_equiv n' \<rho> F x a t"
+  "dims_equiv (n \<squnion> n') \<rho> F x a t \<longleftrightarrow> dims_equiv n \<rho> F x a t \<and> dims_equiv n' \<rho> F x a t"
 proof
-  assume "dims_equiv (sup n n') \<rho> F x a t"
+  assume "dims_equiv (n \<squnion> n') \<rho> F x a t"
   then show "dims_equiv n \<rho> F x a t \<and> dims_equiv n' \<rho> F x a t"
-    by (blast intro: dims_equiv_natd_le[OF sup_ge1] dims_equiv_natd_le[OF sup_ge2])
+    by (blast intro: dims_equiv_natd_le[OF lattice_join_ge1] dims_equiv_natd_le[OF lattice_join_ge2])
 next
   assume e: "dims_equiv n \<rho> F x a t \<and> dims_equiv n' \<rho> F x a t"
   have "rproj n d \<noteq> rproj n d' \<or> rproj n' d \<noteq> rproj n' d'"
-    if "rproj (sup n n') d \<noteq> rproj (sup n n') d'" for d d'
+    if "rproj (n \<squnion> n') d \<noteq> rproj (n \<squnion> n') d'" for d d'
     using that by (auto simp: proj_sup)
-  with e show "dims_equiv (sup n n') \<rho> F x a t"
+  with e show "dims_equiv (n \<squnion> n') \<rho> F x a t"
     unfolding dims_equiv_def relspace.equiv_mod_def by blast
 qed
 
 text \<open>The bottom mask reads nothing, so its natural LOD does not matter.\<close>
 
-lemma dims_equiv_bot_mask: "dims_equiv n bot F x a t"
+lemma dims_equiv_bot_mask: "dims_equiv n \<bottom> F x a t"
   unfolding dims_equiv_def by (simp add: relspace.equiv_mod_refl)
 
 text \<open>An expression's dims hypothesis holds at every mask, at the natural LOD the dims give it.\<close>
@@ -362,7 +362,7 @@ lemma dims_equivsD: "dims_equivs \<Delta> F x a t \<Longrightarrow> dims_equiv (
 lemma dims_equivsI: "(\<And>\<rho>. dims_equiv (\<Delta> \<rho>) \<rho> F x a t) \<Longrightarrow> dims_equivs \<Delta> F x a t"
   unfolding dims_equivs_def by blast
 
-lemma dims_equivs_bot: "dims_equivs bot F x a t"
+lemma dims_equivs_bot: "dims_equivs \<bottom> F x a t"
   by (simp add: dims_equivs_def dims_equiv_bot)
 
 end
@@ -383,22 +383,22 @@ text \<open>A fixed expression has a minimal LOD \<^term>\<open>mind\<close>, di
 locale expr_sem = dataspace +
   fixes mind dims sem
   assumes key_slicer: "sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
-    and key_lives: "sem F k \<noteq> \<bottom> \<Longrightarrow> proj (sup mind (flod F))\<cdot>k = k"
-    and key_data: "sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (sup mind (flod F)) k"
+    and key_lives: "sem F k \<noteq> \<bottom> \<Longrightarrow> proj (mind \<squnion> flod F)\<cdot>k = k"
+    and key_data: "sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (mind \<squnion> flod F) k"
     and peg_law: "compact K \<Longrightarrow> sem (peg K F) K = sem F K"
     and dims_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; x \<in> pts S;
-                    dims_equivs dims F x (sup mind (flod F)) (sup mind (flod F'));
-                    sem F (rproj (sup mind (flod F)) x) \<noteq> \<bottom>;
-                    sem F' (rproj (sup mind (flod F')) x) \<noteq> \<bottom>\<rbrakk>
-                   \<Longrightarrow> sem F (rproj (sup mind (flod F)) x) = sem F' (rproj (sup mind (flod F')) x)"
-    and eff_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
+                    dims_equivs dims F x (mind \<squnion> flod F) (mind \<squnion> flod F');
+                    sem F (rproj (mind \<squnion> flod F) x) \<noteq> \<bottom>;
+                    sem F' (rproj (mind \<squnion> flod F') x) \<noteq> \<bottom>\<rbrakk>
+                   \<Longrightarrow> sem F (rproj (mind \<squnion> flod F) x) = sem F' (rproj (mind \<squnion> flod F') x)"
+    and eff_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; (mind \<squnion> flod F) = (mind \<squnion> flod F')\<rbrakk>
                   \<Longrightarrow> sem F = sem F'"
     and mind_compact: "compact mind"
     and dims_compact: "compact dims"
-    and dims_bot: "dims \<rho> \<le> dims bot"
+    and dims_bot: "dims \<rho> \<sqsubseteq> dims \<bottom>"
 begin
 
-abbreviation "kd F \<equiv> sup mind (flod F)"
+abbreviation "kd F \<equiv> (mind \<squnion> flod F)"
 
 lemma kd_compact: "compact (flod F) \<Longrightarrow> compact (kd F)"
   by (simp add: join_semi_factor[symmetric] compact_join mind_compact)
@@ -469,7 +469,7 @@ text \<open>Values at different levels of detail: an entry of a frame pegged to 
   at the coarser key is not claimed.)\<close>
 
 theorem lod_shift:
-  assumes "amb F1 = amb F2" "slice F1 = slice F2" "flod F1 \<le> flod F2" "sem F2 K2 \<noteq> \<bottom>"
+  assumes "amb F1 = amb F2" "slice F1 = slice F2" "flod F1 \<sqsubseteq> flod F2" "sem F2 K2 \<noteq> \<bottom>"
     and F2: "compact (flod F2)"
     and K2m: "maximal_at (kd F2) K2" and nb: "sem (peg K2 F1) k \<noteq> \<bottom>"
   shows "k = proj (kd F1)\<cdot>K2" "sem (peg K2 F1) k = sem F2 K2"
@@ -478,7 +478,7 @@ proof -
   obtain x where xS: "x \<in> pts S" and x: "frows (peg K2 F1) x" and kx: "k = rproj (kd F1) x"
     using key_data[OF nb] by (auto simp: keyimg_def)
   have Kx: "K2 \<sqsubseteq> rkey\<cdot>x" using x by (simp add: frows_peg cK2)
-  have sub: "kd F1 \<le> kd F2" using assms(3) by (rule sup_mono[OF order_refl])
+  have sub: "kd F1 \<sqsubseteq> kd F2" using assms(3) by (rule lattice_join_mono[OF below_refl])
   have km1: "maximal_at (kd F1) (proj (kd F1)\<cdot>K2)" by (rule maximal_at_proj[OF sub K2m])
   have "proj (kd F1)\<cdot>K2 \<sqsubseteq> k" unfolding kx using Kx by (rule monofun_cfun_arg)
   then show "k = proj (kd F1)\<cdot>K2" using key_lives[OF nb] by (intro maximal_at_eq[OF km1]) simp_all
@@ -540,17 +540,17 @@ abbreviation lawful where "lawful \<equiv> expr_sem conj sunit slod sopen coarse
 
 lemma lawfulI:
   assumes "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
-    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> proj (sup mind (flod F))\<cdot>k = k"
-    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (sup mind (flod F)) k"
+    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> proj (mind \<squnion> flod F)\<cdot>k = k"
+    and "\<And>F k. sem F k \<noteq> \<bottom> \<Longrightarrow> keyimg S F (mind \<squnion> flod F) k"
     and "\<And>F K. compact K \<Longrightarrow> sem (peg K F) K = sem F K"
     and "\<And>F F' x. \<lbrakk>amb F = amb F'; slice F = slice F'; x \<in> pts S;
-                    dims_equivs dims F x (sup mind (flod F)) (sup mind (flod F'));
-                    sem F (rproj (sup mind (flod F)) x) \<noteq> \<bottom>;
-                    sem F' (rproj (sup mind (flod F')) x) \<noteq> \<bottom>\<rbrakk>
-                   \<Longrightarrow> sem F (rproj (sup mind (flod F)) x) = sem F' (rproj (sup mind (flod F')) x)"
-    and "\<And>F F'. \<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
+                    dims_equivs dims F x (mind \<squnion> flod F) (mind \<squnion> flod F');
+                    sem F (rproj (mind \<squnion> flod F) x) \<noteq> \<bottom>;
+                    sem F' (rproj (mind \<squnion> flod F') x) \<noteq> \<bottom>\<rbrakk>
+                   \<Longrightarrow> sem F (rproj (mind \<squnion> flod F) x) = sem F' (rproj (mind \<squnion> flod F') x)"
+    and "\<And>F F'. \<lbrakk>amb F = amb F'; slice F = slice F'; (mind \<squnion> flod F) = (mind \<squnion> flod F')\<rbrakk>
                  \<Longrightarrow> sem F = sem F'"
-    and "compact mind" and "compact dims" and "\<And>\<rho>. dims \<rho> \<le> dims bot"
+    and "compact mind" and "compact dims" and "\<And>\<rho>. dims \<rho> \<sqsubseteq> dims \<bottom>"
   shows "lawful mind dims sem"
   by (intro expr_sem.intro dataspace_axioms expr_sem_axioms.intro) (fact assms)+
 
@@ -564,11 +564,11 @@ text \<open>The \<^emph>\<open>guard\<close> keeps an entry only at keys of the 
   output, restores the key-data law.\<close>
 
 definition guard :: "('k semi_factor, 'f, 'r, 'k, 'v::pcpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'v) expr" where
-  "guard E = E\<lparr>esem := \<lambda>F k. if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>\<rparr>"
+  "guard E = E\<lparr>esem := \<lambda>F k. if keyimg S F (emind E \<squnion> flod F) k then esem E F k else \<bottom>\<rparr>"
 
 lemma guard_simps [simp]:
   "emind (guard E) = emind E" "edims (guard E) = edims E"
-  "esem (guard E) F k = (if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>)"
+  "esem (guard E) F k = (if keyimg S F (emind E \<squnion> flod F) k then esem E F k else \<bottom>)"
   by (simp_all add: guard_def)
 
 lemma guard_idem [simp]: "guard (guard E) = guard E"
@@ -579,7 +579,7 @@ proof -
   assume "lawfulE E"
   then interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
     "emind E" "edims E" "esem E" .
-  have v: "(if keyimg S F (sup (emind E) (flod F)) k then esem E F k else \<bottom>) = esem E F k"
+  have v: "(if keyimg S F (emind E \<squnion> flod F) k then esem E F k else \<bottom>) = esem E F k"
     for F k using E.key_data[of F k] by auto
   show "guard E = E" unfolding guard_def v by simp
 qed
@@ -609,25 +609,25 @@ proof -
     then show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" by (rule E.key_slicer[OF nb])
   next
     fix F :: "('k semi_factor, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
-    then show "proj (sup (emind E) (flod F))\<cdot>k = k" by (rule E.key_lives[OF nb])
+    then show "proj (emind E \<squnion> flod F)\<cdot>k = k" by (rule E.key_lives[OF nb])
   next
     fix F :: "('k semi_factor, 'f, 'r) frame" and k :: 'k assume "g\<cdot>(esem E F k) \<noteq> \<bottom>"
-    then show "keyimg S F (sup (emind E) (flod F)) k" by (rule E.key_data[OF nb])
+    then show "keyimg S F (emind E \<squnion> flod F) k" by (rule E.key_data[OF nb])
   next
     fix F :: "('k semi_factor, 'f, 'r) frame" and K :: 'k assume "compact K"
     then show "g\<cdot>(esem E (peg K F) K) = g\<cdot>(esem E F K)" by (simp only: E.peg_law)
   next
     fix F F' :: "('k semi_factor, 'f, 'r) frame" and x :: 'r
     assume a: "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
-      "dims_equivs (edims E) F x (sup (emind E) (flod F)) (sup (emind E) (flod F'))"
-      "g\<cdot>(esem E F (rproj (sup (emind E) (flod F)) x)) \<noteq> \<bottom>"
-      "g\<cdot>(esem E F' (rproj (sup (emind E) (flod F')) x)) \<noteq> \<bottom>"
-    show "g\<cdot>(esem E F (rproj (sup (emind E) (flod F)) x))
-        = g\<cdot>(esem E F' (rproj (sup (emind E) (flod F')) x))"
+      "dims_equivs (edims E) F x (emind E \<squnion> flod F) (emind E \<squnion> flod F')"
+      "g\<cdot>(esem E F (rproj (emind E \<squnion> flod F) x)) \<noteq> \<bottom>"
+      "g\<cdot>(esem E F' (rproj (emind E \<squnion> flod F') x)) \<noteq> \<bottom>"
+    show "g\<cdot>(esem E F (rproj (emind E \<squnion> flod F) x))
+        = g\<cdot>(esem E F' (rproj (emind E \<squnion> flod F') x))"
       by (simp only: E.dims_law[OF a(1-4) nb[OF a(5)] nb[OF a(6)]])
   next
     fix F F' :: "('k semi_factor, 'f, 'r) frame"
-    assume "amb F = amb F'" "slice F = slice F'" "sup (emind E) (flod F) = sup (emind E) (flod F')"
+    assume "amb F = amb F'" "slice F = slice F'" "(emind E \<squnion> flod F) = (emind E \<squnion> flod F')"
     then have "esem E F = esem E F'" by (rule E.eff_law)
     then show "esem (smap g E) F = esem (smap g E) F'" by (simp add: fun_eq_iff)
   next
@@ -635,7 +635,7 @@ proof -
   next
     show "compact (edims E)" by (rule E.dims_compact)
   next
-    show "edims E \<rho> \<le> edims E bot" for \<rho> by (rule E.dims_bot)
+    show "edims E \<rho> \<sqsubseteq> edims E \<bottom>" for \<rho> by (rule E.dims_bot)
   qed
 qed
 
@@ -656,24 +656,24 @@ definition group_by where
 
 theorem (in expr_sem) lawful_group_by:
   assumes D: "compact D"
-  shows "lawful (sup mind D) dims (group_by D sem)"
+  shows "lawful (mind \<squnion> D) dims (group_by D sem)"
 proof (rule lawfulI)
-  have kd: "sup (sup mind D) X = sup mind (sup X D)" for X by (simp only: ac_simps)
+  have kd: "(mind \<squnion> D \<squnion> X) = (mind \<squnion> (X \<squnion> D))" for X by (simp only: ac_simps)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "group_by D sem F k \<noteq> \<bottom>" for F k
     using key_slicer[of "finclude D F" k] that by (simp add: group_by_def)
-  show "proj (sup (sup mind D) (flod F))\<cdot>k = k" if "group_by D sem F k \<noteq> \<bottom>" for F k
+  show "proj (mind \<squnion> D \<squnion> flod F)\<cdot>k = k" if "group_by D sem F k \<noteq> \<bottom>" for F k
     using key_lives[of "finclude D F" k] that by (simp add: group_by_def kd)
-  show "keyimg S F (sup (sup mind D) (flod F)) k" if "group_by D sem F k \<noteq> \<bottom>" for F k
+  show "keyimg S F (mind \<squnion> D \<squnion> flod F) k" if "group_by D sem F k \<noteq> \<bottom>" for F k
     using key_data[of "finclude D F" k] that keyimg_cong[of "finclude D F" F S]
     by (simp add: group_by_def kd)
   show "group_by D sem (peg K F) K = group_by D sem F K" if "compact K" for F K
     by (simp add: group_by_def peg_finclude[symmetric] peg_law[OF that])
-  show "group_by D sem F (rproj (sup (sup mind D) (flod F)) x)
-      = group_by D sem F' (rproj (sup (sup mind D) (flod F')) x)"
+  show "group_by D sem F (rproj (mind \<squnion> D \<squnion> flod F) x)
+      = group_by D sem F' (rproj (mind \<squnion> D \<squnion> flod F') x)"
     if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
-      "dims_equivs dims F x (sup (sup mind D) (flod F)) (sup (sup mind D) (flod F'))"
-      "group_by D sem F (rproj (sup (sup mind D) (flod F)) x) \<noteq> \<bottom>"
-      "group_by D sem F' (rproj (sup (sup mind D) (flod F')) x) \<noteq> \<bottom>"
+      "dims_equivs dims F x (mind \<squnion> D \<squnion> flod F) (mind \<squnion> D \<squnion> flod F')"
+      "group_by D sem F (rproj (mind \<squnion> D \<squnion> flod F) x) \<noteq> \<bottom>"
+      "group_by D sem F' (rproj (mind \<squnion> D \<squnion> flod F') x) \<noteq> \<bottom>"
     for F F' x
   proof -
     have "dims_equivs dims (finclude D F) x (kd (finclude D F)) (kd (finclude D F'))"
@@ -683,16 +683,16 @@ proof (rule lawfulI)
       by (simp add: group_by_def kd)
   qed
   show "group_by D sem F = group_by D sem F'"
-    if "amb F = amb F'" "slice F = slice F'" "sup (sup mind D) (flod F) = sup (sup mind D) (flod F')"
+    if "amb F = amb F'" "slice F = slice F'" "(mind \<squnion> D \<squnion> flod F) = (mind \<squnion> D \<squnion> flod F')"
     for F F'
   proof -
     have "sem (finclude D F) = sem (finclude D F')"
       by (rule eff_law) (use that in \<open>simp_all add: kd\<close>)
     then show ?thesis by (simp add: group_by_def)
   qed
-  show "compact (sup mind D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
+  show "compact (mind \<squnion> D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
   show "compact dims" by (rule dims_compact)
-  show "dims \<rho> \<le> dims bot" for \<rho> by (rule dims_bot)
+  show "dims \<rho> \<sqsubseteq> dims \<bottom>" for \<rho> by (rule dims_bot)
 qed
 
 subsection \<open>Fixed-level constructs: \<open>GROUP BY ONLY\<close>, \<open>TOTAL\<close>, \<open>ISOLATE\<close>\<close>
@@ -707,44 +707,44 @@ context dataspace
 begin
 
 definition fixed where
-  "fixed E T sem F k = (if fkeys S F (sup E (flod F)) k then sem (T F) (proj E\<cdot>k) else \<bottom>)"
+  "fixed E T sem F k = (if fkeys S F (E \<squnion> flod F) k then sem (T F) (proj E\<cdot>k) else \<bottom>)"
 
 theorem lawful_fixed:
   assumes "\<And>F K. compact K \<Longrightarrow> sem (T (peg K F)) (proj E\<cdot>K) = sem (T F) (proj E\<cdot>K)"
     and "\<And>F F'. amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> T F = T F'"
     and "compact E"
-  shows "lawful E bot (fixed E T sem)"
+  shows "lawful E \<bottom> (fixed E T sem)"
 proof (rule lawfulI)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "fixed E T sem F k \<noteq> \<bottom>" for F k
     using that by (auto simp: fixed_def fkeys_def split: if_splits dest: keyimg_slicer)
-  show "proj (sup E (flod F))\<cdot>k = k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
+  show "proj (E \<squnion> flod F)\<cdot>k = k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
     using that by (auto simp: fixed_def fkeys_def split: if_splits dest: maximal_at_lives)
-  show "keyimg S F (sup E (flod F)) k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
+  show "keyimg S F (E \<squnion> flod F) k" if "fixed E T sem F k \<noteq> \<bottom>" for F k
     using that by (auto simp: fixed_def fkeys_def split: if_splits)
   show "fixed E T sem (peg K F) K = fixed E T sem F K" if "compact K" for F K
     by (simp add: fixed_def fkeys_peg_iff[OF that] assms(1)[OF that])
-  show "fixed E T sem F (rproj (sup E (flod F)) x) = fixed E T sem F' (rproj (sup E (flod F')) x)"
+  show "fixed E T sem F (rproj (E \<squnion> flod F) x) = fixed E T sem F' (rproj (E \<squnion> flod F') x)"
     if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
-      "dims_equivs bot F x (sup E (flod F)) (sup E (flod F'))"
-      "fixed E T sem F (rproj (sup E (flod F)) x) \<noteq> \<bottom>"
-      "fixed E T sem F' (rproj (sup E (flod F')) x) \<noteq> \<bottom>" for F F' x
+      "dims_equivs \<bottom> F x (E \<squnion> flod F) (E \<squnion> flod F')"
+      "fixed E T sem F (rproj (E \<squnion> flod F) x) \<noteq> \<bottom>"
+      "fixed E T sem F' (rproj (E \<squnion> flod F') x) \<noteq> \<bottom>" for F F' x
   proof -
-    have "proj E\<cdot>(rproj (sup E (flod G)) x) = rproj E x" for G :: "('k semi_factor, 'f, 'r) frame"
-      by (simp add: proj_le)
+    have "proj E\<cdot>(rproj (E \<squnion> flod G) x) = rproj E x" for G :: "('k semi_factor, 'f, 'r) frame"
+      by (simp add: proj_le lattice_join_ge1)
     moreover have "T F' = T F" using assms(2)[OF that(1,2)] by simp
     ultimately show ?thesis using that(5,6) by (simp add: fixed_def split: if_splits)
   qed
   show "fixed E T sem F = fixed E T sem F'"
-    if "amb F = amb F'" "slice F = slice F'" "sup E (flod F) = sup E (flod F')"
+    if "amb F = amb F'" "slice F = slice F'" "(E \<squnion> flod F) = (E \<squnion> flod F')"
     for F F'
   proof -
-    have "fkeys S F (sup E (flod F)) = fkeys S F' (sup E (flod F'))"
+    have "fkeys S F (E \<squnion> flod F) = fkeys S F' (E \<squnion> flod F')"
       using fkeys_cong[OF frows_cong[OF that(1,2)]] that(3) by simp
     then show ?thesis using assms(2)[OF that(1,2)] by (simp add: fixed_def fun_eq_iff)
   qed
   show "compact E" by (fact assms(3))
-  show "compact (bot :: 'k semi_factor \<Rightarrow> 'k semi_factor)"
-    by (simp add: compact_fun_iff semi_factor_bot_bottom)  show "(bot :: 'k semi_factor \<Rightarrow> 'k semi_factor) \<rho> \<le> bot bot" for \<rho> by simp
+  show "compact (\<bottom> :: 'k semi_factor \<Rightarrow> 'k semi_factor)"
+    by (simp add: compact_fun_iff semi_factor_bot_bottom)  show "(\<bottom> :: 'k semi_factor \<Rightarrow> 'k semi_factor) \<rho> \<sqsubseteq> \<bottom> \<bottom>" for \<rho> by simp
 qed
 
 end
@@ -753,29 +753,29 @@ context expr_sem
 begin
 
 definition group_by_only where
-  "group_by_only D = fixed (sup mind D) (fgroupby D) sem"
+  "group_by_only D = fixed (mind \<squnion> D) (fgroupby D) sem"
 
 abbreviation total where
-  "total \<equiv> group_by_only bot"
+  "total \<equiv> group_by_only \<bottom>"
 
 theorem lawful_group_by_only:
   assumes D: "compact D"
-  shows "lawful (sup mind D) bot (group_by_only D)"
+  shows "lawful (mind \<squnion> D) \<bottom> (group_by_only D)"
   unfolding group_by_only_def
 proof (rule lawful_fixed)
-  show "sem (fgroupby D (peg K F)) (proj (sup mind D)\<cdot>K) = sem (fgroupby D F) (proj (sup mind D)\<cdot>K)"
+  show "sem (fgroupby D (peg K F)) (proj (mind \<squnion> D)\<cdot>K) = sem (fgroupby D F) (proj (mind \<squnion> D)\<cdot>K)"
     if "compact K" for F K
     by (simp add: fgroupby_peg[OF that]
-        peg_below[OF compact_proj_compact[OF that] compact_proj_compact[OF that] proj_mono])
+        peg_below[OF compact_proj_compact[OF that] compact_proj_compact[OF that] proj_mono[OF lattice_join_ge2]])
   show "fgroupby D F = fgroupby D F'" if "amb F = amb F'" "slice F = slice F'" for F F'
     using that by (cases F, cases F') (simp add: fgroupby_def)
-  show "compact (sup mind D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
+  show "compact (mind \<squnion> D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
 qed
 
 definition isolate where
   "isolate = fixed mind fisolate sem"
 
-theorem lawful_isolate: "lawful mind bot isolate"
+theorem lawful_isolate: "lawful mind \<bottom> isolate"
   unfolding isolate_def
   by (rule lawful_fixed) (simp_all add: fisolate_peg fisolate_def mind_compact)
 
@@ -792,17 +792,17 @@ text \<open>Under \<open>FOR \<tau>\<close> the dims move along the masks' meet 
 
 definition for_dims ::
     "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> ('k semi_factor \<Rightarrow> 'k semi_factor) \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor"
-  where "for_dims \<tau> \<Delta> \<rho>' = Sup {\<Delta> \<rho> |\<rho>. inf \<rho> \<tau> = \<rho>'}"
+  where "for_dims \<tau> \<Delta> \<rho>' = lub {\<Delta> \<rho> |\<rho>. (\<rho> \<sqinter> \<tau>) = \<rho>'}"
 
-lemma for_dims_upper: "\<Delta> \<rho> \<le> for_dims \<tau> \<Delta> (inf \<rho> \<tau>)"
-  by (auto simp: for_dims_def intro: Sup_upper)
+lemma for_dims_upper: "\<Delta> \<rho> \<sqsubseteq> for_dims \<tau> \<Delta> (\<rho> \<sqinter> \<tau>)"
+  by (auto simp: for_dims_def intro: lattice_lub_upper)
 
 lemma for_dims_bot:
-  assumes "\<And>\<rho>. \<Delta> \<rho> \<le> \<Delta> bot"
-  shows "for_dims \<tau> \<Delta> \<rho>' \<le> for_dims \<tau> \<Delta> bot"
+  assumes "\<And>\<rho>. \<Delta> \<rho> \<sqsubseteq> \<Delta> \<bottom>"
+  shows "for_dims \<tau> \<Delta> \<rho>' \<sqsubseteq> for_dims \<tau> \<Delta> \<bottom>"
 proof -
-  have "for_dims \<tau> \<Delta> \<rho>' \<le> \<Delta> bot" unfolding for_dims_def by (rule Sup_least) (auto intro: assms)
-  also have "\<Delta> bot \<le> for_dims \<tau> \<Delta> bot" using for_dims_upper[of \<Delta> bot \<tau>] by simp
+  have "for_dims \<tau> \<Delta> \<rho>' \<sqsubseteq> \<Delta> \<bottom>" unfolding for_dims_def by (rule lattice_lub_least) (auto simp: is_ub_def intro: assms)
+  also have "\<Delta> \<bottom> \<sqsubseteq> for_dims \<tau> \<Delta> \<bottom>" using for_dims_upper[of \<Delta> \<bottom> \<tau>] by simp
   finally show ?thesis .
 qed
 
@@ -811,25 +811,25 @@ lemma compact_for_dims:
   assumes "compact \<Delta>"
   shows "compact (for_dims \<tau> \<Delta>)"
 proof -
-  have fin: "finite {\<rho>. \<Delta> \<rho> \<noteq> bot}" and comp: "\<And>\<rho>. compact (\<Delta> \<rho>)"
+  have fin: "finite {\<rho>. \<Delta> \<rho> \<noteq> \<bottom>}" and comp: "\<And>\<rho>. compact (\<Delta> \<rho>)"
     using assms by (simp_all add: compact_fun_iff semi_factor_bot_bottom)
-  have "range \<Delta> \<subseteq> insert bot (\<Delta> ` {\<rho>. \<Delta> \<rho> \<noteq> bot})" by auto
+  have "range \<Delta> \<subseteq> insert \<bottom> (\<Delta> ` {\<rho>. \<Delta> \<rho> \<noteq> \<bottom>})" by auto
   then have rng: "finite (range \<Delta>)" using fin by (rule finite_subset[OF _ finite_insert[THEN iffD2, OF finite_imageI]])
   have val: "compact (for_dims \<tau> \<Delta> \<rho>')" for \<rho>'
   proof -
-    let ?S = "{\<Delta> \<rho> |\<rho>. inf \<rho> \<tau> = \<rho>'}"
+    let ?S = "{\<Delta> \<rho> |\<rho>. (\<rho> \<sqinter> \<tau>) = \<rho>'}"
     have "?S \<subseteq> range \<Delta>" by auto
     then have "finite ?S" using rng by (rule finite_subset)
-    then have "compact (Sup ?S)" by (rule compact_finite_lub[OF _ _ semi_factor_is_lub]) (auto simp: comp)
+    then have "compact (lub ?S)" by (rule compact_finite_lub[OF _ _ lattice_is_lub]) (auto simp: comp)
     then show ?thesis by (simp add: for_dims_def)
   qed
-  have "for_dims \<tau> \<Delta> \<rho>' = bot" if "\<rho>' \<notin> (\<lambda>\<rho>. inf \<rho> \<tau>) ` {\<rho>. \<Delta> \<rho> \<noteq> bot}" for \<rho>'
+  have "for_dims \<tau> \<Delta> \<rho>' = \<bottom>" if "\<rho>' \<notin> (\<lambda>\<rho>. (\<rho> \<sqinter> \<tau>)) ` {\<rho>. \<Delta> \<rho> \<noteq> \<bottom>}" for \<rho>'
   proof -
-    have "\<forall>\<rho>. inf \<rho> \<tau> = \<rho>' \<longrightarrow> \<Delta> \<rho> = bot" using that by blast
-    then show ?thesis by (auto simp: for_dims_def Sup_bot_conv)
+    have "\<forall>\<rho>. (\<rho> \<sqinter> \<tau>) = \<rho>' \<longrightarrow> \<Delta> \<rho> = \<bottom>" using that by blast
+    then show ?thesis by (auto simp: for_dims_def lattice_lub_bot_conv)
   qed
-  then have "{\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> bot} \<subseteq> (\<lambda>\<rho>. inf \<rho> \<tau>) ` {\<rho>. \<Delta> \<rho> \<noteq> bot}" by blast
-  then have "finite {\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> bot}" using fin by (rule finite_subset[OF _ finite_imageI])
+  then have "{\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> \<bottom>} \<subseteq> (\<lambda>\<rho>. (\<rho> \<sqinter> \<tau>)) ` {\<rho>. \<Delta> \<rho> \<noteq> \<bottom>}" by blast
+  then have "finite {\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> \<bottom>}" using fin by (rule finite_subset[OF _ finite_imageI])
   with val show ?thesis by (simp add: compact_fun_iff semi_factor_bot_bottom)
 qed
 
@@ -849,36 +849,36 @@ lemma flod_ffor [simp]: "flod (ffor \<tau> G F) = truncate \<tau> (flod F)"
 lemma amb_ffor [simp]: "amb (ffor \<tau> G F) = amb F"
   by (simp add: ffor_def)
 
-lemma kd_ffor: "sup mind (truncate \<tau> (flod F)) = sup mind (truncate \<tau> (kd F))"
+lemma kd_ffor: "(mind \<squnion> truncate \<tau> (flod F)) = (mind \<squnion> truncate \<tau> (kd F))"
   using truncate_below[of \<tau> mind]
-  by (simp add: truncate_sup sup_absorb1 sup_assoc[symmetric])
+  by (simp add: truncate_sup lattice_join_absorb1 lattice_join_assoc[symmetric])
 
-lemma kd_ffor_le: "kd (ffor \<tau> G F) \<le> kd F"
-  by (simp only: flod_ffor) (intro sup_mono order_refl truncate_below)
+lemma kd_ffor_le: "kd (ffor \<tau> G F) \<sqsubseteq> kd F"
+  by (simp only: flod_ffor) (intro lattice_join_mono below_refl truncate_below)
 
-lemma kd_ffor_trunc: "truncate \<tau> (kd F) \<le> kd (ffor \<tau> G F)"
-  by (simp only: flod_ffor kd_ffor) (rule sup_ge2)
+lemma kd_ffor_trunc: "truncate \<tau> (kd F) \<sqsubseteq> kd (ffor \<tau> G F)"
+  by (simp only: flod_ffor kd_ffor) (rule lattice_join_ge2)
 
 text \<open>Through any mask, the inner frame's masked rows are among the outer frame's rows masked by
   the composite, and its masked key LOD is the composite's, plus the masked detail of the
   expression itself.  \<open>FOR\<close> meets every mask of the dims with \<open>\<tau>\<close>.\<close>
 
-lemma mrows_ffor: "mrows \<rho> (ffor \<tau> G F) \<subseteq> mrows (inf \<rho> \<tau>) F"
+lemma mrows_ffor: "mrows \<rho> (ffor \<tau> G F) \<subseteq> mrows (\<rho> \<sqinter> \<tau>) F"
   using trunc_slice_conj[of \<rho> "trunc_slice \<tau> (slice F)" G] trunc_slice_comp[of \<rho> \<tau> "slice F"]
   by (auto simp: mrows_def ffor_def)
 
 lemma mask_kd_ffor:
-  "truncate \<rho> (kd (ffor \<tau> G F)) = sup (truncate (inf \<rho> \<tau>) (kd F)) (truncate \<rho> mind)"
+  "truncate \<rho> (kd (ffor \<tau> G F)) = (truncate (\<rho> \<sqinter> \<tau>) (kd F) \<squnion> truncate \<rho> mind)"
 proof -
-  have le: "truncate \<rho> (truncate \<tau> mind) \<le> truncate \<rho> mind"
+  have le: "truncate \<rho> (truncate \<tau> mind) \<sqsubseteq> truncate \<rho> mind"
     by (rule truncate_mono[OF truncate_below])
-  have "truncate \<rho> (kd (ffor \<tau> G F)) = sup (truncate \<rho> mind) (truncate \<rho> (truncate \<tau> (flod F)))"
+  have "truncate \<rho> (kd (ffor \<tau> G F)) = (truncate \<rho> mind \<squnion> (truncate \<rho> (truncate \<tau> (flod F))))"
     by (simp add: truncate_sup)
-  also have "\<dots> = sup (truncate \<rho> mind)
-      (sup (truncate \<rho> (truncate \<tau> mind)) (truncate \<rho> (truncate \<tau> (flod F))))"
-    by (simp only: sup_assoc[symmetric] sup_absorb1[OF le])
-  also have "\<dots> = sup (truncate (inf \<rho> \<tau>) (kd F)) (truncate \<rho> mind)"
-    by (simp add: truncate_inf_comp truncate_sup sup_commute)
+  also have "\<dots> = truncate \<rho> mind \<squnion>
+      (truncate \<rho> (truncate \<tau> mind) \<squnion> truncate \<rho> (truncate \<tau> (flod F)))"
+    by (simp only: lattice_join_assoc[symmetric] lattice_join_absorb1[OF le])
+  also have "\<dots> = (truncate (\<rho> \<sqinter> \<tau>) (kd F) \<squnion> truncate \<rho> mind)"
+    by (simp add: truncate_inf_comp truncate_sup lattice_join_commute)
   finally show ?thesis .
 qed
 
@@ -917,9 +917,9 @@ proof (rule lawfulI)
     have eq: "dims_equivs dims ?H x (kd ?H) (kd ?H')"
     proof (rule dims_equivsI)
       fix \<rho>
-      have "dims_equiv (for_dims \<tau> dims (inf \<rho> \<tau>)) (inf \<rho> \<tau>) F x (kd F) (kd F')"
+      have "dims_equiv (for_dims \<tau> dims (\<rho> \<sqinter> \<tau>)) (\<rho> \<sqinter> \<tau>) F x (kd F) (kd F')"
         by (rule dims_equivsD[OF that(4)])
-      then have "dims_equiv (dims \<rho>) (inf \<rho> \<tau>) F x (kd F) (kd F')"
+      then have "dims_equiv (dims \<rho>) (\<rho> \<sqinter> \<tau>) F x (kd F) (kd F')"
         by (rule dims_equiv_natd_le[OF for_dims_upper])
       then show "dims_equiv (dims \<rho>) \<rho> ?H x (kd ?H) (kd ?H')"
         by (rule dims_equiv_sup[OF mrows_ffor _ mask_kd_ffor mask_kd_ffor])
@@ -940,7 +940,7 @@ proof (rule lawfulI)
   qed
   show "compact mind" by (rule mind_compact)
   show "compact (for_dims \<tau> dims)" by (rule compact_for_dims[OF dims_compact])
-  show "for_dims \<tau> dims \<rho> \<le> for_dims \<tau> dims bot" for \<rho> by (rule for_dims_bot) (rule dims_bot)
+  show "for_dims \<tau> dims \<rho> \<sqsubseteq> for_dims \<tau> dims \<bottom>" for \<rho> by (rule for_dims_bot) (rule dims_bot)
 qed
 
 end
@@ -985,7 +985,7 @@ proof (rule lawfulI)
   qed
   show "compact mind" by (rule mind_compact)
   show "compact dims" by (rule dims_compact)
-  show "dims \<rho> \<le> dims bot" for \<rho> by (rule dims_bot)
+  show "dims \<rho> \<sqsubseteq> dims \<bottom>" for \<rho> by (rule dims_bot)
 qed
 
 end

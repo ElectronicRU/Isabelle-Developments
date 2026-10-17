@@ -757,28 +757,25 @@ qed
 lemma compact_proj_compact: "compact k \<Longrightarrow> compact (k \<downharpoonright> (F :: 'a::dI semi_factor))"
   by (rule compact_below_compact[OF _ deflation.below[OF deflation_semi_factor_p]])
 
-lemma proj_inf: "proj (inf a b)\<cdot>k = proj a\<cdot>(proj b\<cdot>k)"
-  by (simp add: semi_factor_proj_comp inf_commute)
+lemma proj_inf: "proj (a \<sqinter> b)\<cdot>k = proj a\<cdot>(proj b\<cdot>k)"
+  by (simp add: meet_semi_factor semi_factor_proj_comp inf_commute)
 
-lemma proj_sup: "proj (sup a b)\<cdot>k = proj a\<cdot>k \<squnion> proj b\<cdot>k"
-  by (simp add: semi_factor_p_sup)
-
-lemma proj_bot: "proj bot = \<bottom>"
-  by (simp add: semi_factor_p_bot)
+lemma proj_sup: "proj (a \<squnion> b)\<cdot>k = proj a\<cdot>k \<squnion> proj b\<cdot>k"
+  by (simp add: join_semi_factor semi_factor_p_sup)
 
 lemma semi_factor_bot_bottom: "(bot :: 'k::{bifinite, distributive_cpo} semi_factor) = \<bottom>"
   by (rule bottomI) (simp add: below_semi_factor_iff_le)
 
-lemma compact_semi_factor_bot [simp]: "compact (bot :: 'k::{bifinite, distributive_cpo} semi_factor)"
-  by (simp add: semi_factor_bot_bottom)
+lemma proj_bot: "proj \<bottom> = \<bottom>"
+  by (simp add: semi_factor_bot_bottom[symmetric] semi_factor_p_bot)
 
 lemma compact_semi_factor_sup:
-  "compact a \<Longrightarrow> compact b \<Longrightarrow> compact (sup a b :: 'k::{bifinite, distributive_cpo} semi_factor)"
-  by (simp add: join_semi_factor[symmetric] compact_join)
+  "compact a \<Longrightarrow> compact b \<Longrightarrow> compact (a \<squnion> b :: 'k::{bifinite, distributive_cpo} semi_factor)"
+  by (simp add: compact_join)
 
 lemma compact_fold_sup:
   "(\<And>x. x \<in> set xs \<Longrightarrow> compact x) \<Longrightarrow> compact b
-    \<Longrightarrow> compact (fold sup xs b :: 'k::{bifinite, distributive_cpo} semi_factor)"
+    \<Longrightarrow> compact (fold (\<squnion>) xs b :: 'k::{bifinite, distributive_cpo} semi_factor)"
   by (induct xs arbitrary: b) (simp_all add: compact_semi_factor_sup)
 
 lemma proj_defl: "deflation (proj a)"
@@ -808,12 +805,12 @@ lemma proj_idem [simp]: "proj a\<cdot>(proj a\<cdot>k) = proj a\<cdot>k"
   by (rule deflation.idem[OF proj_defl])
 
 lemma proj_commute: "proj a\<cdot>(proj b\<cdot>k) = proj b\<cdot>(proj a\<cdot>k)"
-  by (simp only: proj_inf[symmetric] inf_commute)
+  by (simp only: proj_inf[symmetric] lattice_meet_commute)
 
-lemma proj_le: "a \<le> b \<Longrightarrow> proj a\<cdot>(proj b\<cdot>k) = proj a\<cdot>k"
-  by (simp only: proj_inf[symmetric] inf_absorb1)
+lemma proj_le: "a \<sqsubseteq> b \<Longrightarrow> proj a\<cdot>(proj b\<cdot>k) = proj a\<cdot>k"
+  by (simp only: proj_inf[symmetric] lattice_meet_absorb1)
 
-lemma proj_mono: "a \<le> b \<Longrightarrow> proj a\<cdot>k \<sqsubseteq> proj b\<cdot>k"
+lemma proj_mono: "a \<sqsubseteq> b \<Longrightarrow> proj a\<cdot>k \<sqsubseteq> proj b\<cdot>k"
   by (metis proj_le proj_below)
 
 subsection \<open>Where a key lives\<close>
@@ -826,10 +823,10 @@ text \<open>The LODs a key lives at form a filter, non-empty exactly for compact
 definition lods_of :: "'k::{bifinite, distributive_cpo} \<Rightarrow> 'k semi_factor set" where
   "lods_of k = {c. lives_at c k}"
 
-lemma lives_at_up: "lives_at c k \<Longrightarrow> c \<le> c' \<Longrightarrow> lives_at c' k"
+lemma lives_at_up: "lives_at c k \<Longrightarrow> c \<sqsubseteq> c' \<Longrightarrow> lives_at c' k"
   unfolding lives_at_def by (metis proj_le proj_commute)
 
-lemma lives_at_inf: "lives_at c k \<Longrightarrow> lives_at c' k \<Longrightarrow> lives_at (inf c c') k"
+lemma lives_at_inf: "lives_at c k \<Longrightarrow> lives_at c' k \<Longrightarrow> lives_at (c \<sqinter> c') k"
   unfolding lives_at_def by (simp add: proj_inf)
 
 lemma lives_at_proj: "lives_at a (proj a\<cdot>k)"
@@ -865,7 +862,7 @@ text \<open>Maximality passes down to coarser LODs: anything above the projectio
   slides into a join with the key, which lives at the finer LOD and so cannot exceed it.\<close>
 
 lemma maximal_at_proj:
-  assumes ab: "a \<le> b" and k: "maximal_at b k"
+  assumes ab: "a \<sqsubseteq> b" and k: "maximal_at b k"
   shows "maximal_at a (proj a\<cdot>k)"
   unfolding maximal_at_def
 proof (intro conjI allI impI)
@@ -897,7 +894,7 @@ text \<open>Joins of compatible maximal keys are maximal at the join of their LO
 
 lemma maximal_at_join:
   assumes a: "maximal_at A a" and b: "maximal_at B b" and j: "a \<Up> b"
-  shows "maximal_at (sup A B) (a \<squnion> b)"
+  shows "maximal_at (A \<squnion> B) (a \<squnion> b)"
   unfolding maximal_at_def
 proof (intro conjI allI impI)
   have aA: "proj A\<cdot>a = a" and bB: "proj B\<cdot>b = b" using a b by (simp_all add: maximal_at_def)
@@ -913,8 +910,8 @@ proof (intro conjI allI impI)
     then have "b \<sqsubseteq> proj B\<cdot>(a \<squnion> b)" by (simp only: bB)
     then show ?thesis using b by (simp add: maximal_at_def)
   qed
-  show "proj (sup A B)\<cdot>(a \<squnion> b) = a \<squnion> b" by (simp only: proj_sup pa pb)
-  fix t assume t: "proj (sup A B)\<cdot>t = t" and le: "a \<squnion> b \<sqsubseteq> t"
+  show "proj (A \<squnion> B)\<cdot>(a \<squnion> b) = a \<squnion> b" by (simp only: proj_sup pa pb)
+  fix t assume t: "proj (A \<squnion> B)\<cdot>t = t" and le: "a \<squnion> b \<sqsubseteq> t"
   have at: "a \<sqsubseteq> t" and bt: "b \<sqsubseteq> t" using le joinableD[OF j] by (blast intro: below_trans)+
   have "proj A\<cdot>t = a"
   proof -
@@ -949,7 +946,7 @@ text \<open>Round trip between two LODs that agree up to the LOD of a pinned key
   \<open>a\<close> compatible with the pin, go to \<open>a'\<close> through the join with the pin, and back.\<close>
 
 lemma proj_round_trip:
-  assumes aL: "sup a L = sup a' L" and K: "maximal_at L K"
+  assumes aL: "a \<squnion> L = a' \<squnion> L" and K: "maximal_at L K"
     and K1: "proj a\<cdot>K1 = K1" and le: "proj a\<cdot>K \<sqsubseteq> K1"
   shows "proj a\<cdot>(proj a'\<cdot>(K1 \<squnion> K) \<squnion> K) = K1"
 proof -
@@ -964,13 +961,13 @@ proof -
     then have "K \<sqsubseteq> proj L\<cdot>?J" by (simp only: KL)
     then show ?thesis using K by (simp add: maximal_at_def)
   qed
-  have a_split: "a = sup (inf a a') (inf a L)"
-    by (metis aL inf_sup_absorb inf_sup_distrib1)
-  have "proj a\<cdot>?J = proj (inf a a')\<cdot>?J \<squnion> proj a\<cdot>K"
+  have a_split: "a = (a \<sqinter> a') \<squnion> (a \<sqinter> L)"
+    by (metis aL lattice_meet_join_absorb lattice_meet_join_distrib1)
+  have "proj a\<cdot>?J = proj (a \<sqinter> a')\<cdot>?J \<squnion> proj a\<cdot>K"
     by (subst a_split) (simp add: proj_sup proj_inf LJ)
   moreover have "proj a\<cdot>?J = K1"
     by (simp add: proj_join[OF j] K1 join_absorb2[OF le])
-  ultimately have "K1 = proj (inf a a')\<cdot>?J \<squnion> proj a\<cdot>K" by simp
+  ultimately have "K1 = proj (a \<sqinter> a')\<cdot>?J \<squnion> proj a\<cdot>K" by simp
   then show ?thesis by (simp add: proj_join[OF jJ] proj_inf)
 qed
 
@@ -979,61 +976,61 @@ subsection \<open>Masks\<close>
 
 text \<open>A \<^emph>\<open>mask\<close> is a semi-factor, possibly non-compact, acting on LODs by meet: truncating an LOD
   to a mask keeps the part of it within the mask.  (This replaces an abstract type of
-  truncations, i.e. of maps obeying \<open>\<tau> (inf x y) = inf x (\<tau> y)\<close>, which on a complete lattice
+  truncations, i.e. of maps obeying \<open>\<tau> (x \<sqinter> y) = x \<sqinter> \<tau> y\<close>, which on a complete lattice
   are exactly the meets with a fixed element.)\<close>
 
-abbreviation truncate :: "'l::lattice \<Rightarrow> 'l \<Rightarrow> 'l" where
-  "truncate m x \<equiv> inf m x"
+abbreviation truncate :: "'l::lattice_complete \<Rightarrow> 'l \<Rightarrow> 'l" where
+  "truncate m x \<equiv> m \<sqinter> x"
 
-lemma truncate_inf: "truncate \<tau> (inf x y) = inf x (truncate \<tau> y)"
-  by (simp add: inf_left_commute)
+lemma truncate_inf: "truncate \<tau> (x \<sqinter> y) = x \<sqinter> truncate \<tau> y"
+  by (rule lattice_meet_left_commute)
 
 context
-  fixes \<tau> :: "'l::{distrib_lattice, bounded_lattice_bot}"
+  fixes \<tau> :: "'l::{lattice_complete, distributive_cpo}"
 begin
 
-lemma truncate_below: "truncate \<tau> x \<le> x"
-  by simp
+lemma truncate_below: "truncate \<tau> x \<sqsubseteq> x"
+  by (rule lattice_meet_le2)
 
 lemma truncate_idem: "truncate \<tau> (truncate \<tau> x) = truncate \<tau> x"
-  by simp
+  by (rule lattice_meet_left_idem)
 
-lemma truncate_mono: "x \<le> y \<Longrightarrow> truncate \<tau> x \<le> truncate \<tau> y"
-  by (rule inf_mono[OF order_refl])
+lemma truncate_mono: "x \<sqsubseteq> y \<Longrightarrow> truncate \<tau> x \<sqsubseteq> truncate \<tau> y"
+  by (rule lattice_meet_mono[OF below_refl])
 
-lemma truncate_inf_hom: "truncate \<tau> (inf x y) = inf (truncate \<tau> x) (truncate \<tau> y)"
-  by (simp add: inf_aci)
+lemma truncate_inf_hom: "truncate \<tau> (x \<sqinter> y) = truncate \<tau> x \<sqinter> truncate \<tau> y"
+  by (simp add: lattice_meet_ac)
 
-lemma truncate_sup: "truncate \<tau> (sup x y) = sup (truncate \<tau> x) (truncate \<tau> y)"
-  by (rule inf_sup_distrib1)
+lemma truncate_sup: "truncate \<tau> (x \<squnion> y) = truncate \<tau> x \<squnion> truncate \<tau> y"
+  by (rule lattice_meet_join_distrib1)
 
-lemma truncate_bot: "truncate \<tau> bot = bot"
-  by simp
+lemma truncate_bot: "truncate \<tau> \<bottom> = \<bottom>"
+  by (rule lattice_meet_bot_right)
 
-lemma truncate_fix_down: "truncate \<tau> c = c \<Longrightarrow> d \<le> c \<Longrightarrow> truncate \<tau> d = d"
-  by (metis inf_absorb2 inf_le1 order_trans)
+lemma truncate_fix_down: "truncate \<tau> c = c \<Longrightarrow> d \<sqsubseteq> c \<Longrightarrow> truncate \<tau> d = d"
+  by (metis lattice_meet_absorb2 lattice_meet_le1 below_trans)
 
-lemma truncate_fix_sup: "truncate \<tau> c = c \<Longrightarrow> truncate \<tau> d = d \<Longrightarrow> truncate \<tau> (sup c d) = sup c d"
+lemma truncate_fix_sup: "truncate \<tau> c = c \<Longrightarrow> truncate \<tau> d = d \<Longrightarrow> truncate \<tau> (c \<squnion> d) = c \<squnion> d"
   by (simp add: truncate_sup)
 
-lemma truncate_greatest: "truncate \<tau> c = c \<Longrightarrow> c \<le> x \<Longrightarrow> c \<le> truncate \<tau> x"
+lemma truncate_greatest: "truncate \<tau> c = c \<Longrightarrow> c \<sqsubseteq> x \<Longrightarrow> c \<sqsubseteq> truncate \<tau> x"
   by (metis truncate_mono)
 
 text \<open>Within \<open>a\<close>, truncating more than \<open>a\<close> is truncating \<open>a\<close>.\<close>
 
-lemma truncate_inf_sup: "inf (truncate \<tau> (sup a b)) a = truncate \<tau> a"
-  by (metis inf_assoc inf_commute inf_sup_absorb)
+lemma truncate_inf_sup: "truncate \<tau> (a \<squnion> b) \<sqinter> a = truncate \<tau> a"
+  by (metis lattice_meet_assoc lattice_meet_commute lattice_meet_join_absorb)
 
 end
 
-lemma truncate_inf_comp: "truncate (inf \<rho> \<tau>) x = truncate \<rho> (truncate \<tau> x)"
-  by (simp add: inf_assoc)
+lemma truncate_inf_comp: "truncate (\<rho> \<sqinter> \<tau>) x = truncate \<rho> (truncate \<tau> x)"
+  by (rule lattice_meet_assoc)
 
-lemma truncate_top: "truncate top x = x" for x :: "'l::bounded_lattice"
-  by simp
+lemma truncate_top: "truncate lattice_top x = x"
+  by (rule lattice_meet_top_left)
 
-lemma truncate_bot_trunc: "truncate bot x = bot" for x :: "'l::bounded_lattice_bot"
-  by simp
+lemma truncate_bot_trunc: "truncate \<bottom> x = \<bottom>"
+  by (rule lattice_meet_bot_left)
 
 subsection \<open>Masks acting on keys\<close>
 
@@ -1043,10 +1040,10 @@ lemma truncate_proj_irrelevant:
   assumes c: "lives_at c k" and c': "lives_at c' k"
   shows "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c')\<cdot>k"
 proof -
-  have e: "inf (truncate \<tau> c) c' = inf (truncate \<tau> c') c" by (metis truncate_inf inf_commute)
+  have e: "truncate \<tau> c \<sqinter> c' = truncate \<tau> c' \<sqinter> c" by (metis truncate_inf lattice_meet_commute)
   have "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c)\<cdot>(proj c'\<cdot>k)" using c' by (simp add: lives_at_def)
-  also have "\<dots> = proj (inf (truncate \<tau> c) c')\<cdot>k" by (simp only: proj_inf)
-  also have "\<dots> = proj (inf (truncate \<tau> c') c)\<cdot>k" by (simp only: e)
+  also have "\<dots> = proj (truncate \<tau> c \<sqinter> c')\<cdot>k" by (simp only: proj_inf)
+  also have "\<dots> = proj (truncate \<tau> c' \<sqinter> c)\<cdot>k" by (simp only: e)
   also have "\<dots> = proj (truncate \<tau> c')\<cdot>(proj c\<cdot>k)" by (simp only: proj_inf)
   also have "\<dots> = proj (truncate \<tau> c')\<cdot>k" using c by (simp add: lives_at_def)
   finally show ?thesis .

@@ -69,9 +69,85 @@ theorem distrib_lattice_below:
   by (rule class.distrib_lattice.intro[OF class.complete_lattice.axioms(1)[OF complete_lattice_below]])
     (unfold_locales, simp add: join_meet_distrib)
 
+text \<open>The lattice laws needed elsewhere, re-exported from local interpretations under
+  \<open>lattice_\<close> names (the interpretations themselves stay local, see above).\<close>
+
+context
+begin
+
+interpretation lc: complete_lattice "glb :: 'a::lattice_complete set \<Rightarrow> 'a" lub "(\<sqinter>)" "(\<sqsubseteq>)" "(\<sqsubset>)" "(\<squnion>)" \<bottom> lattice_top
+  by (fact complete_lattice_below)
+
+lemmas lattice_join_assoc = lc.sup_assoc
+  and lattice_join_commute = lc.sup_commute
+  and lattice_join_left_commute = lc.sup_left_commute
+  and lattice_join_ge1 = lc.sup_ge1
+  and lattice_join_ge2 = lc.sup_ge2
+  and lattice_join_least = lc.sup_least
+  and lattice_join_mono = lc.sup_mono
+  and lattice_join_absorb1 = lc.sup_absorb1
+  and lattice_join_absorb2 = lc.sup_absorb2
+  and lattice_join_bot_left = lc.sup_bot_left
+  and lattice_join_bot_right = lc.sup_bot_right
+  and lattice_meet_assoc = lc.inf_assoc
+  and lattice_meet_commute = lc.inf_commute
+  and lattice_meet_left_commute = lc.inf_left_commute
+  and lattice_meet_le1 = lc.inf_le1
+  and lattice_meet_le2 = lc.inf_le2
+  and lattice_meet_greatest = lc.inf_greatest
+  and lattice_meet_mono = lc.inf_mono
+  and lattice_meet_absorb1 = lc.inf_absorb1
+  and lattice_meet_absorb2 = lc.inf_absorb2
+  and lattice_meet_idem = lc.inf_idem
+  and lattice_meet_left_idem = lc.inf_left_idem
+  and lattice_meet_bot_left = lc.inf_bot_left
+  and lattice_meet_bot_right = lc.inf_bot_right
+  and lattice_meet_top_left = lc.inf_top_left
+  and lattice_meet_join_absorb = lc.inf_sup_absorb
+  and lattice_join_meet_absorb = lc.sup_inf_absorb
+  and lattice_lub_bot_conv = lc.Sup_bot_conv
+  and lattice_join_ac = lc.sup_aci
+  and lattice_meet_ac = lc.inf_aci
+
+end
+
+context
+begin
+
+interpretation lcd: distrib_lattice "(\<sqinter>)" "(\<sqsubseteq>)" "(\<sqsubset>)" "(\<squnion>) :: 'a::{lattice_complete, distributive_cpo} \<Rightarrow> _"
+  by (fact distrib_lattice_below)
+
+lemmas lattice_meet_join_distrib1 = lcd.inf_sup_distrib1
+  and lattice_meet_join_distrib2 = lcd.inf_sup_distrib2
+  and lattice_join_meet_distrib1 = lcd.sup_inf_distrib1
+  and lattice_join_meet_distrib2 = lcd.sup_inf_distrib2
+
+end
+
 text \<open>Adjoining a top to a bounded-complete domain makes it a complete lattice.\<close>
 
 instance top :: (bounded_complete) lattice_complete
   by intro_classes (rule exI[of _ Top], simp)
+
+instance "fun" :: (type, lattice_complete) lattice_complete
+  by intro_classes (rule exI[of _ "\<lambda>_. lattice_top"], simp add: fun_below_iff)
+
+lemma fold_join_ge_init: "b \<sqsubseteq> fold (\<squnion>) xs (b::'a::lattice_complete)"
+  by (induct xs arbitrary: b) (simp_all, metis lattice_join_ge2 below_trans)
+
+lemma fold_join_upper: "x \<in> set xs \<Longrightarrow> x \<sqsubseteq> fold (\<squnion>) xs (b::'a::lattice_complete)"
+proof (induct xs arbitrary: b)
+  case (Cons y xs)
+  show ?case
+  proof (cases "x = y")
+    case True
+    have "x \<sqsubseteq> x \<squnion> b" by (rule lattice_join_ge1)
+    also have "\<dots> \<sqsubseteq> fold (\<squnion>) xs (x \<squnion> b)" by (rule fold_join_ge_init)
+    finally show ?thesis using True by simp
+  next
+    case False
+    with Cons show ?thesis by simp
+  qed
+qed simp
 
 end
