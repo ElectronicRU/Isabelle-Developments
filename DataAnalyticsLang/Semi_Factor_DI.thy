@@ -1,5 +1,5 @@
 theory Semi_Factor_DI
-  imports Subdomain "HOLCF-extra.DI"
+  imports Subdomain "HOLCF-extra.DI" "HOLCF-extra.Algebraic_Lattice" "HOL-Library.Countable_Set"
 begin
 
 section \<open>Semi-factors over dI-domains\<close>
@@ -130,4 +130,195 @@ proof -
   qed
   then show ?thesis by (simp add: semi_factor_p_of_defl[OF sfd])
 qed
+
+subsection \<open>Algebraicity\<close>
+
+lemma countable_compacts: "countable {x :: 'a::bifinite. compact x}"
+proof -
+  obtain f :: "'a compact_basis \<Rightarrow> nat" where "inj f" using compact_basis.countable ..
+  then have "countable (range (Rep_compact_basis :: 'a compact_basis \<Rightarrow> 'a))"
+    by (rule countable_image[OF countableI])
+  moreover have "range (Rep_compact_basis :: 'a compact_basis \<Rightarrow> 'a) = {x. compact x}"
+    using type_definition_compact_basis by (rule type_definition.Rep_range)
+  ultimately show ?thesis by simp
+qed
+
+lemma stable_defl_semi_factor_p: "stable_defl (semi_factor_p F)"
+  by (rule semi_factor_defl.axioms(1)[OF semi_factor_defl_semi_factor_p])
+
+lemma deflation_semi_factor_p: "deflation (semi_factor_p F)"
+  by (rule stable_defl.deflation[OF stable_defl_semi_factor_p])
+
+lemma semi_factor_p_mono: "F \<sqsubseteq> G \<Longrightarrow> semi_factor_p F\<cdot>x \<sqsubseteq> semi_factor_p G\<cdot>x"
+  by (rule monofun_cfun_fun) (simp add: semi_factor_below_iff_p[symmetric])
+
+text \<open>Projections onto a lub of semi-factors are pointwise lubs (@{thm [source] proj_Sup}).\<close>
+
+lemma semi_factor_p_lub_is_lub: "(\<lambda>F. semi_factor_p F\<cdot>x) ` \<X> <<| semi_factor_p (lub \<X>)\<cdot>x"
+proof -
+  have "lub \<X> = Sup \<X>" by (rule lub_eqI[OF semi_factor_is_lub])
+  then have "semi_factor_p (lub \<X>) = stable_subdom_p (Sup (subdom_of_semi_factor ` \<X>))"
+    by (simp add: semi_factor_p.rep_eq Sup_semi_factor.rep_eq)
+  moreover have "(\<lambda>F. semi_factor_p F\<cdot>x) ` \<X> = (\<lambda>A. stable_subdom_p A\<cdot>x) ` (subdom_of_semi_factor ` \<X>)"
+    by (simp add: image_image semi_factor_p.rep_eq)
+  ultimately show ?thesis using proj_Sup[where \<A> = "subdom_of_semi_factor ` \<X>" and x = x] by simp
+qed
+
+lemma semi_factor_p_chain_lub: "semi_factor_p (\<Squnion>i. Y i)\<cdot>x = (\<Squnion>i. semi_factor_p (Y i)\<cdot>x)"
+proof -
+  have "range (\<lambda>i. semi_factor_p (Y i)\<cdot>x) <<| semi_factor_p (\<Squnion>i. Y i)\<cdot>x"
+    using semi_factor_p_lub_is_lub[where \<X> = "range Y" and x = x] by (simp add: image_image)
+  then show ?thesis by (rule lub_eqI[symmetric])
+qed
+
+text \<open>The principal semi-factor of \<open>x\<close>: the least one containing \<open>x\<close>.  Over a dI key its image is
+  the intersection of the images containing \<open>x\<close> (@{thm [source] semi_factor_p_glb}).\<close>
+
+definition semi_factor_principal :: "'a::dI \<Rightarrow> 'a semi_factor" where
+  "semi_factor_principal x = glb {F. semi_factor_p F\<cdot>x = x}"
+
+lemma semi_factor_principal_fixes:
+  "semi_factor_p (semi_factor_principal x)\<cdot>y = y \<longleftrightarrow>
+    (\<forall>F. semi_factor_p F\<cdot>x = x \<longrightarrow> semi_factor_p F\<cdot>y = y)"
+proof -
+  let ?A = "{F :: 'a semi_factor. semi_factor_p F\<cdot>x = x}"
+  have "semi_factor_of_defl ID \<in> ?A" by (simp add: semi_factor_p_of_defl semi_factor_defl_ID)
+  then have ne: "?A \<noteq> {}" by blast
+  have "semi_factor_p (semi_factor_principal x) = glb (semi_factor_p ` ?A)"
+    unfolding semi_factor_principal_def by (rule semi_factor_p_glb[OF ne])
+  moreover have "glb (semi_factor_p ` ?A)\<cdot>y = y \<longleftrightarrow> (\<forall>d\<in>semi_factor_p ` ?A. d\<cdot>y = y)"
+    by (rule stable_defl_glb_fixes) (use ne in \<open>auto intro: stable_defl_semi_factor_p\<close>)
+  ultimately show ?thesis by auto
+qed
+
+lemma semi_factor_principal_self: "semi_factor_p (semi_factor_principal x)\<cdot>x = x"
+  by (simp add: semi_factor_principal_fixes)
+
+lemma semi_factor_principal_below_iff: "semi_factor_principal x \<sqsubseteq> F \<longleftrightarrow> semi_factor_p F\<cdot>x = x"
+proof
+  assume "semi_factor_principal x \<sqsubseteq> F"
+  then have "semi_factor_p (semi_factor_principal x)\<cdot>x \<sqsubseteq> semi_factor_p F\<cdot>x"
+    by (rule semi_factor_p_mono)
+  then have "x \<sqsubseteq> semi_factor_p F\<cdot>x" by (simp add: semi_factor_principal_self)
+  then show "semi_factor_p F\<cdot>x = x" by (rule below_antisym[OF deflation.below[OF deflation_semi_factor_p]])
+next
+  assume "semi_factor_p F\<cdot>x = x"
+  then show "semi_factor_principal x \<sqsubseteq> F" unfolding semi_factor_principal_def by (intro glb_below) simp
+qed
+
+lemma compact_semi_factor_principal:
+  assumes k: "compact k"
+  shows "compact (semi_factor_principal k)"
+proof (rule compactI2)
+  fix Y :: "nat \<Rightarrow> 'a semi_factor" assume Y: "chain Y" and le: "semi_factor_principal k \<sqsubseteq> (\<Squnion>i. Y i)"
+  have ch: "chain (\<lambda>i. semi_factor_p (Y i)\<cdot>k)" by (rule chainI, rule semi_factor_p_mono, rule chainE[OF Y])
+  have "k = semi_factor_p (\<Squnion>i. Y i)\<cdot>k" using le by (simp add: semi_factor_principal_below_iff)
+  also have "\<dots> = (\<Squnion>i. semi_factor_p (Y i)\<cdot>k)" by (rule semi_factor_p_chain_lub)
+  finally have "k \<sqsubseteq> (\<Squnion>i. semi_factor_p (Y i)\<cdot>k)" by simp
+  then obtain i where "k \<sqsubseteq> semi_factor_p (Y i)\<cdot>k" using compactD2[OF k ch] by blast
+  then have "semi_factor_p (Y i)\<cdot>k = k" by (rule below_antisym[OF deflation.below[OF deflation_semi_factor_p]])
+  then have "semi_factor_principal k \<sqsubseteq> Y i" by (simp add: semi_factor_principal_below_iff)
+  then show "\<exists>i. semi_factor_principal k \<sqsubseteq> Y i" by blast
+qed
+
+text \<open>Every semi-factor is the lub of the principals of its compact elements: its image is
+  downward closed and the projection onto the lub fixes every compact of it, hence every element.\<close>
+
+lemma semi_factor_lub_principals:
+  "F = lub {semi_factor_principal k | k. compact k \<and> semi_factor_p F\<cdot>k = k}" (is "F = lub ?P")
+proof (rule below_antisym)
+  show "lub ?P \<sqsubseteq> F" by (rule lattice_lub_least) (auto simp: is_ub_def semi_factor_principal_below_iff)
+  show "F \<sqsubseteq> lub ?P"
+  proof (simp only: semi_factor_below_iff_p, rule cfun_belowI)
+    fix x
+    let ?Z = "lub ?P" and ?y = "semi_factor_p F\<cdot>x"
+    have fix_Z: "semi_factor_p ?Z\<cdot>k = k" if "compact k" "semi_factor_p F\<cdot>k = k" for k
+    proof -
+      have "semi_factor_principal k \<sqsubseteq> ?Z" by (rule lattice_lub_upper) (use that in blast)
+      then show ?thesis by (simp add: semi_factor_principal_below_iff)
+    qed
+    obtain C where C: "chain C" "\<forall>i. compact (C i)" "?y = (\<Squnion>i. C i)" by (rule obtain_compact_chain)
+    have fixF: "semi_factor_p F\<cdot>(C i) = C i" for i
+    proof -
+      have "C i \<sqsubseteq> semi_factor_p F\<cdot>x" using is_ub_thelub[OF C(1)] C(3) by simp
+      then show ?thesis by (rule stable_defl.lower_fixed[OF stable_defl_semi_factor_p])
+    qed
+    have "semi_factor_p ?Z\<cdot>?y = (\<Squnion>i. semi_factor_p ?Z\<cdot>(C i))"
+      unfolding C(3) by (rule contlub_cfun_arg[OF C(1)])
+    also have "\<dots> = (\<Squnion>i. C i)" using C(2) fixF by (simp add: fix_Z)
+    also have "\<dots> = ?y" by (simp add: C(3))
+    finally have yZ: "semi_factor_p ?Z\<cdot>?y = ?y" .
+    have "?y \<sqsubseteq> x" by (rule deflation.below[OF deflation_semi_factor_p])
+    then have "semi_factor_p ?Z\<cdot>?y \<sqsubseteq> semi_factor_p ?Z\<cdot>x" by (rule monofun_cfun_arg)
+    with yZ show "semi_factor_p F\<cdot>x \<sqsubseteq> semi_factor_p ?Z\<cdot>x" by simp
+  qed
+qed
+
+lemma semi_factor_algebraic: "F = lub {K. compact K \<and> K \<sqsubseteq> F}" for F :: "'a::dI semi_factor"
+proof (rule below_antisym)
+  have "lub {semi_factor_principal k | k. compact k \<and> semi_factor_p F\<cdot>k = k} \<sqsubseteq> lub {K. compact K \<and> K \<sqsubseteq> F}"
+    by (rule lattice_lub_mono)
+      (auto intro: compact_semi_factor_principal simp: semi_factor_principal_below_iff)
+  then show "F \<sqsubseteq> lub {K. compact K \<and> K \<sqsubseteq> F}"
+    by (rule below_trans[OF eq_imp_below[OF semi_factor_lub_principals]])
+  show "lub {K. compact K \<and> K \<sqsubseteq> F} \<sqsubseteq> F" by (rule lattice_lub_least) (auto simp: is_ub_def)
+qed
+
+text \<open>A compact semi-factor is the join of finitely many compact principals: enumerate the
+  compacts of its image, and the joins of initial segments form a chain with lub the semi-factor.\<close>
+
+lemma compact_semi_factor_finite_join:
+  assumes K: "compact K"
+  shows "\<exists>A. finite A \<and> A \<subseteq> {k. compact k} \<and> K = lub (semi_factor_principal ` A)"
+proof -
+  let ?P = "{k. compact k \<and> semi_factor_p K\<cdot>k = k}"
+  have "semi_factor_p K\<cdot>\<bottom> = \<bottom>" by (rule bottomI, rule deflation.below[OF deflation_semi_factor_p])
+  then have neP: "?P \<noteq> {}" by (intro exI[of _ \<bottom>] notI) simp
+  have cP: "countable ?P" by (rule countable_subset[OF _ countable_compacts]) auto
+  define e where "e = from_nat_into ?P"
+  have e: "range e = ?P" unfolding e_def by (rule range_from_nat_into[OF neP cP])
+  have eP: "compact (e i) \<and> semi_factor_p K\<cdot>(e i) = e i" for i using rangeI[of e i] e by blast
+  define G where "G n = lub (semi_factor_principal ` e ` {..n})" for n
+  have chG: "chain G" unfolding G_def by (rule chainI, rule lattice_lub_mono) auto
+  have GK: "G n \<sqsubseteq> K" for n
+    unfolding G_def by (rule lattice_lub_least) (auto simp: is_ub_def semi_factor_principal_below_iff eP)
+  have "K \<sqsubseteq> (\<Squnion>n. G n)"
+  proof -
+    have "K = lub {semi_factor_principal k | k. compact k \<and> semi_factor_p K\<cdot>k = k}"
+      by (rule semi_factor_lub_principals)
+    also have "\<dots> \<sqsubseteq> (\<Squnion>n. G n)"
+    proof (rule lattice_lub_least, rule is_ubI)
+      fix X assume "X \<in> {semi_factor_principal k | k. compact k \<and> semi_factor_p K\<cdot>k = k}"
+      then obtain k where X: "X = semi_factor_principal k" and k: "k \<in> ?P" by blast
+      then have "k \<in> range e" using e by simp
+      then obtain n where n: "k = e n" by blast
+      have "X \<sqsubseteq> G n" unfolding X n G_def by (rule lattice_lub_upper) simp
+      also have "G n \<sqsubseteq> (\<Squnion>n. G n)" by (rule is_ub_thelub[OF chG])
+      finally show "X \<sqsubseteq> (\<Squnion>n. G n)" .
+    qed
+    finally show ?thesis .
+  qed
+  then obtain n where "K \<sqsubseteq> G n" using compactD2[OF K chG] by blast
+  then have "K = G n" using GK[of n] by (rule below_antisym)
+  then show ?thesis unfolding G_def by (intro exI[of _ "e ` {..n}"] conjI) (auto simp: eP)
+qed
+
+lemma countable_compact_semi_factors: "countable {K :: 'a::dI semi_factor. compact K}"
+proof (rule countable_subset)
+  show "{K. compact K} \<subseteq> (\<lambda>A. lub (semi_factor_principal ` A)) ` {A. finite A \<and> A \<subseteq> {k :: 'a. compact k}}"
+    using compact_semi_factor_finite_join by blast
+  show "countable ((\<lambda>A. lub (semi_factor_principal ` A)) ` {A. finite A \<and> A \<subseteq> {k :: 'a. compact k}})"
+    by (rule countable_image, rule countable_Collect_finite_subset, rule countable_compacts)
+qed
+
+lemma semi_factor_compacts_enum: "\<exists>c :: nat \<Rightarrow> 'a::dI semi_factor. range c = {K. compact K}"
+proof
+  have "{K :: 'a semi_factor. compact K} \<noteq> {}" using compact_bottom by blast
+  then show "range (from_nat_into {K :: 'a semi_factor. compact K}) = {K. compact K}"
+    by (rule range_from_nat_into[OF _ countable_compact_semi_factors])
+qed
+
+instance semi_factor :: (dI) bifinite
+  by (rule bifinite_algebraic_lattice[OF semi_factor_compacts_enum semi_factor_algebraic])
+
 end
