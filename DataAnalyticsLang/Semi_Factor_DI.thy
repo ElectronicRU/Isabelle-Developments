@@ -59,8 +59,10 @@ proof -
   have "(\<lambda>d. d\<cdot>x) ` \<D> \<subseteq> {z. z \<sqsubseteq> x}"
     using st by (auto intro: deflation.below stable_defl.deflation)
   then have "finite ((\<lambda>d. d\<cdot>x) ` \<D>)" by (rule finite_subset) (rule finite_below_compact[OF k])
+  then have "\<exists>F\<subseteq>\<D>. finite F \<and> (\<lambda>d. d\<cdot>x) ` \<D> = (\<lambda>d. d\<cdot>x) ` F"
+    by (rule finite_subset_image[OF _ subset_refl])
   then obtain F where F: "F \<subseteq> \<D>" "finite F" and FD: "(\<lambda>d. d\<cdot>x) ` \<D> = (\<lambda>d. d\<cdot>x) ` F"
-    using finite_subset_image[OF _ subset_refl] by blast
+    by (elim exE conjE) (rule that)
   obtain e where e: "semi_factor_defl e" and efx: "\<And>z. e\<cdot>z = z \<longleftrightarrow> (\<forall>d\<in>F. d\<cdot>z = z)"
     using semi_factor_defl_finite_meet[OF F(2)] sf F(1) by blast
   interpret e: semi_factor_defl e by (rule e)
@@ -99,4 +101,33 @@ proof (rule semi_factor_deflI)
   then show "x \<Up> y" by (simp add: contlub_cfun_fun[OF chain_approx, symmetric])
 qed
 
+
+subsection \<open>Meets of semi-factors\<close>
+
+lemma semi_factor_below_iff_p: "F \<sqsubseteq> G \<longleftrightarrow> semi_factor_p F \<sqsubseteq> semi_factor_p G"
+  by (simp add: below_semi_factor_def stable_subdom_below_iff semi_factor_p.rep_eq)
+
+text \<open>Over a dI key the meet of a non-empty set of semi-factors is computed pointwise: its
+  projection is the glb of the projections, so its image is the intersection of the images.\<close>
+
+lemma semi_factor_p_glb:
+  fixes \<A> :: "'a::dI semi_factor set"
+  assumes ne: "\<A> \<noteq> {}"
+  shows "semi_factor_p (glb \<A>) = (\<Sqinter>A\<in>\<A>. semi_factor_p A)"
+proof -
+  let ?P = "semi_factor_p ` \<A>"
+  have neP: "?P \<noteq> {}" using ne by blast
+  have sfd: "semi_factor_defl (glb ?P)"
+    by (rule semi_factor_defl_glb[OF neP]) (auto intro: semi_factor_defl_semi_factor_p)
+  have "glb \<A> = semi_factor_of_defl (glb ?P)"
+  proof (rule glb_eqI, rule is_glbI)
+    show "semi_factor_of_defl (glb ?P) \<sqsubseteq> A" if "A \<in> \<A>" for A
+      unfolding semi_factor_below_iff_p semi_factor_p_of_defl[OF sfd]
+      by (rule glb_below) (use that in blast)
+    show "B \<sqsubseteq> semi_factor_of_defl (glb ?P)" if "\<forall>A\<in>\<A>. B \<sqsubseteq> A" for B
+      unfolding semi_factor_below_iff_p semi_factor_p_of_defl[OF sfd]
+      by (rule glb_greatest[OF neP]) (use that in \<open>auto simp: semi_factor_below_iff_p\<close>)
+  qed
+  then show ?thesis by (simp add: semi_factor_p_of_defl[OF sfd])
+qed
 end
