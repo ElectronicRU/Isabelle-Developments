@@ -6,23 +6,26 @@ section \<open>Combinators on expression semantics\<close>
 
 text \<open>Record-level constructions do not conform to data on their own; they are lawful
   \<^emph>\<open>up to data\<close> (their guard is lawful), and a single guard where they enter an
-  aggregation restores the key-data law.  Collecting a list of expressions into a strict tuple,
-  followed by a map, expresses every strict operator of any arity.\<close>
+  aggregation restores the presence law.  Collecting a list of expressions into a tuple,
+  followed by a map, expresses every operator of any arity.\<close>
 
-subsection \<open>Strict tuples\<close>
+subsection \<open>Tuples\<close>
 
-text \<open>A strict tuple is \<open>\<bottom>\<close> as soon as one component is: it has an entry exactly where every
-  component has one.  No order classes are needed for values; they will be once tuples are key
-  values.\<close>
+text \<open>A collected entry is present where every component is; its value is a tuple that is lazy in
+  the components, so an undefined component does not make the tuple undefined.  No order classes
+  are needed for values; they will be once tuples are key values.\<close>
 
-domain ('a::"domain") stuple = SNil | SCons 'a "'a stuple"
+domain ('a::"domain") ltuple = LNil | LCons (lazy "'a") "'a ltuple"
 
-fun stuple_of :: "'a::domain list \<Rightarrow> 'a stuple" where
-  "stuple_of [] = SNil"
-| "stuple_of (x # xs) = SCons\<cdot>x\<cdot>(stuple_of xs)"
+fun ltuple_of :: "'a::domain list \<Rightarrow> 'a ltuple" where
+  "ltuple_of [] = LNil"
+| "ltuple_of (x # xs) = LCons\<cdot>x\<cdot>(ltuple_of xs)"
 
-lemma stuple_of_bottom_iff: "stuple_of xs = \<bottom> \<longleftrightarrow> (\<exists>x\<in>set xs. x = \<bottom>)"
+lemma ltuple_of_not_bottom: "ltuple_of xs \<noteq> \<bottom>"
   by (induct xs) simp_all
+
+lemma those_not_None_iff: "those xs \<noteq> None \<longleftrightarrow> (\<forall>x\<in>set xs. x \<noteq> None)"
+  by (induct xs) (auto split: option.splits)
 
 context dataspace
 begin
@@ -68,16 +71,16 @@ proof (induct fs arbitrary: b)
   then show ?case unfolding fold_Cons o_apply by (rule Cons.hyps[rotated]) (rule Cons.prems(1), simp)
 qed simp
 
-definition collect :: "('k semi_factor, 'f, 'r, 'k, 'a::domain) expr list \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'a stuple) expr"
+definition collect :: "('k semi_factor, 'f, 'r, 'k, 'a::domain) expr list \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'a ltuple) expr"
   where "collect Es =
     (let M = fold (\<squnion>) (map emind Es) \<bottom> in
      \<lparr>emind = M, edims = fold (\<squnion>) (map edims Es) \<bottom>,
-      esem = \<lambda>F k. stuple_of (map (\<lambda>E. esem E (finclude M F) k) Es)\<rparr>)"
+      esem = \<lambda>F k. map_option ltuple_of (those (map (\<lambda>E. esem E (finclude M F) k) Es))\<rparr>)"
 
 lemma collect_simps:
   "emind (collect Es) = fold (\<squnion>) (map emind Es) \<bottom>"
   "edims (collect Es) = fold (\<squnion>) (map edims Es) \<bottom>"
-  "esem (collect Es) F k = stuple_of (map (\<lambda>E. esem E (finclude (emind (collect Es)) F) k) Es)"
+  "esem (collect Es) F k = map_option ltuple_of (those (map (\<lambda>E. esem E (finclude (emind (collect Es)) F) k) Es))"
   by (simp_all add: collect_def Let_def)
 
 lemma edims_collect_upper: "E \<in> set Es \<Longrightarrow> edims E \<rho> \<sqsubseteq> edims (collect Es) \<rho>"
@@ -103,20 +106,31 @@ proof -
     if "E \<in> set Es" for E and F :: "('k semi_factor, 'f, 'r) frame"
     using ekd_collect[OF that, of F] by (simp only: ekd_def)
   obtain E0 where E0: "E0 \<in> set Es" using ne by (cases Es) auto
-  have nb: "esem E (finclude ?M F) k \<noteq> \<bottom>" if "esem (collect Es) F k \<noteq> \<bottom>" "E \<in> set Es" for E F k
-    using that by (auto simp: collect_simps stuple_of_bottom_iff)
+  have nb: "esem E (finclude ?M F) k \<noteq> None" if "esem (collect Es) F k \<noteq> None" "E \<in> set Es" for E F k
+    using that unfolding collect_simps by (auto simp: those_not_None_iff simp del: not_None_eq)
   interpret E0: expr_sem conj sunit slod sopen coarsen spin rkey S
     "emind E0" "edims E0" "esem E0"
     by (rule law[OF E0])
   show ?thesis
   proof (rule lawfulI)
-    show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "esem (collect Es) F k \<noteq> \<bottom>" for F k
-      using E0.key_slicer[OF nb[OF that E0]] by simp
-    show "proj (?M \<squnion> flod F)\<cdot>k = k" if "esem (collect Es) F k \<noteq> \<bottom>" for F k
-      using E0.key_lives[OF nb[OF that E0]] by (simp only: kd[OF E0])
-    show "keyimg S F (?M \<squnion> flod F) k" if "esem (collect Es) F k \<noteq> \<bottom>" for F k
-      using E0.key_data[OF nb[OF that E0]]
-      by (simp only: kd[OF E0] keyimg_cong[OF frows_finclude])
+    show "esem (collect Es) F k \<noteq> None \<longleftrightarrow> keyimg S F (?M \<squnion> flod F) k" for F k
+    proof
+      assume "esem (collect Es) F k \<noteq> None"
+      then show "keyimg S F (?M \<squnion> flod F) k"
+        using E0.key_data[OF nb[OF _ E0]] by (simp only: kd[OF E0] keyimg_cong[OF frows_finclude])
+    next
+      assume ki: "keyimg S F (?M \<squnion> flod F) k"
+      have "esem E (finclude ?M F) k \<noteq> None" if "E \<in> set Es" for E
+      proof -
+        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
+          "emind E" "edims E" "esem E"
+          by (rule law[OF that])
+        show ?thesis using ki
+          by (simp only: E.presence kd[OF that] keyimg_cong[OF frows_finclude])
+      qed
+      then show "esem (collect Es) F k \<noteq> None"
+        unfolding collect_simps by (auto simp: those_not_None_iff simp del: not_None_eq)
+    qed
     show "esem (collect Es) (peg K F) K = esem (collect Es) F K" if "compact K" for F K
     proof -
       note cK = that
@@ -128,14 +142,14 @@ proof -
         show ?thesis by (simp only: peg_finclude[symmetric] E.peg_law[OF cK])
       qed
       show ?thesis unfolding collect_simps(3)
-        by (rule arg_cong[where f = stuple_of], rule map_cong[OF refl e])
+        by (rule arg_cong[where f = "\<lambda>xs. map_option ltuple_of (those xs)"], rule map_cong[OF refl e])
     qed
     show "esem (collect Es) F (rproj (?M \<squnion> flod F) x)
         = esem (collect Es) F' (rproj (?M \<squnion> flod F') x)"
       if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
         "dims_equivs (edims (collect Es)) F x (?M \<squnion> flod F) (?M \<squnion> flod F')"
-        "esem (collect Es) F (rproj (?M \<squnion> flod F) x) \<noteq> \<bottom>"
-        "esem (collect Es) F' (rproj (?M \<squnion> flod F') x) \<noteq> \<bottom>" for F F' x
+        "esem (collect Es) F (rproj (?M \<squnion> flod F) x) \<noteq> None"
+        "esem (collect Es) F' (rproj (?M \<squnion> flod F') x) \<noteq> None" for F F' x
     proof -
       note a = that
       have e: "esem E (finclude ?M F) (rproj (?M \<squnion> flod F) x)
@@ -163,7 +177,7 @@ proof -
         then show ?thesis by (simp only: kd[OF E])
       qed
       show ?thesis unfolding collect_simps(3)
-        by (rule arg_cong[where f = stuple_of], rule map_cong[OF refl e])
+        by (rule arg_cong[where f = "\<lambda>xs. map_option ltuple_of (those xs)"], rule map_cong[OF refl e])
     qed
     show "esem (collect Es) F = esem (collect Es) F'"
       if "amb F = amb F'" "slice F = slice F'" "(?M \<squnion> flod F) = (?M \<squnion> flod F')"
@@ -178,7 +192,7 @@ proof -
         show ?thesis by (rule E.eff_law) (simp_all only: amb_finclude slice_finclude kd[OF that] a)
       qed
       show ?thesis unfolding collect_simps(3)
-        by (intro ext arg_cong[where f = stuple_of] map_cong[OF refl]) (simp only: e)
+        by (intro ext arg_cong[where f = "\<lambda>xs. map_option ltuple_of (those xs)"] map_cong[OF refl]) (simp only: e)
     qed
     show "compact ?M" unfolding collect_simps(1)
       by (rule compact_fold_sup) (auto intro: expr_sem.mind_compact[OF law])
