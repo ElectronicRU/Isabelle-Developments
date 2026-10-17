@@ -4,10 +4,22 @@ Alex's Isabelle/HOLCF developments. Two sessions, both built on `HOLCF`.
 
 ## CRITICAL: editing theory files
 
-**NEVER** read/write/create Isabelle theory (`.thy`) files with the filesystem
-tools (`Read`/`Edit`/`Write`/`Bash cat`). **ALWAYS** use the **Isabelle/Q (I/Q)
-MCP server** so edits go through the live jEdit instance and PIDE state stays in
-sync. Filesystem tools are fine for non-`.thy` files (`ROOT`, `.tex`, `.bib`, docs).
+Two modes; find out which one is live before touching a `.thy`.
+
+**Headless (ic2)** — when no jEdit is running and an `isabelle ic2` server is up
+(`isabelle ic2 server status`). ic2 is a persistent PIDE server that rechecks files
+from disk, so edit `.thy` files with the filesystem tools, keep them pure ASCII
+(`\<forall>` escapes, never raw Unicode), and check with
+`isabelle ic2 check --command-timeout 120 /abs/X.thy` + `isabelle ic2 check status`.
+Start it from this directory with
+`isabelle ic2 server start --daemon --mcp -l HOLCF -d HOLCF-extra -d DataAnalyticsLang`.
+Docs: `~/Isabelle/AutoCorrode/ic2/README.md` and `SKILL.md`.
+
+**Interactive (jEdit + I/Q)** — when jEdit is running: **NEVER** read/write/create
+`.thy` files with the filesystem tools (`Read`/`Edit`/`Write`/`Bash cat`).
+**ALWAYS** use the **Isabelle/Q (I/Q) MCP server** so edits go through the live
+jEdit instance and PIDE state stays in sync. Filesystem tools are fine for non-`.thy`
+files (`ROOT`, `.tex`, `.bib`, docs).
 
 - No authentication needed: a hook applies the I/Q token. If I/Q hangs or the
   connection closes, ask the user to run `/mcp reconnect Isabelle_Q`.
