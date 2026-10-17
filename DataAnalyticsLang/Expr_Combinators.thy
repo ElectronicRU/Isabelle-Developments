@@ -47,8 +47,42 @@ definition ekd :: "('k semi_factor, 'f, 'r, 'k, 'v) expr \<Rightarrow> ('k semi_
 subsection \<open>Collect\<close>
 
 text \<open>The components are evaluated at the frame extended by all their minds, so they all share
-  the collected key LOD; the collected minimal LOD is the join, and the dims are the union: the
-  collected dims law needs each component's own hypothesis, and no more.\<close>
+  the collected key LOD; the collected minimal LOD is the join, and the dims are the pointwise
+  join: at each mask the collected natural LOD is at least each component's, so the collected
+  dims hypothesis gives each component's.\<close>
+
+lemma compact_fun_sup:
+  fixes f g :: "'a \<Rightarrow> 'c::{bifinite, distributive_cpo} semi_factor"
+  assumes f: "compact f" and g: "compact g"
+  shows "compact (sup f g)"
+proof -
+  have "{x. sup f g x \<noteq> bot} \<subseteq> {x. f x \<noteq> bot} \<union> {x. g x \<noteq> bot}" by auto
+  moreover have "finite ({x. f x \<noteq> bot} \<union> {x. g x \<noteq> bot})"
+    using f g by (simp add: compact_fun_iff semi_factor_bot_bottom)
+  ultimately have "finite {x. sup f g x \<noteq> bot}" by (rule finite_subset)
+  moreover have "compact (sup f g x)" for x
+    using f g by (simp add: compact_fun_iff compact_semi_factor_sup)
+  ultimately show ?thesis by (simp add: compact_fun_iff semi_factor_bot_bottom)
+qed
+
+lemma compact_fun_bot [simp]: "compact (bot :: 'a \<Rightarrow> 'c::{bifinite, distributive_cpo} semi_factor)"
+  by (simp add: compact_fun_iff semi_factor_bot_bottom)
+
+lemma compact_fun_fold_sup:
+  "(\<And>f. f \<in> set fs \<Longrightarrow> compact f) \<Longrightarrow> compact b
+    \<Longrightarrow> compact (fold sup fs b :: 'a \<Rightarrow> 'c::{bifinite, distributive_cpo} semi_factor)"
+  by (induct fs arbitrary: b) (simp_all add: compact_fun_sup)
+
+lemma fold_sup_apply_bot:
+  "(\<And>f. f \<in> set fs \<Longrightarrow> f x = bot) \<Longrightarrow> fold sup fs b x = (b x :: 'b::bounded_lattice_bot)"
+proof (induct fs arbitrary: b)
+  case (Cons a fs)
+  have ax: "a x = bot" by (rule Cons.prems) simp
+  have "fold sup (a # fs) b x = fold sup fs (sup a b) x" by (simp only: fold_Cons o_apply)
+  also have "\<dots> = sup a b x" by (rule Cons.hyps) (use Cons.prems in auto)
+  also have "\<dots> = b x" by (simp add: ax)
+  finally show ?case .
+qed simp
 
 definition collect :: "('k semi_factor, 'f, 'r, 'k, 'a::domain) expr list \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'a stuple) expr"
   where "collect Es =
@@ -62,11 +96,8 @@ lemma collect_simps:
   "esem (collect Es) F k = stuple_of (map (\<lambda>E. esem E (finclude (emind (collect Es)) F) k) Es)"
   by (simp_all add: collect_def Let_def)
 
-lemma fmember_fold_sup: "x |\<in>| fold sup Xs B \<longleftrightarrow> x |\<in>| B \<or> (\<exists>X\<in>set Xs. x |\<in>| X)"
-  by (induct Xs arbitrary: B) auto
-
-lemma fmember_edims_collect: "(n, \<rho>) |\<in>| edims (collect Es) \<longleftrightarrow> (\<exists>E\<in>set Es. (n, \<rho>) |\<in>| edims E)"
-  by (simp add: collect_simps fmember_fold_sup)
+lemma edims_collect_upper: "E \<in> set Es \<Longrightarrow> edims E \<rho> \<le> edims (collect Es) \<rho>"
+  unfolding collect_simps by (rule le_funD, rule fold_sup_upper) simp
 
 lemma ekd_collect:
   "E \<in> set Es \<Longrightarrow> ekd E (finclude (emind (collect Es)) F) = ekd (collect Es) F"
@@ -132,11 +163,12 @@ proof -
         have eq: "dims_equivs (edims E) (finclude ?M F) x
             (E.kd (finclude ?M F)) (E.kd (finclude ?M F'))"
         proof (rule dims_equivsI)
-          fix n \<rho> assume "(n, \<rho>) |\<in>| edims E"
-          then have "(n, \<rho>) |\<in>| edims (collect Es)" using E by (auto simp: fmember_edims_collect)
-          then have "dims_equiv n \<rho> F x (sup ?M (flod F)) (sup ?M (flod F'))"
+          fix \<rho>
+          have "dims_equiv (edims (collect Es) \<rho>) \<rho> F x (sup ?M (flod F)) (sup ?M (flod F'))"
             by (rule dims_equivsD[OF a(4)])
-          then show "dims_equiv n \<rho> (finclude ?M F) x (E.kd (finclude ?M F)) (E.kd (finclude ?M F'))"
+          then have "dims_equiv (edims E \<rho>) \<rho> F x (sup ?M (flod F)) (sup ?M (flod F'))"
+            by (rule dims_equiv_natd_le[OF edims_collect_upper[OF E]])
+          then show "dims_equiv (edims E \<rho>) \<rho> (finclude ?M F) x (E.kd (finclude ?M F)) (E.kd (finclude ?M F'))"
             by (simp only: kd[OF E] dims_equiv_def mrows_cong[OF amb_finclude slice_finclude])
         qed
         have "esem E (finclude ?M F) (rproj (E.kd (finclude ?M F)) x)
@@ -166,6 +198,10 @@ proof -
     qed
     show "compact ?M" unfolding collect_simps(1)
       by (rule compact_fold_sup) (auto intro: expr_sem.mind_compact[OF law])
+    show "compact (edims (collect Es))" unfolding collect_simps(2)
+      by (rule compact_fun_fold_sup) (auto intro: expr_sem.dims_compact[OF law])
+    show "edims (collect Es) bot = bot" unfolding collect_simps(2)
+      by (subst fold_sup_apply_bot) (auto intro: expr_sem.dims_bot[OF law])
   qed
 qed
 

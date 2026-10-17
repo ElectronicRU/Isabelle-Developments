@@ -1060,6 +1060,86 @@ lemma truncate_key_eq:
   shows "truncate_key \<tau> k = proj (truncate \<tau> c)\<cdot>k"
   using c by (simp add: truncate_key_def proj_inf lives_at_def)
 
+subsection \<open>Compact maps\<close>
+
+text \<open>A map into a pcpo is compact in the pointwise order exactly when it has finite support and
+  compact values.\<close>
+
+lemma compact_fun_iff:
+  fixes f :: "'a \<Rightarrow> 'b::pcpo"
+  shows "compact f \<longleftrightarrow> finite {x. f x \<noteq> \<bottom>} \<and> (\<forall>x. compact (f x))"
+proof
+  assume c: "compact f"
+  have "compact (f x)" for x
+  proof (rule compactI2)
+    fix C :: "nat \<Rightarrow> 'b" assume C: "chain C" and le: "f x \<sqsubseteq> (\<Squnion>i. C i)"
+    let ?Y = "\<lambda>i. f(x := C i)"
+    have Y: "chain ?Y" by (rule chainI, rule fun_belowI) (simp add: chainE[OF C])
+    have "f \<sqsubseteq> (\<Squnion>i. ?Y i)"
+    proof (rule fun_belowI)
+      fix y show "f y \<sqsubseteq> (\<Squnion>i. ?Y i) y" by (cases "y = x") (simp_all add: lub_fun[OF Y] le)
+    qed
+    then obtain i where "f \<sqsubseteq> ?Y i" using compactD2[OF c Y] by blast
+    then show "\<exists>i. f x \<sqsubseteq> C i" by (metis fun_belowD fun_upd_same)
+  qed
+  moreover have "finite {x. f x \<noteq> \<bottom>}"
+  proof (rule ccontr)
+    assume "infinite {x. f x \<noteq> \<bottom>}"
+    then obtain g :: "nat \<Rightarrow> 'a" where g: "inj g" "range g \<subseteq> {x. f x \<noteq> \<bottom>}"
+      using infinite_countable_subset by blast
+    let ?Y = "\<lambda>n y. if y \<in> g ` {n..} then \<bottom> else f y"
+    have Y: "chain ?Y"
+    proof (rule chainI, rule fun_belowI)
+      fix n y show "?Y n y \<sqsubseteq> ?Y (Suc n) y" by (cases "y \<in> g ` {n..}") auto
+    qed
+    have "f \<sqsubseteq> (\<Squnion>n. ?Y n)"
+    proof (rule fun_belowI)
+      fix y
+      obtain n where n: "y \<notin> g ` {n..}"
+      proof (cases "y \<in> range g")
+        case True
+        then obtain k where "y = g k" by blast
+        then have "y \<notin> g ` {Suc k..}" using g(1) by (auto simp: inj_eq)
+        then show ?thesis by (rule that)
+      next
+        case False
+        then show ?thesis by (intro that[of 0]) auto
+      qed
+      then have "f y = ?Y n y" by simp
+      also have "\<dots> \<sqsubseteq> (\<Squnion>n. ?Y n y)" by (rule is_ub_thelub[OF ch2ch_fun[OF Y]])
+      finally show "f y \<sqsubseteq> (\<Squnion>n. ?Y n) y" by (simp add: lub_fun[OF Y])
+    qed
+    then obtain n where "f \<sqsubseteq> ?Y n" using compactD2[OF c Y] by blast
+    then have "f (g n) \<sqsubseteq> \<bottom>" using fun_belowD[of f "?Y n" "g n"] by simp
+    then have "f (g n) = \<bottom>" by (rule bottomI)
+    with g(2) show False by blast
+  qed
+  ultimately show "finite {x. f x \<noteq> \<bottom>} \<and> (\<forall>x. compact (f x))" by blast
+next
+  assume "finite {x. f x \<noteq> \<bottom>} \<and> (\<forall>x. compact (f x))"
+  then have fin: "finite {x. f x \<noteq> \<bottom>}" and comp: "\<And>x. compact (f x)" by blast+
+  show "compact f"
+  proof (rule compactI2)
+    fix Y :: "nat \<Rightarrow> 'a \<Rightarrow> 'b" assume Y: "chain Y" and le: "f \<sqsubseteq> (\<Squnion>i. Y i)"
+    have "\<exists>i. f x \<sqsubseteq> Y i x" for x
+    proof -
+      have "f x \<sqsubseteq> (\<Squnion>i. Y i x)" using fun_belowD[OF le, of x] by (simp add: lub_fun[OF Y])
+      then show ?thesis by (rule compactD2[OF comp ch2ch_fun[OF Y]])
+    qed
+    then obtain h where h: "\<And>x. f x \<sqsubseteq> Y (h x) x" by metis
+    let ?n = "Max (insert 0 (h ` {x. f x \<noteq> \<bottom>}))"
+    have "f x \<sqsubseteq> Y ?n x" for x
+    proof (cases "f x = \<bottom>")
+      case True then show ?thesis by simp
+    next
+      case False
+      then have "h x \<le> ?n" by (intro Max_ge) (use fin in auto)
+      then show ?thesis by (rule below_trans[OF h fun_belowD[OF chain_mono[OF Y]]])
+    qed
+    then show "\<exists>i. f \<sqsubseteq> Y i" by (blast intro: fun_belowI)
+  qed
+qed
+
 subsection \<open>Levels of detail\<close>
 
 text \<open>LODs are the compact semi-factors of the keys; the synonym only shortens the type.\<close>

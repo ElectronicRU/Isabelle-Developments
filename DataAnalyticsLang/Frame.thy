@@ -15,15 +15,16 @@ record ('l::type, 'f::type, 'r::pcpo) frame =
   amb :: "'r sel"
   slice :: 'f
 
-text \<open>The meaning of an expression: the LOD it decides at least; its \<^emph>\<open>dims\<close>, a finite set of
-  pairs of a \<^emph>\<open>natural\<close> LOD (the key of values read out of the dataset) and a \<^emph>\<open>mask\<close> (a truncation
-  to the part of a key's detail those values actually read; dropped detail is broadcast); and its
-  values at each frame and key, \<open>\<bottom>\<close> for ``no entry''.  A pair per component keeps the dims law of a
-  collection as weak as its components' laws; a broadcast needs none.\<close>
+text \<open>The meaning of an expression: the LOD it decides at least; its \<^emph>\<open>dims\<close>, a map from
+  \<^emph>\<open>masks\<close> (the part of a key's detail some values actually read; dropped detail is broadcast) to
+  \<^emph>\<open>natural\<close> LODs (the key those values are read out of the dataset at), \<open>\<bottom>\<close> for none; and its
+  values at each frame and key, \<open>\<bottom>\<close> for ``no entry''.  Natural LODs of one mask combine by join
+  (@{text dims_equiv_sup_natd}), so a collection joins its components' maps and its dims law is as
+  weak as theirs; a broadcast needs none.\<close>
 
 record ('l::distrib_lattice, 'f::type, 'r::pcpo, 'k::type, 'v::type) expr =
   emind :: 'l
-  edims :: "('l \<times> 'l) fset"
+  edims :: "'l \<Rightarrow> 'l"
   esem :: "('l, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v"
 
 text \<open>The record packages' own \<open>truncate\<close> operations would shadow the truncation action.\<close>
@@ -344,16 +345,24 @@ next
     unfolding dims_equiv_def relspace.equiv_mod_def by blast
 qed
 
-text \<open>An expression's dims hypothesis holds at every pair of its dims.\<close>
+text \<open>The bottom mask reads nothing, so its natural LOD does not matter.\<close>
 
-definition dims_equivs :: "('k semi_factor \<times> 'k semi_factor) fset \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
-  "dims_equivs \<Delta> F x a t \<longleftrightarrow> (\<forall>(n, \<rho>) |\<in>| \<Delta>. dims_equiv n \<rho> F x a t)"
+lemma dims_equiv_bot_mask: "dims_equiv n bot F x a t"
+  unfolding dims_equiv_def by (simp add: relspace.equiv_mod_refl)
 
-lemma dims_equivsD: "dims_equivs \<Delta> F x a t \<Longrightarrow> (n, \<rho>) |\<in>| \<Delta> \<Longrightarrow> dims_equiv n \<rho> F x a t"
+text \<open>An expression's dims hypothesis holds at every mask, at the natural LOD the dims give it.\<close>
+
+definition dims_equivs :: "('k semi_factor \<Rightarrow> 'k semi_factor) \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
+  "dims_equivs \<Delta> F x a t \<longleftrightarrow> (\<forall>\<rho>. dims_equiv (\<Delta> \<rho>) \<rho> F x a t)"
+
+lemma dims_equivsD: "dims_equivs \<Delta> F x a t \<Longrightarrow> dims_equiv (\<Delta> \<rho>) \<rho> F x a t"
   unfolding dims_equivs_def by blast
 
-lemma dims_equivsI: "(\<And>n \<rho>. (n, \<rho>) |\<in>| \<Delta> \<Longrightarrow> dims_equiv n \<rho> F x a t) \<Longrightarrow> dims_equivs \<Delta> F x a t"
+lemma dims_equivsI: "(\<And>\<rho>. dims_equiv (\<Delta> \<rho>) \<rho> F x a t) \<Longrightarrow> dims_equivs \<Delta> F x a t"
   unfolding dims_equivs_def by blast
+
+lemma dims_equivs_bot: "dims_equivs bot F x a t"
+  by (simp add: dims_equivs_def dims_equiv_bot)
 
 end
 
@@ -384,6 +393,8 @@ locale expr_sem = dataspace +
     and eff_law: "\<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
                   \<Longrightarrow> sem F = sem F'"
     and mind_compact: "compact mind"
+    and dims_compact: "compact dims"
+    and dims_bot: "dims bot = bot"
 begin
 
 abbreviation "kd F \<equiv> sup mind (flod F)"
@@ -538,7 +549,7 @@ lemma lawfulI:
                    \<Longrightarrow> sem F (rproj (sup mind (flod F)) x) = sem F' (rproj (sup mind (flod F')) x)"
     and "\<And>F F'. \<lbrakk>amb F = amb F'; slice F = slice F'; sup mind (flod F) = sup mind (flod F')\<rbrakk>
                  \<Longrightarrow> sem F = sem F'"
-    and "compact mind"
+    and "compact mind" and "compact dims" and "dims bot = bot"
   shows "lawful mind dims sem"
   by (intro expr_sem.intro dataspace_axioms expr_sem_axioms.intro) (fact assms)+
 
@@ -620,6 +631,10 @@ proof -
     then show "esem (smap g E) F = esem (smap g E) F'" by (simp add: fun_eq_iff)
   next
     show "compact (emind E)" by (rule E.mind_compact)
+  next
+    show "compact (edims E)" by (rule E.dims_compact)
+  next
+    show "edims E bot = bot" by (rule E.dims_bot)
   qed
 qed
 
@@ -675,6 +690,8 @@ proof (rule lawfulI)
     then show ?thesis by (simp add: group_by_def)
   qed
   show "compact (sup mind D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
+  show "compact dims" by (rule dims_compact)
+  show "dims bot = bot" by (rule dims_bot)
 qed
 
 subsection \<open>Fixed-level constructs: \<open>GROUP BY ONLY\<close>, \<open>TOTAL\<close>, \<open>ISOLATE\<close>\<close>
@@ -695,7 +712,7 @@ theorem lawful_fixed:
   assumes "\<And>F K. compact K \<Longrightarrow> sem (T (peg K F)) (proj E\<cdot>K) = sem (T F) (proj E\<cdot>K)"
     and "\<And>F F'. amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> T F = T F'"
     and "compact E"
-  shows "lawful E {||} (fixed E T sem)"
+  shows "lawful E bot (fixed E T sem)"
 proof (rule lawfulI)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "fixed E T sem F k \<noteq> \<bottom>" for F k
     using that by (auto simp: fixed_def fkeys_def split: if_splits dest: keyimg_slicer)
@@ -707,7 +724,7 @@ proof (rule lawfulI)
     by (simp add: fixed_def fkeys_peg_iff[OF that] assms(1)[OF that])
   show "fixed E T sem F (rproj (sup E (flod F)) x) = fixed E T sem F' (rproj (sup E (flod F')) x)"
     if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
-      "dims_equivs {||} F x (sup E (flod F)) (sup E (flod F'))"
+      "dims_equivs bot F x (sup E (flod F)) (sup E (flod F'))"
       "fixed E T sem F (rproj (sup E (flod F)) x) \<noteq> \<bottom>"
       "fixed E T sem F' (rproj (sup E (flod F')) x) \<noteq> \<bottom>" for F F' x
   proof -
@@ -725,6 +742,8 @@ proof (rule lawfulI)
     then show ?thesis using assms(2)[OF that(1,2)] by (simp add: fixed_def fun_eq_iff)
   qed
   show "compact E" by (fact assms(3))
+  show "compact (bot :: 'k semi_factor \<Rightarrow> 'k semi_factor)"
+    by (simp add: compact_fun_iff semi_factor_bot_bottom)  show "(bot :: 'k semi_factor \<Rightarrow> 'k semi_factor) bot = bot" by simp
 qed
 
 end
@@ -740,7 +759,7 @@ abbreviation total where
 
 theorem lawful_group_by_only:
   assumes D: "compact D"
-  shows "lawful (sup mind D) {||} (group_by_only D)"
+  shows "lawful (sup mind D) bot (group_by_only D)"
   unfolding group_by_only_def
 proof (rule lawful_fixed)
   show "sem (fgroupby D (peg K F)) (proj (sup mind D)\<cdot>K) = sem (fgroupby D F) (proj (sup mind D)\<cdot>K)"
@@ -755,7 +774,7 @@ qed
 definition isolate where
   "isolate = fixed mind fisolate sem"
 
-theorem lawful_isolate: "lawful mind {||} isolate"
+theorem lawful_isolate: "lawful mind bot isolate"
   unfolding isolate_def
   by (rule lawful_fixed) (simp_all add: fisolate_peg fisolate_def mind_compact)
 
@@ -766,6 +785,49 @@ subsection \<open>\<open>FOR\<close> and \<open>EXCLUDE\<close>\<close>
 text \<open>\<open>E FOR \<tau> G\<close> is evaluated at the incoming frame's keys, truncated to the key LOD of the inner
   frame.  The key LOD of the inner frame is the expression's own detail plus the truncated key
   LOD of the outer one.\<close>
+
+text \<open>Under \<open>FOR \<tau>\<close> the dims move along the masks' meet with \<open>\<tau>\<close>; the natural LODs of masks
+  that meet \<open>\<tau>\<close> in the same mask join, and the bottom mask is dropped.\<close>
+
+definition for_dims ::
+    "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> ('k semi_factor \<Rightarrow> 'k semi_factor) \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor"
+  where "for_dims \<tau> \<Delta> \<rho>' = (if \<rho>' = bot then bot else Sup {\<Delta> \<rho> |\<rho>. inf \<rho> \<tau> = \<rho>'})"
+
+lemma for_dims_upper: "inf \<rho> \<tau> \<noteq> bot \<Longrightarrow> \<Delta> \<rho> \<le> for_dims \<tau> \<Delta> (inf \<rho> \<tau>)"
+  by (auto simp: for_dims_def intro: Sup_upper)
+
+lemma for_dims_bot: "for_dims \<tau> \<Delta> bot = bot"
+  by (simp add: for_dims_def)
+
+lemma compact_for_dims:
+  fixes \<Delta> :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> 'k semi_factor"
+  assumes "compact \<Delta>"
+  shows "compact (for_dims \<tau> \<Delta>)"
+proof -
+  have fin: "finite {\<rho>. \<Delta> \<rho> \<noteq> bot}" and comp: "\<And>\<rho>. compact (\<Delta> \<rho>)"
+    using assms by (simp_all add: compact_fun_iff semi_factor_bot_bottom)
+  have "range \<Delta> \<subseteq> insert bot (\<Delta> ` {\<rho>. \<Delta> \<rho> \<noteq> bot})" by auto
+  then have rng: "finite (range \<Delta>)" using fin by (rule finite_subset[OF _ finite_insert[THEN iffD2, OF finite_imageI]])
+  have val: "compact (for_dims \<tau> \<Delta> \<rho>')" for \<rho>'
+  proof (cases "\<rho>' = bot")
+    case True then show ?thesis by (simp add: for_dims_def)
+  next
+    case False
+    let ?S = "{\<Delta> \<rho> |\<rho>. inf \<rho> \<tau> = \<rho>'}"
+    have "?S \<subseteq> range \<Delta>" by auto
+    then have "finite ?S" using rng by (rule finite_subset)
+    then have "compact (Sup ?S)" by (rule compact_finite_lub[OF _ _ semi_factor_is_lub]) (auto simp: comp)
+    then show ?thesis using False by (simp add: for_dims_def)
+  qed
+  have "for_dims \<tau> \<Delta> \<rho>' = bot" if "\<rho>' \<notin> (\<lambda>\<rho>. inf \<rho> \<tau>) ` {\<rho>. \<Delta> \<rho> \<noteq> bot}" for \<rho>'
+  proof -
+    have "\<forall>\<rho>. inf \<rho> \<tau> = \<rho>' \<longrightarrow> \<Delta> \<rho> = bot" using that by blast
+    then show ?thesis by (auto simp: for_dims_def Sup_bot_conv)
+  qed
+  then have "{\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> bot} \<subseteq> (\<lambda>\<rho>. inf \<rho> \<tau>) ` {\<rho>. \<Delta> \<rho> \<noteq> bot}" by blast
+  then have "finite {\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> bot}" using fin by (rule finite_subset[OF _ finite_imageI])
+  with val show ?thesis by (simp add: compact_fun_iff semi_factor_bot_bottom)
+qed
 
 context expr_sem
 begin
@@ -816,10 +878,6 @@ proof -
   finally show ?thesis .
 qed
 
-abbreviation for_dims ::
-    "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> ('k semi_factor \<times> 'k semi_factor) fset \<Rightarrow> ('k semi_factor \<times> 'k semi_factor) fset" where
-  "for_dims \<tau> \<Delta> \<equiv> (\<lambda>(n, \<rho>). (n, inf \<rho> \<tau>)) |`| \<Delta>"
-
 theorem lawful_filtfor: "lawful mind (for_dims \<tau> dims) (filtfor \<tau> G)"
 proof (rule lawfulI)
   show "\<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'" if "filtfor \<tau> G F k \<noteq> \<bottom>" for F k
@@ -854,10 +912,17 @@ proof (rule lawfulI)
     have fH: "amb ?H = amb ?H'" "slice ?H = slice ?H'" by (simp_all add: ffor_def that(1,2))
     have eq: "dims_equivs dims ?H x (kd ?H) (kd ?H')"
     proof (rule dims_equivsI)
-      fix n \<rho> assume n\<rho>: "(n, \<rho>) |\<in>| dims"
-      have "dims_equiv n (inf \<rho> \<tau>) F x (kd F) (kd F')"
-        by (rule dims_equivsD[OF that(4)]) (use n\<rho> in force)
-      then show "dims_equiv n \<rho> ?H x (kd ?H) (kd ?H')"
+      fix \<rho>
+      have "dims_equiv (dims \<rho>) (inf \<rho> \<tau>) F x (kd F) (kd F')"
+      proof (cases "inf \<rho> \<tau> = bot")
+        case True then show ?thesis by (simp add: dims_equiv_bot_mask)
+      next
+        case False
+        have "dims_equiv (for_dims \<tau> dims (inf \<rho> \<tau>)) (inf \<rho> \<tau>) F x (kd F) (kd F')"
+          by (rule dims_equivsD[OF that(4)])
+        then show ?thesis by (rule dims_equiv_natd_le[OF for_dims_upper[OF False]])
+      qed
+      then show "dims_equiv (dims \<rho>) \<rho> ?H x (kd ?H) (kd ?H')"
         by (rule dims_equiv_sup[OF mrows_ffor _ mask_kd_ffor mask_kd_ffor])
     qed
     have "sem ?H (rproj (kd ?H) x) = sem ?H' (rproj (kd ?H') x)"
@@ -875,6 +940,8 @@ proof (rule lawfulI)
     then show ?thesis using k kH by (simp add: filtfor_def fun_eq_iff)
   qed
   show "compact mind" by (rule mind_compact)
+  show "compact (for_dims \<tau> dims)" by (rule compact_for_dims[OF dims_compact])
+  show "for_dims \<tau> dims bot = bot" by (rule for_dims_bot)
 qed
 
 end
@@ -903,8 +970,8 @@ proof (rule lawfulI)
     text \<open>Restricting loses rows, which the equivalence survives.\<close>
     have "dims_equivs dims (frestrict \<phi> F) x (kd (frestrict \<phi> F)) (kd (frestrict \<phi> F'))"
     proof (rule dims_equivsI)
-      fix n \<rho> assume "(n, \<rho>) |\<in>| dims"
-      then show "dims_equiv n \<rho> (frestrict \<phi> F) x (kd (frestrict \<phi> F)) (kd (frestrict \<phi> F'))"
+      fix \<rho>
+      show "dims_equiv (dims \<rho>) \<rho> (frestrict \<phi> F) x (kd (frestrict \<phi> F)) (kd (frestrict \<phi> F'))"
         by (intro dims_equiv_sub[OF _ dims_equivsD[OF that(4)]]) (auto simp: mrows_def arows_def)
     qed
     then show ?thesis
@@ -918,6 +985,8 @@ proof (rule lawfulI)
     then show ?thesis by (simp add: restrict_def)
   qed
   show "compact mind" by (rule mind_compact)
+  show "compact dims" by (rule dims_compact)
+  show "dims bot = bot" by (rule dims_bot)
 qed
 
 end
