@@ -401,7 +401,7 @@ begin
 abbreviation "kd F \<equiv> (mind \<squnion> flod F)"
 
 lemma kd_compact: "compact (flod F) \<Longrightarrow> compact (kd F)"
-  by (simp add: join_semi_factor[symmetric] compact_join mind_compact)
+  by (simp add: compact_semi_factor_sup mind_compact)
 
 
 text \<open>The compatibility the dims law relies on is automatic: an entry's key is the projection of
@@ -690,7 +690,7 @@ proof (rule lawfulI)
       by (rule eff_law) (use that in \<open>simp_all add: kd\<close>)
     then show ?thesis by (simp add: group_by_def)
   qed
-  show "compact (mind \<squnion> D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
+  show "compact (mind \<squnion> D)" by (simp add: compact_semi_factor_sup mind_compact D)
   show "compact dims" by (rule dims_compact)
   show "dims \<rho> \<sqsubseteq> dims \<bottom>" for \<rho> by (rule dims_bot)
 qed
@@ -744,7 +744,8 @@ proof (rule lawfulI)
   qed
   show "compact E" by (fact assms(3))
   show "compact (\<bottom> :: 'k semi_factor \<Rightarrow> 'k semi_factor)"
-    by (simp add: compact_fun_iff semi_factor_bot_bottom)  show "(\<bottom> :: 'k semi_factor \<Rightarrow> 'k semi_factor) \<rho> \<sqsubseteq> \<bottom> \<bottom>" for \<rho> by simp
+    by (simp add: compact_fun_iff)
+  show "(\<bottom> :: 'k semi_factor \<Rightarrow> 'k semi_factor) \<rho> \<sqsubseteq> \<bottom> \<bottom>" for \<rho> by simp
 qed
 
 end
@@ -769,7 +770,7 @@ proof (rule lawful_fixed)
         peg_below[OF compact_proj_compact[OF that] compact_proj_compact[OF that] proj_mono[OF lattice_join_ge2]])
   show "fgroupby D F = fgroupby D F'" if "amb F = amb F'" "slice F = slice F'" for F F'
     using that by (cases F, cases F') (simp add: fgroupby_def)
-  show "compact (mind \<squnion> D)" by (simp add: join_semi_factor[symmetric] compact_join mind_compact D)
+  show "compact (mind \<squnion> D)" by (simp add: compact_semi_factor_sup mind_compact D)
 qed
 
 definition isolate where
@@ -812,7 +813,7 @@ lemma compact_for_dims:
   shows "compact (for_dims \<tau> \<Delta>)"
 proof -
   have fin: "finite {\<rho>. \<Delta> \<rho> \<noteq> \<bottom>}" and comp: "\<And>\<rho>. compact (\<Delta> \<rho>)"
-    using assms by (simp_all add: compact_fun_iff semi_factor_bot_bottom)
+    using assms by (simp_all add: compact_fun_iff)
   have "range \<Delta> \<subseteq> insert \<bottom> (\<Delta> ` {\<rho>. \<Delta> \<rho> \<noteq> \<bottom>})" by auto
   then have rng: "finite (range \<Delta>)" using fin by (rule finite_subset[OF _ finite_insert[THEN iffD2, OF finite_imageI]])
   have val: "compact (for_dims \<tau> \<Delta> \<rho>')" for \<rho>'
@@ -830,7 +831,7 @@ proof -
   qed
   then have "{\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> \<bottom>} \<subseteq> (\<lambda>\<rho>. (\<rho> \<sqinter> \<tau>)) ` {\<rho>. \<Delta> \<rho> \<noteq> \<bottom>}" by blast
   then have "finite {\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> \<bottom>}" using fin by (rule finite_subset[OF _ finite_imageI])
-  with val show ?thesis by (simp add: compact_fun_iff semi_factor_bot_bottom)
+  with val show ?thesis by (simp add: compact_fun_iff)
 qed
 
 context expr_sem

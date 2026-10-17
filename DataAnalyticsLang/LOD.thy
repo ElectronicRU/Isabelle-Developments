@@ -615,7 +615,7 @@ text \<open>Under the isomorphism with families of semi-factors, the finitary se
 lemma finitary_semi_factor_of_family:
   fixes F :: "'d::countable \<Rightarrow> 'v::{bifinite, distributive_cpo} semi_factor"
   shows "finitary_semi_factor (semi_factor_of_family F) \<longleftrightarrow>
-    finite {d. F d \<noteq> bot} \<and> (\<forall>d. finitary_semi_factor (F d))"
+    finite {d. F d \<noteq> \<bottom>} \<and> (\<forall>d. finitary_semi_factor (F d))"
 proof safe
   assume fin: "finitary_semi_factor (semi_factor_of_family F)"
   then have cpt: "compact (t \<downharpoonright> semi_factor_of_family F)" for t
@@ -627,29 +627,29 @@ proof safe
     have "compact ((tupd d\<cdot>\<bottom>\<cdot>x \<downharpoonright> semi_factor_of_family F)\<langle>d\<rangle>)" by (rule compact_tget[OF cpt])
     then show "compact (x \<downharpoonright> F d)" by (simp add: tupd_bot_tget)
   qed
-  show "finite {d. F d \<noteq> bot}"
+  show "finite {d. F d \<noteq> \<bottom>}"
   proof (rule ccontr)
-    assume inf: "infinite {d. F d \<noteq> bot}"
-    have "\<exists>x. x \<downharpoonright> F d \<noteq> \<bottom>" if "F d \<noteq> bot" for d
+    assume inf: "infinite {d. F d \<noteq> \<bottom>}"
+    have "\<exists>x. x \<downharpoonright> F d \<noteq> \<bottom>" if "F d \<noteq> \<bottom>" for d
     proof (rule ccontr)
       assume "\<nexists>x. x \<downharpoonright> F d \<noteq> \<bottom>"
-      then have "semi_factor_p (F d) = semi_factor_p bot" by (simp add: cfun_eq_iff semi_factor_p_bot)
+      then have "semi_factor_p (F d) = semi_factor_p \<bottom>" by (simp add: cfun_eq_iff semi_factor_p_bot)
       with that show False by (simp add: semi_factor_p_inject)
     qed
-    then obtain x where x: "\<And>d. F d \<noteq> bot \<Longrightarrow> x d \<downharpoonright> F d \<noteq> \<bottom>" by metis
+    then obtain x where x: "\<And>d. F d \<noteq> \<bottom> \<Longrightarrow> x d \<downharpoonright> F d \<noteq> \<bottom>" by metis
     define t :: "('d, 'v) tuple" where "t = Abs_tuple x"
-    have "{d. F d \<noteq> bot} \<subseteq> tsupp (t \<downharpoonright> semi_factor_of_family F)"
+    have "{d. F d \<noteq> \<bottom>} \<subseteq> tsupp (t \<downharpoonright> semi_factor_of_family F)"
       using x by (auto simp: tsupp_def t_def Abs_tuple_inverse')
     with inf compact_finite_tsupp[OF cpt] show False by (metis finite_subset)
   qed
 next
-  assume fin: "finite {d. F d \<noteq> bot}" and F: "\<forall>d. finitary_semi_factor (F d)"
+  assume fin: "finite {d. F d \<noteq> \<bottom>}" and F: "\<forall>d. finitary_semi_factor (F d)"
   show "finitary_semi_factor (semi_factor_of_family F)"
     unfolding finitary_semi_factor_def finitary_def
   proof
     fix t show "compact (t \<downharpoonright> semi_factor_of_family F)"
     proof (rule compact_tupleI)
-      have "tsupp (t \<downharpoonright> semi_factor_of_family F) \<subseteq> {d. F d \<noteq> bot}"
+      have "tsupp (t \<downharpoonright> semi_factor_of_family F) \<subseteq> {d. F d \<noteq> \<bottom>}"
         by (auto simp: tsupp_def semi_factor_p_bot)
       then show "finite (tsupp (t \<downharpoonright> semi_factor_of_family F))" using fin by (rule finite_subset)
       show "compact ((t \<downharpoonright> semi_factor_of_family F)\<langle>d\<rangle>)" for d
@@ -659,14 +659,14 @@ next
 qed
 
 text \<open>A compact tuple has finite support and compact components.  A finitary level containing
-  it is the family of finitary levels containing the components on its support, and \<open>bot\<close>
+  it is the family of finitary levels containing the components on its support, and \<open>\<bottom>\<close>
   elsewhere.\<close>
 
 instance tuple :: (countable, locally_finitely_detailed) locally_finitely_detailed
 proof
   fix K :: "('a, 'b) tuple" assume K: "compact K"
   define F where "F d = (if d \<in> tsupp K
-      then (SOME G. finitary_semi_factor G \<and> K\<langle>d\<rangle> \<downharpoonright> G = K\<langle>d\<rangle>) else bot)" for d
+      then (SOME G. finitary_semi_factor G \<and> K\<langle>d\<rangle> \<downharpoonright> G = K\<langle>d\<rangle>) else \<bottom>)" for d
   have F: "finitary_semi_factor (F d) \<and> K\<langle>d\<rangle> \<downharpoonright> F d = K\<langle>d\<rangle>" for d
   proof (cases "d \<in> tsupp K")
     case True
@@ -677,8 +677,8 @@ proof
     then show ?thesis
       by (simp add: F_def tsupp_def finitary_semi_factor_def finitary_def semi_factor_p_bot)
   qed
-  have "{d. F d \<noteq> bot} \<subseteq> tsupp K" by (auto simp: F_def)
-  then have "finite {d. F d \<noteq> bot}" using compact_finite_tsupp[OF K] by (rule finite_subset)
+  have "{d. F d \<noteq> \<bottom>} \<subseteq> tsupp K" by (auto simp: F_def)
+  then have "finite {d. F d \<noteq> \<bottom>}" using compact_finite_tsupp[OF K] by (rule finite_subset)
   with F have "finitary_semi_factor (semi_factor_of_family F)"
     by (simp add: finitary_semi_factor_of_family)
   moreover have "K \<downharpoonright> semi_factor_of_family F = K" using F by (simp add: tuple_eq_iff)
@@ -758,16 +758,13 @@ lemma compact_proj_compact: "compact k \<Longrightarrow> compact (k \<downharpoo
   by (rule compact_below_compact[OF _ deflation.below[OF deflation_semi_factor_p]])
 
 lemma proj_inf: "proj (a \<sqinter> b)\<cdot>k = proj a\<cdot>(proj b\<cdot>k)"
-  by (simp add: meet_semi_factor semi_factor_proj_comp inf_commute)
+  by (simp add: semi_factor_proj_comp lattice_meet_commute)
 
 lemma proj_sup: "proj (a \<squnion> b)\<cdot>k = proj a\<cdot>k \<squnion> proj b\<cdot>k"
-  by (simp add: join_semi_factor semi_factor_p_sup)
-
-lemma semi_factor_bot_bottom: "(bot :: 'k::{bifinite, distributive_cpo} semi_factor) = \<bottom>"
-  by (rule bottomI) (simp add: below_semi_factor_iff_le)
+  by (rule semi_factor_p_sup)
 
 lemma proj_bot: "proj \<bottom> = \<bottom>"
-  by (simp add: semi_factor_bot_bottom[symmetric] semi_factor_p_bot)
+  by (rule semi_factor_p_bot)
 
 lemma compact_semi_factor_sup:
   "compact a \<Longrightarrow> compact b \<Longrightarrow> compact (a \<squnion> b :: 'k::{bifinite, distributive_cpo} semi_factor)"

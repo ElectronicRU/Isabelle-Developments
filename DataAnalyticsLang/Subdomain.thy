@@ -1715,6 +1715,29 @@ proof -
         stable_subdom_p_subdom_of_defl[OF st])
 qed
 
+lemma semi_factor_below_iff_p: "F \<sqsubseteq> G \<longleftrightarrow> semi_factor_p F \<sqsubseteq> semi_factor_p G"
+  by (simp add: below_semi_factor_def stable_subdom_below_iff semi_factor_p.rep_eq)
+
+text \<open>The bottom semi-factor projects to \<open>\<bottom>\<close>, the top one is the identity, and joins
+  project to joins.\<close>
+
+lemma semi_factor_bot_bottom: "(bot :: 'a semi_factor) = \<bottom>"
+  by (rule bottomI) (simp add: below_semi_factor_iff_le)
+
+lemma semi_factor_top_lattice_top: "(top :: 'a semi_factor) = lattice_top"
+  by (rule below_antisym) (rule below_lattice_top, simp add: below_semi_factor_iff_le)
+
+lemma semi_factor_p_bot: "semi_factor_p \<bottom> = \<bottom>"
+  by (rule cfun_eqI) (simp add: semi_factor_bot_bottom[symmetric] semi_factor_p.rep_eq
+      bot_semi_factor.rep_eq p_bot_stable_subdom)
+
+lemma semi_factor_p_top: "semi_factor_p lattice_top = ID"
+  by (simp add: semi_factor_top_lattice_top[symmetric] semi_factor_p.rep_eq top_semi_factor.rep_eq
+      p_top_stable_subdom)
+
+lemma semi_factor_p_sup: "semi_factor_p (F \<squnion> G)\<cdot>x = semi_factor_p F\<cdot>x \<squnion> semi_factor_p G\<cdot>x"
+  by (simp add: join_semi_factor semi_factor_p.rep_eq sup_semi_factor.rep_eq p_sup_join)
+
 lemma semi_factor_p_inject: "semi_factor_p F = semi_factor_p G \<longleftrightarrow> F = G"
   by transfer (auto intro: stable_subdom_proj_eqI)
 
@@ -1726,16 +1749,16 @@ abbreviation semi_factor_proj (infixl \<open>\<downharpoonright>\<close> 200)
   where "semi_factor_proj x a \<equiv> semi_factor_p a\<cdot>x"
 
 lemma semi_factor_proj_comp:
-  "x \<downharpoonright> a \<downharpoonright> b = x \<downharpoonright> (inf a b)"
-  by (transfer', rule p_comp_inf)
+  "x \<downharpoonright> a \<downharpoonright> b = x \<downharpoonright> (a \<sqinter> b)"
+  unfolding meet_semi_factor by (transfer', rule p_comp_inf)
 
 lemma semi_factor_proj_comm:
   "x \<downharpoonright> a \<downharpoonright> b = x \<downharpoonright> b \<downharpoonright> a"
-  by (simp add: semi_factor_proj_comp inf_commute)
+  by (simp add: semi_factor_proj_comp lattice_meet_commute)
 
 corollary semi_factor_comp_simp[simp]:
-  "a \<le> b \<Longrightarrow> x \<downharpoonright> a \<downharpoonright> b = x \<downharpoonright> a"
-  "a \<le> b \<Longrightarrow> x \<downharpoonright> b \<downharpoonright> a = x \<downharpoonright> a"
-  by (simp_all add: semi_factor_proj_comp inf_absorb1 inf_absorb2)
+  "a \<sqsubseteq> b \<Longrightarrow> x \<downharpoonright> a \<downharpoonright> b = x \<downharpoonright> a"
+  "a \<sqsubseteq> b \<Longrightarrow> x \<downharpoonright> b \<downharpoonright> a = x \<downharpoonright> a"
+  by (simp_all add: semi_factor_proj_comp lattice_meet_absorb1 lattice_meet_absorb2)
 
 end

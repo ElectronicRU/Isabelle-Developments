@@ -132,6 +132,9 @@ instance top :: (bounded_complete) lattice_complete
 instance "fun" :: (type, lattice_complete) lattice_complete
   by intro_classes (rule exI[of _ "\<lambda>_. lattice_top"], simp add: fun_below_iff)
 
+lemma lattice_top_fun: "lattice_top = (\<lambda>_. lattice_top :: 'b::lattice_complete)"
+  by (rule below_antisym) (simp add: fun_below_iff, rule below_lattice_top)
+
 lemma fold_join_ge_init: "b \<sqsubseteq> fold (\<squnion>) xs (b::'a::lattice_complete)"
   by (induct xs arbitrary: b) (simp_all, metis lattice_join_ge2 below_trans)
 

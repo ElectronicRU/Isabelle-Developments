@@ -104,9 +104,6 @@ qed
 
 subsection \<open>Meets of semi-factors\<close>
 
-lemma semi_factor_below_iff_p: "F \<sqsubseteq> G \<longleftrightarrow> semi_factor_p F \<sqsubseteq> semi_factor_p G"
-  by (simp add: below_semi_factor_def stable_subdom_below_iff semi_factor_p.rep_eq)
-
 text \<open>Over a dI key the meet of a non-empty set of semi-factors is computed pointwise: its
   projection is the glb of the projections, so its image is the intersection of the images.\<close>
 

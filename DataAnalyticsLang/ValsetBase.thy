@@ -514,9 +514,6 @@ lemma semi_factor_of_family_of_semi_factor [simp]:
   by (simp add: semi_factor_p_inject[symmetric] semi_factor_p_of_family semi_factor_p_family_of
       tmap_tcomp)
 
-lemma semi_factor_le_iff: "F \<le> G \<longleftrightarrow> semi_factor_p F \<sqsubseteq> semi_factor_p G"
-  by (simp add: less_eq_semi_factor.rep_eq semi_factor_p.rep_eq p_below_iff_le)
-
 lemma tmap_below_iff: "tmap f \<sqsubseteq> tmap g \<longleftrightarrow> (\<forall>d. f d \<sqsubseteq> g d)"
 proof
   assume fg: "tmap f \<sqsubseteq> tmap g"
@@ -529,66 +526,64 @@ proof
   qed
 qed (auto intro!: cfun_belowI simp: tuple_below_iff monofun_cfun_fun)
 
-lemma semi_factor_of_family_le_iff:
-  "semi_factor_of_family F \<le> semi_factor_of_family F' \<longleftrightarrow> F \<le> F'"
-  by (simp add: semi_factor_le_iff semi_factor_p_of_family tmap_below_iff le_fun_def)
+lemma semi_factor_of_family_below_iff:
+  "semi_factor_of_family F \<sqsubseteq> semi_factor_of_family F' \<longleftrightarrow> F \<sqsubseteq> F'"
+  by (simp add: semi_factor_below_iff_p semi_factor_p_of_family tmap_below_iff fun_below_iff)
 
-lemma family_of_semi_factor_le_iff: "family_of_semi_factor G \<le> F \<longleftrightarrow> G \<le> semi_factor_of_family F"
-  by (metis semi_factor_of_family_le_iff semi_factor_of_family_of_semi_factor)
+lemma family_of_semi_factor_below_iff:
+  "family_of_semi_factor G \<sqsubseteq> F \<longleftrightarrow> G \<sqsubseteq> semi_factor_of_family F"
+  by (metis semi_factor_of_family_below_iff semi_factor_of_family_of_semi_factor)
 
-lemma le_family_of_semi_factor_iff: "F \<le> family_of_semi_factor G \<longleftrightarrow> semi_factor_of_family F \<le> G"
-  by (metis semi_factor_of_family_le_iff semi_factor_of_family_of_semi_factor)
+lemma below_family_of_semi_factor_iff:
+  "F \<sqsubseteq> family_of_semi_factor G \<longleftrightarrow> semi_factor_of_family F \<sqsubseteq> G"
+  by (metis semi_factor_of_family_below_iff semi_factor_of_family_of_semi_factor)
 
-text \<open>Being an order isomorphism, it is a complete-lattice isomorphism.\<close>
+text \<open>Being an order isomorphism, it preserves all glbs and lubs.\<close>
 
-lemma semi_factor_of_family_Inf:
-  "semi_factor_of_family (Inf A) = Inf (semi_factor_of_family ` A)"
-proof (rule antisym)
-  show "semi_factor_of_family (Inf A) \<le> Inf (semi_factor_of_family ` A)"
-    by (rule Inf_greatest) (auto simp: semi_factor_of_family_le_iff intro: Inf_lower)
-  show "Inf (semi_factor_of_family ` A) \<le> semi_factor_of_family (Inf A)"
-    by (simp add: family_of_semi_factor_le_iff[symmetric])
-      (rule Inf_greatest, simp add: family_of_semi_factor_le_iff Inf_lower)
+lemma semi_factor_of_family_glb:
+  "semi_factor_of_family (glb A) = glb (semi_factor_of_family ` A)"
+proof (rule below_antisym)
+  show "semi_factor_of_family (glb A) \<sqsubseteq> glb (semi_factor_of_family ` A)"
+    by (rule lattice_glb_greatest) (auto simp: semi_factor_of_family_below_iff intro: glb_below)
+  show "glb (semi_factor_of_family ` A) \<sqsubseteq> semi_factor_of_family (glb A)"
+    unfolding family_of_semi_factor_below_iff[symmetric]
+    by (rule lattice_glb_greatest) (simp add: family_of_semi_factor_below_iff glb_below)
 qed
 
-lemma semi_factor_of_family_Sup:
-  "semi_factor_of_family (Sup A) = Sup (semi_factor_of_family ` A)"
-proof (rule antisym)
-  show "semi_factor_of_family (Sup A) \<le> Sup (semi_factor_of_family ` A)"
-    by (simp add: le_family_of_semi_factor_iff[symmetric])
-      (rule Sup_least, simp add: le_family_of_semi_factor_iff Sup_upper)
-  show "Sup (semi_factor_of_family ` A) \<le> semi_factor_of_family (Sup A)"
-    by (rule Sup_least) (auto simp: semi_factor_of_family_le_iff intro: Sup_upper)
+lemma semi_factor_of_family_lub:
+  "semi_factor_of_family (lub A) = lub (semi_factor_of_family ` A)"
+proof (rule below_antisym)
+  show "semi_factor_of_family (lub A) \<sqsubseteq> lub (semi_factor_of_family ` A)"
+    unfolding below_family_of_semi_factor_iff[symmetric]
+    by (rule lattice_lub_least) (simp add: is_ub_def below_family_of_semi_factor_iff lattice_lub_upper)
+  show "lub (semi_factor_of_family ` A) \<sqsubseteq> semi_factor_of_family (lub A)"
+    by (rule lattice_lub_least)
+      (auto simp: is_ub_def semi_factor_of_family_below_iff intro: lattice_lub_upper)
 qed
 
-lemma semi_factor_of_family_inf: "semi_factor_of_family (inf F G) = inf (semi_factor_of_family F) (semi_factor_of_family G)"
-  using semi_factor_of_family_Inf[of "{F, G}"] by simp
+lemma semi_factor_of_family_inf:
+  "semi_factor_of_family (F \<sqinter> G) = semi_factor_of_family F \<sqinter> semi_factor_of_family G"
+  unfolding meet_def using semi_factor_of_family_glb[of "{F, G}"] by simp
 
-lemma semi_factor_of_family_sup: "semi_factor_of_family (sup F G) = sup (semi_factor_of_family F) (semi_factor_of_family G)"
-  using semi_factor_of_family_Sup[of "{F, G}"] by simp
+lemma semi_factor_of_family_sup:
+  "semi_factor_of_family (F \<squnion> G) = semi_factor_of_family F \<squnion> semi_factor_of_family G"
+  unfolding join_def using semi_factor_of_family_lub[of "{F, G}"] by simp
 
-lemma semi_factor_of_family_top: "semi_factor_of_family top = top"
-  using semi_factor_of_family_Inf[of "{}"] by simp
+lemma semi_factor_of_family_top: "semi_factor_of_family lattice_top = lattice_top"
+  by (rule below_antisym) (simp_all add: family_of_semi_factor_below_iff[symmetric])
 
-lemma semi_factor_of_family_bot: "semi_factor_of_family bot = bot"
-  using semi_factor_of_family_Sup[of "{}"] by simp
+lemma semi_factor_of_family_bot: "semi_factor_of_family \<bottom> = \<bottom>"
+  by (rule bottomI) (subst below_family_of_semi_factor_iff[symmetric], rule minimal)
 
 lemma semi_factor_of_family_proj [simp]: "(t \<downharpoonright> semi_factor_of_family F)\<langle>d\<rangle> = t\<langle>d\<rangle> \<downharpoonright> F d"
   by (simp add: semi_factor_p_of_family)
 
 subsection \<open>Dimension sets as semi-factors of the tuple domain\<close>
 
-lemma semi_factor_p_bot: "semi_factor_p bot = \<bottom>"
-  by (rule cfun_eqI)
-     (simp add: semi_factor_p.rep_eq bot_semi_factor.rep_eq p_bot_stable_subdom)
-
-lemma semi_factor_p_top: "semi_factor_p top = ID"
-  by (simp add: semi_factor_p.rep_eq top_semi_factor.rep_eq p_top_stable_subdom)
-
-text \<open>The coordinate cut is the family that is \<open>top\<close> on the dimensions and \<open>bot\<close> elsewhere.\<close>
+text \<open>The coordinate cut is the family that is the top on the dimensions and \<open>\<bottom>\<close> elsewhere.\<close>
 
 definition dcut :: "'a::countable set \<Rightarrow> ('a, 'b::scott_domain) tuple semi_factor" where
-  "dcut A = semi_factor_of_family (\<lambda>d. if d \<in> A then top else bot)"
+  "dcut A = semi_factor_of_family (\<lambda>d. if d \<in> A then lattice_top else \<bottom>)"
 
 lemma semi_factor_p_dcut:
   "semi_factor_p (dcut A) = (tcut A :: ('a::countable, 'b::scott_domain) tuple \<rightarrow> ('a,'b) tuple)"
@@ -608,9 +603,9 @@ lemma tcut_compose: "tcut B\<cdot>(tcut A\<cdot>t) = tcut (A \<inter> B)\<cdot>t
   by (rule tuple_eqI) (simp add: tcut_tget)
 
 text \<open>@{const dcut} is a lattice homomorphism, as the indicator families are.\<close>
-lemma dcut_inf: "dcut (A \<inter> B) = inf (dcut A) (dcut B)"
+lemma dcut_inf: "dcut (A \<inter> B) = dcut A \<sqinter> dcut B"
   unfolding dcut_def semi_factor_of_family_inf[symmetric]
-  by (rule arg_cong[where f = semi_factor_of_family]) (simp add: fun_eq_iff)
+  by (rule arg_cong[where f = semi_factor_of_family]) (simp add: fun_eq_iff fun_meet lattice_meet_idem lattice_meet_bot_left lattice_meet_bot_right)
 
 lemma tcut_joinable: "tcut A\<cdot>t \<Up> tcut B\<cdot>t"
 proof (rule joinableI)
@@ -628,19 +623,15 @@ proof (rule tuple_eqI)
     by (cases "a \<in> A"; cases "a \<in> B") (simp_all add: tcut_tget)
 qed
 
-lemma semi_factor_p_sup:
-  "semi_factor_p (sup F G)\<cdot>x = semi_factor_p F\<cdot>x \<squnion> semi_factor_p G\<cdot>x"
-  by (simp add: semi_factor_p.rep_eq sup_semi_factor.rep_eq p_sup_join)
-
-lemma dcut_sup: "dcut (A \<union> B) = sup (dcut A) (dcut B)"
+lemma dcut_sup: "dcut (A \<union> B) = dcut A \<squnion> dcut B"
   unfolding dcut_def semi_factor_of_family_sup[symmetric]
-  by (rule arg_cong[where f = semi_factor_of_family]) (simp add: fun_eq_iff)
+  by (rule arg_cong[where f = semi_factor_of_family]) (simp add: fun_eq_iff fun_join lattice_join_bot_left lattice_join_bot_right)
 
-lemma dcut_bot: "dcut {} = bot"
-  by (simp add: dcut_def semi_factor_of_family_bot[unfolded bot_fun_def])
+lemma dcut_bot: "dcut {} = \<bottom>"
+  by (simp add: dcut_def semi_factor_of_family_bot lambda_strict)
 
-lemma dcut_top: "dcut UNIV = top"
-  by (simp add: dcut_def semi_factor_of_family_top[unfolded top_fun_def])
+lemma dcut_top: "dcut UNIV = lattice_top"
+  by (simp add: dcut_def semi_factor_of_family_top[unfolded lattice_top_fun])
 
 lemma tcut_below: "tcut A\<cdot>t \<sqsubseteq> t"
   by (simp add: below_tuple_def fun_below_iff tcut_tget)
