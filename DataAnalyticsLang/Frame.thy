@@ -323,6 +323,28 @@ proof -
   with e show ?thesis unfolding dims_equiv_def relspace.equiv_mod_def by blast
 qed
 
+text \<open>The grains of one mask combine: the equivalence at a join of grains is the equivalence at
+  both, and the bottom grain imposes nothing.  So the dims are a map from masks to grains, a
+  collection joins those maps, and two pairs with the same mask collapse into one.\<close>
+
+lemma dims_equiv_bot: "dims_equiv bot \<rho> F x a t"
+  unfolding dims_equiv_def relspace.equiv_mod_def by (simp add: proj_bot)
+
+lemma dims_equiv_sup_natd:
+  "dims_equiv (sup n n') \<rho> F x a t \<longleftrightarrow> dims_equiv n \<rho> F x a t \<and> dims_equiv n' \<rho> F x a t"
+proof
+  assume "dims_equiv (sup n n') \<rho> F x a t"
+  then show "dims_equiv n \<rho> F x a t \<and> dims_equiv n' \<rho> F x a t"
+    by (blast intro: dims_equiv_natd_le[OF sup_ge1] dims_equiv_natd_le[OF sup_ge2])
+next
+  assume e: "dims_equiv n \<rho> F x a t \<and> dims_equiv n' \<rho> F x a t"
+  have "rproj n d \<noteq> rproj n d' \<or> rproj n' d \<noteq> rproj n' d'"
+    if "rproj (sup n n') d \<noteq> rproj (sup n n') d'" for d d'
+    using that by (auto simp: proj_sup)
+  with e show "dims_equiv (sup n n') \<rho> F x a t"
+    unfolding dims_equiv_def relspace.equiv_mod_def by blast
+qed
+
 text \<open>An expression's dims hypothesis holds at every pair of its dims.\<close>
 
 definition dims_equivs :: "('l \<times> 'l trunc) fset \<Rightarrow> ('l, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> 'l \<Rightarrow> 'l \<Rightarrow> bool" where
