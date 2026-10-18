@@ -6,7 +6,7 @@ section \<open>Combinators on expression semantics\<close>
 
 text \<open>Record-level constructions do not conform to data on their own; they are lawful
   \<^emph>\<open>up to data\<close> (their guard is lawful), and a single guard where they enter an
-  aggregation restores the presence law.  Collecting a list of expressions into a tuple,
+  aggregation restores the key law.  Collecting a list of expressions into a tuple,
   followed by a map, expresses every operator of any arity.\<close>
 
 subsection \<open>Tuples\<close>
@@ -113,24 +113,8 @@ proof -
     by (rule law[OF E0])
   show ?thesis
   proof (rule lawfulI)
-    show "esem (collect Es) F k \<noteq> None \<longleftrightarrow> keyimg S F (?M \<squnion> flod F) k" for F k
-    proof
-      assume "esem (collect Es) F k \<noteq> None"
-      then show "keyimg S F (?M \<squnion> flod F) k"
-        using E0.key_data[OF nb[OF _ E0]] by (simp only: kd[OF E0] keyimg_cong[OF frows_finclude])
-    next
-      assume ki: "keyimg S F (?M \<squnion> flod F) k"
-      have "esem E (finclude ?M F) k \<noteq> None" if "E \<in> set Es" for E
-      proof -
-        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S
-          "emind E" "edims E" "esem E"
-          by (rule law[OF that])
-        show ?thesis using ki
-          by (simp only: E.presence kd[OF that] keyimg_cong[OF frows_finclude])
-      qed
-      then show "esem (collect Es) F k \<noteq> None"
-        unfolding collect_simps by (auto simp: those_not_None_iff simp del: not_None_eq)
-    qed
+    show "keyimg S F (?M \<squnion> flod F) k" if "esem (collect Es) F k \<noteq> None" for F k
+      using E0.key_data[OF nb[OF that E0]] by (simp only: kd[OF E0] keyimg_cong[OF frows_finclude])
     show "esem (collect Es) (peg K F) K = esem (collect Es) F K" if "compact K" for F K
     proof -
       note cK = that
@@ -147,9 +131,7 @@ proof -
     show "esem (collect Es) F (rproj (?M \<squnion> flod F) x)
         = esem (collect Es) F' (rproj (?M \<squnion> flod F') x)"
       if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S"
-        "dims_equivs (edims (collect Es)) F x (?M \<squnion> flod F) (?M \<squnion> flod F')"
-        "esem (collect Es) F (rproj (?M \<squnion> flod F) x) \<noteq> None"
-        "esem (collect Es) F' (rproj (?M \<squnion> flod F') x) \<noteq> None" for F F' x
+        "frows F x" "dims_equivs (edims (collect Es)) F x (?M \<squnion> flod F) (?M \<squnion> flod F')" for F F' x
     proof -
       note a = that
       have e: "esem E (finclude ?M F) (rproj (?M \<squnion> flod F) x)
@@ -163,7 +145,7 @@ proof -
         proof (rule dims_equivsI)
           fix \<rho>
           have "dims_equiv (edims (collect Es) \<rho>) \<rho> F x (?M \<squnion> flod F) (?M \<squnion> flod F')"
-            by (rule dims_equivsD[OF a(4)])
+            by (rule dims_equivsD[OF a(5)])
           then have "dims_equiv (edims E \<rho>) \<rho> F x (?M \<squnion> flod F) (?M \<squnion> flod F')"
             by (rule dims_equiv_natd_le[OF edims_collect_upper[OF E]])
           then show "dims_equiv (edims E \<rho>) \<rho> (finclude ?M F) x (E.kd (finclude ?M F)) (E.kd (finclude ?M F'))"
@@ -171,9 +153,8 @@ proof -
         qed
         have "esem E (finclude ?M F) (rproj (E.kd (finclude ?M F)) x)
             = esem E (finclude ?M F') (rproj (E.kd (finclude ?M F')) x)"
-          by (rule E.dims_law[OF _ _ a(3) eq])
-            (use nb[OF a(5) E] nb[OF a(6) E] in
-              \<open>simp_all only: amb_finclude slice_finclude a(1,2) kd[OF E] not_False_eq_True\<close>)
+          by (rule E.dims_law[OF _ _ a(3) _ eq])
+            (simp_all only: amb_finclude slice_finclude a(1,2,4) frows_finclude)
         then show ?thesis by (simp only: kd[OF E])
       qed
       show ?thesis unfolding collect_simps(3)
@@ -195,11 +176,11 @@ proof -
         by (intro ext arg_cong[where f = "\<lambda>xs. map_option ltuple_of (those xs)"] map_cong[OF refl]) (simp only: e)
     qed
     show "compact ?M" unfolding collect_simps(1)
-      by (rule compact_fold_sup) (auto intro: expr_sem.mind_compact[OF law])
+      by (rule compact_fold_sup) (auto intro: expr_laws.mind_compact[OF lawful_semilawful[OF law]])
     show "compact (edims (collect Es))" unfolding collect_simps(2)
-      by (rule compact_fun_fold_join) (auto intro: expr_sem.dims_compact[OF law])
+      by (rule compact_fun_fold_join) (auto intro: expr_laws.dims_compact[OF lawful_semilawful[OF law]])
     show "edims (collect Es) \<rho> \<sqsubseteq> edims (collect Es) \<bottom>" for \<rho> unfolding collect_simps(2)
-      by (rule fold_join_apply_le) (auto intro: expr_sem.dims_bot[OF law])
+      by (rule fold_join_apply_le) (auto intro: expr_laws.dims_bot[OF lawful_semilawful[OF law]])
   qed
 qed
 
