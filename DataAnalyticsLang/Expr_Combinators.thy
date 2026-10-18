@@ -201,7 +201,7 @@ lemma value_at_simps:
   by (simp_all add: value_at_def fixed_def)
 
 theorem lawful_value_at: "compact c \<Longrightarrow> lawfulE (value_at c g)"
-  unfolding value_at_def by (simp only: expr.simps) (rule lawful_fixed, simp_all add: fisolate_def)
+  unfolding value_at_def by (simp only: expr.simps) (rule lawful_fixed, simp_all add: fisolate_def compact_fun_iff)
 
 end
 

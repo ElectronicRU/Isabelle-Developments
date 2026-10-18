@@ -762,98 +762,8 @@ proof (rule lawfulI)
   show "dims \<rho> \<sqsubseteq> dims \<bottom>" for \<rho> by (rule dims_bot)
 qed
 
-subsection \<open>Fixed-level constructs: \<open>GROUP BY ONLY\<close>, \<open>TOTAL\<close>, \<open>ISOLATE\<close>\<close>
-
-text \<open>A construct that evaluates its argument under a transformed frame at a fixed LOD
-  \<^term>\<open>E\<close>, broadcast back to the incoming frame's keys: it reads only the \<open>E\<close>-part of a key.  It
-  is lawful whenever the transformer sees the incoming frame only through its filters and pegging
-  the incoming frame does not change the inner value at the truncated key.  Its dims law holds
-  unconditionally: it has no dims.  The inner expression may drop truncated keys, also by rows
-  the incoming slice would not select, after a coarsening.\<close>
-
-context dataspace
-begin
-
-definition fixed where
-  "fixed E T sem F k = (if keyimg S F (E \<squnion> flod F) k then sem (T F) (proj E\<cdot>k) else None)"
-
-theorem lawful_fixed:
-  assumes "\<And>F K. compact K \<Longrightarrow> sem (T (peg K F)) (proj E\<cdot>K) = sem (T F) (proj E\<cdot>K)"
-    and "\<And>F F'. amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> T F = T F'"
-    and "compact E"
-  shows "lawful E \<bottom> (fixed E T sem)"
-proof (rule lawfulI)
-  show "keyimg S F (E \<squnion> flod F) k" if "fixed E T sem F k \<noteq> None" for F k
-    using that by (simp add: fixed_def split: if_splits)
-  show "fixed E T sem (peg K F) K = fixed E T sem F K" if "compact K" for F K
-    by (simp add: fixed_def keyimg_peg_iff[OF that] assms(1)[OF that])
-  show "fixed E T sem F (rproj (E \<squnion> flod F) x) = fixed E T sem F' (rproj (E \<squnion> flod F') x)"
-    if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S" "frows F x"
-      "dims_equivs \<bottom> F x (E \<squnion> flod F) (E \<squnion> flod F')" for F F' x
-  proof -
-    have "proj E\<cdot>(rproj (E \<squnion> flod G) x) = rproj E x" for G :: "('k semi_factor, 'f, 'r) frame"
-      by (simp add: proj_le lattice_join_ge1)
-    moreover have "keyimg S G (E \<squnion> flod G) (rproj (E \<squnion> flod G) x)" if "frows G x" for G
-      using that \<open>x \<in> pts S\<close> by (auto simp: keyimg_def)
-    moreover have "frows F' x" using that(4) frows_cong[OF that(1,2)] by simp
-    moreover have "T F' = T F" using assms(2)[OF that(1,2)] by simp
-    ultimately show ?thesis using that(4) by (simp add: fixed_def)
-  qed
-  show "fixed E T sem F = fixed E T sem F'"
-    if "amb F = amb F'" "slice F = slice F'" "(E \<squnion> flod F) = (E \<squnion> flod F')"
-    for F F'
-  proof -
-    have "keyimg S F (E \<squnion> flod F) = keyimg S F' (E \<squnion> flod F')"
-      using keyimg_cong[OF frows_cong[OF that(1,2)]] that(3) by simp
-    then show ?thesis using assms(2)[OF that(1,2)] by (simp add: fixed_def fun_eq_iff)
-  qed
-  show "compact E" by (fact assms(3))
-  show "compact (\<bottom> :: 'k semi_factor \<Rightarrow> 'k semi_factor)"
-    by (simp add: compact_fun_iff)
-  show "(\<bottom> :: 'k semi_factor \<Rightarrow> 'k semi_factor) \<rho> \<sqsubseteq> \<bottom> \<bottom>" for \<rho> by simp
-qed
-
-end
-
-context expr_sem
-begin
-
-definition group_by_only where
-  "group_by_only D = fixed (mind \<squnion> D) (fgroupby D) sem"
-
-abbreviation total where
-  "total \<equiv> group_by_only \<bottom>"
-
-theorem lawful_group_by_only:
-  assumes D: "compact D"
-  shows "lawful (mind \<squnion> D) \<bottom> (group_by_only D)"
-  unfolding group_by_only_def
-proof (rule lawful_fixed)
-  show "sem (fgroupby D (peg K F)) (proj (mind \<squnion> D)\<cdot>K) = sem (fgroupby D F) (proj (mind \<squnion> D)\<cdot>K)"
-    if "compact K" for F K
-    by (simp add: fgroupby_peg[OF that]
-        peg_below[OF compact_proj_compact[OF that] compact_proj_compact[OF that] proj_mono[OF lattice_join_ge2]])
-  show "fgroupby D F = fgroupby D F'" if "amb F = amb F'" "slice F = slice F'" for F F'
-    using that by (cases F, cases F') (simp add: fgroupby_def)
-  show "compact (mind \<squnion> D)" by (simp add: compact_semi_factor_sup mind_compact D)
-qed
-
-definition isolate where
-  "isolate = fixed mind fisolate sem"
-
-theorem lawful_isolate: "lawful mind \<bottom> isolate"
-  unfolding isolate_def by (rule lawful_fixed) (simp_all add: fisolate_peg fisolate_def mind_compact)
-
-end
-
-subsection \<open>\<open>FOR\<close> and \<open>EXCLUDE\<close>\<close>
-
-text \<open>\<open>E FOR \<tau> G\<close> is evaluated at the incoming frame's keys, truncated to the key LOD of the inner
-  frame.  The key LOD of the inner frame is the expression's own detail plus the truncated key
-  LOD of the outer one.\<close>
-
-text \<open>Under \<open>FOR \<tau>\<close> the dims move along the masks' meet with \<open>\<tau>\<close>; the natural LODs of masks
-  that meet \<open>\<tau>\<close> in the same mask join.  The bottom mask keeps carrying the natural grain.\<close>
+text \<open>Under a truncation to \<open>\<tau>\<close> (\<open>FOR\<close>, or a fixed LOD) the dims move along the masks' meet
+  with \<open>\<tau>\<close>; the natural LODs of masks that meet \<open>\<tau>\<close> in the same mask join.  The bottom mask keeps carrying the natural grain.\<close>
 
 definition for_dims ::
     "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> ('k semi_factor \<Rightarrow> 'k semi_factor) \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor"
@@ -897,6 +807,103 @@ proof -
   then have "finite {\<rho>'. for_dims \<tau> \<Delta> \<rho>' \<noteq> \<bottom>}" using fin by (rule finite_subset[OF _ finite_imageI])
   with val show ?thesis by (simp add: compact_fun_iff)
 qed
+
+subsection \<open>Fixed-level constructs: \<open>GROUP BY ONLY\<close>, \<open>TOTAL\<close>, \<open>ISOLATE\<close>\<close>
+
+text \<open>A construct that evaluates its argument under a transformed frame at a fixed LOD
+  \<^term>\<open>E\<close>, broadcast back to the incoming frame's keys: it reads only the \<open>E\<close>-part of a key.  It
+  is lawful whenever the transformer sees the incoming frame only through its filters and pegging
+  the incoming frame does not change the inner value at the truncated key.  The inner expression
+  may drop truncated keys, also by rows the incoming slice would not select, after a coarsening.
+  Its dims are what the inner expression reads, moved along the truncation to \<open>E\<close>
+  (@{const for_dims}); all their masks lie below \<open>E\<close>, so they see no change of the incoming LOD,
+  only the incoming selection coarsened, and the dims law holds whatever they are.\<close>
+
+context dataspace
+begin
+
+definition fixed where
+  "fixed E T sem F k = (if keyimg S F (E \<squnion> flod F) k then sem (T F) (proj E\<cdot>k) else None)"
+
+theorem lawful_fixed:
+  assumes "\<And>F K. compact K \<Longrightarrow> sem (T (peg K F)) (proj E\<cdot>K) = sem (T F) (proj E\<cdot>K)"
+    and "\<And>F F'. amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrightarrow> T F = T F'"
+    and "compact E" and "compact \<Delta>" and "\<And>\<rho>. \<Delta> \<rho> \<sqsubseteq> \<Delta> \<bottom>"
+  shows "lawful E \<Delta> (fixed E T sem)"
+proof (rule lawfulI)
+  show "keyimg S F (E \<squnion> flod F) k" if "fixed E T sem F k \<noteq> None" for F k
+    using that by (simp add: fixed_def split: if_splits)
+  show "fixed E T sem (peg K F) K = fixed E T sem F K" if "compact K" for F K
+    by (simp add: fixed_def keyimg_peg_iff[OF that] assms(1)[OF that])
+  show "fixed E T sem F (rproj (E \<squnion> flod F) x) = fixed E T sem F' (rproj (E \<squnion> flod F') x)"
+    if "amb F = amb F'" "slice F = slice F'" "x \<in> pts S" "frows F x"
+      "dims_equivs \<Delta> F x (E \<squnion> flod F) (E \<squnion> flod F')" for F F' x
+  proof -
+    have "proj E\<cdot>(rproj (E \<squnion> flod G) x) = rproj E x" for G :: "('k semi_factor, 'f, 'r) frame"
+      by (simp add: proj_le lattice_join_ge1)
+    moreover have "keyimg S G (E \<squnion> flod G) (rproj (E \<squnion> flod G) x)" if "frows G x" for G
+      using that \<open>x \<in> pts S\<close> by (auto simp: keyimg_def)
+    moreover have "frows F' x" using that(4) frows_cong[OF that(1,2)] by simp
+    moreover have "T F' = T F" using assms(2)[OF that(1,2)] by simp
+    ultimately show ?thesis using that(4) by (simp add: fixed_def)
+  qed
+  show "fixed E T sem F = fixed E T sem F'"
+    if "amb F = amb F'" "slice F = slice F'" "(E \<squnion> flod F) = (E \<squnion> flod F')"
+    for F F'
+  proof -
+    have "keyimg S F (E \<squnion> flod F) = keyimg S F' (E \<squnion> flod F')"
+      using keyimg_cong[OF frows_cong[OF that(1,2)]] that(3) by simp
+    then show ?thesis using assms(2)[OF that(1,2)] by (simp add: fixed_def fun_eq_iff)
+  qed
+  show "compact E" by (fact assms(3))
+  show "compact \<Delta>" by (fact assms(4))
+  show "\<Delta> \<rho> \<sqsubseteq> \<Delta> \<bottom>" for \<rho> by (fact assms(5))
+qed
+
+end
+
+context expr_sem
+begin
+
+definition group_by_only where
+  "group_by_only D = fixed (mind \<squnion> D) (fgroupby D) sem"
+
+abbreviation total where
+  "total \<equiv> group_by_only \<bottom>"
+
+theorem lawful_group_by_only:
+  assumes D: "compact D"
+  shows "lawful (mind \<squnion> D) (for_dims (mind \<squnion> D) dims) (group_by_only D)"
+  unfolding group_by_only_def
+proof (rule lawful_fixed)
+  show "sem (fgroupby D (peg K F)) (proj (mind \<squnion> D)\<cdot>K) = sem (fgroupby D F) (proj (mind \<squnion> D)\<cdot>K)"
+    if "compact K" for F K
+    by (simp add: fgroupby_peg[OF that]
+        peg_below[OF compact_proj_compact[OF that] compact_proj_compact[OF that] proj_mono[OF lattice_join_ge2]])
+  show "fgroupby D F = fgroupby D F'" if "amb F = amb F'" "slice F = slice F'" for F F'
+    using that by (cases F, cases F') (simp add: fgroupby_def)
+  show "compact (mind \<squnion> D)" by (simp add: compact_semi_factor_sup mind_compact D)
+  show "compact (for_dims (mind \<squnion> D) dims)" by (rule compact_for_dims[OF dims_compact])
+  show "for_dims (mind \<squnion> D) dims \<rho> \<sqsubseteq> for_dims (mind \<squnion> D) dims \<bottom>" for \<rho>
+    by (rule for_dims_bot) (rule dims_bot)
+qed
+
+text \<open>\<open>ISOLATE\<close> replaces the incoming frame by the whole dataset, so it reads nothing of the
+  incoming selection: it has no dims.\<close>
+
+definition isolate where
+  "isolate = fixed mind fisolate sem"
+
+theorem lawful_isolate: "lawful mind \<bottom> isolate"
+  unfolding isolate_def by (rule lawful_fixed) (simp_all add: fisolate_peg fisolate_def mind_compact compact_fun_iff)
+
+end
+
+subsection \<open>\<open>FOR\<close> and \<open>EXCLUDE\<close>\<close>
+
+text \<open>\<open>E FOR \<tau> G\<close> is evaluated at the incoming frame's keys, truncated to the key LOD of the inner
+  frame.  The key LOD of the inner frame is the expression's own detail plus the truncated key
+  LOD of the outer one.\<close>
 
 text \<open>An expression that reads, or drops rows by, a grain \<open>m\<close> of the whole key: \<open>m\<close> joins
   the natural LOD of the full mask, and of the bottom mask, which carries an upper bound.\<close>
