@@ -184,6 +184,25 @@ proof -
   qed
 qed
 
+
+subsection \<open>Values\<close>
+
+text \<open>A value at an LOD \<open>c\<close>: a function of the key, evaluated at the key's truncation to \<open>c\<close>.
+  The expression decides the detail \<open>c\<close> itself, so the truncation is part of every key it has an
+  entry at, and nothing finer is read: it has no dims.  It is a broadcast from the fixed LOD
+  \<open>c\<close>, which never looks at the frame.  (The name \<open>value\<close> is taken by the Isar command.)\<close>
+
+definition value_at :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> 'v::cpo) \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'v) expr" where
+  "value_at c g = \<lparr>emind = c, edims = \<bottom>, esem = fixed c fisolate (\<lambda>_ k. Some (g\<cdot>k))\<rparr>"
+
+lemma value_at_simps:
+  "emind (value_at c g) = c" "edims (value_at c g) = \<bottom>"
+  "esem (value_at c g) F k = (if keyimg S F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None)"
+  by (simp_all add: value_at_def fixed_def)
+
+theorem lawful_value_at: "compact c \<Longrightarrow> lawfulE (value_at c g)"
+  unfolding value_at_def by (simp only: expr.simps) (rule lawful_fixed, simp_all add: fisolate_def)
+
 end
 
 end
