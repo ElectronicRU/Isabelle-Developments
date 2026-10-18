@@ -15,9 +15,9 @@ session DataAnalyticsLang = "HOLCF" +
     LOD
     Domain_Transfer
     Value
+    Content_Law
     Expr_Combinators
     Aggregate
-    Content_Law
   document_files
     "root.tex"
     "root.bib"

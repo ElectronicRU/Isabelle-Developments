@@ -1,5 +1,5 @@
 theory Aggregate
-  imports Frame
+  imports Content_Law
 begin
 
 section \<open>Aggregation\<close>
@@ -81,6 +81,15 @@ qed
 
 end
 
+lemma agg_fold_bij:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and h: "bij_betw h A B"
+  shows "agg_fold f (v \<circ> h) A = agg_fold f v B"
+proof -
+  interpret A: comm_monoid_set "opt_op f" None
+    unfolding comm_monoid_set_def by (rule comm_monoid_opt_op[OF f])
+  show ?thesis unfolding agg_fold_def comp_def by (rule A.reindex_bij_betw[OF h])
+qed
+
 context dataspace
 begin
 
@@ -89,200 +98,186 @@ text \<open>The rows of a frame in the fiber of a key at an LOD.\<close>
 definition afiber :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'r set" where
   "afiber F c k = {y \<in> pts S. frows F y \<and> rproj c y = k}"
 
-text \<open>The aggregate decides no detail of its own (\<open>INCLUDE\<close> adds some); at a key of the frame
-  it folds the inner entries at the keys of the fiber's rows.  Through the full mask it reads
-  its grouping at the inner expression's minimal LOD.\<close>
+text \<open>\<open>aggregate R f E\<close> folds the inner entries over each fiber of the frame LOD, the inner
+  expression being evaluated under the frame refined by the extra requested dimensions \<open>R\<close> (a
+  grouping inside the aggregate).  Its keys are the frame's, so it decides no detail: the lower
+  parts of the inner entries move into the observations, and the fold reads the fiber's classes
+  at \<open>emind E \<squnion> R\<close>.\<close>
 
-definition aggregate ::
-    "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'v) expr \<Rightarrow> ('k semi_factor, 'f, 'r, 'k, 'v) expr"
-  where "aggregate f E =
-    \<lparr>emind = \<bottom>, edims = top_dims (emind E) (edims E),
-     esem = \<lambda>F k. agg_fold f (esem E F) (rproj (emind E \<squnion> flod F) ` afiber F (flod F) k)\<rparr>"
+definition aggregate :: "'k semi_factor \<Rightarrow> ('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "aggregate R f E = \<lparr>emind = \<bottom>,
+     edims = (\<bottom>, lattice_top, obs_key (emind E \<squnion> R)) #
+       map (\<lambda>(a, \<rho>, g). (\<bottom>, \<rho>, obs_pair g (obs_key (a \<squnion> truncate \<rho> R)))) (edims E),
+     esem = \<lambda>F k. agg_fold f (esem E (finclude R F))
+       (rproj (emind E \<squnion> flod (finclude R F)) ` afiber F (flod F) k)\<rparr>"
 
-lemma aggregate_simps:
-  "emind (aggregate f E) = \<bottom>" "edims (aggregate f E) = top_dims (emind E) (edims E)"
-  "esem (aggregate f E) F k = agg_fold f (esem E F) (rproj (emind E \<squnion> flod F) ` afiber F (flod F) k)"
+lemma aggregate_simps [simp]:
+  "emind (aggregate R f E) = \<bottom>"
+  "edims (aggregate R f E) = (\<bottom>, lattice_top, obs_key (emind E \<squnion> R)) #
+       map (\<lambda>(a, \<rho>, g). (\<bottom>, \<rho>, obs_pair g (obs_key (a \<squnion> truncate \<rho> R)))) (edims E)"
+  "esem (aggregate R f E) F k = agg_fold f (esem E (finclude R F))
+       (rproj (emind E \<squnion> flod (finclude R F)) ` afiber F (flod F) k)"
   by (simp_all add: aggregate_def)
 
-text \<open>What the aggregate needs: a commutative semigroup operation (continuity is not used yet),
-  and keys of data rows compact, so that pegging the frame reaches the inner keys.  The inner
-  expression may drop keys: the fold reads the entries present, and there is no entry where the
-  whole fiber has none.  The dims law of the inner expression covers its entries, present or
-  not, at every row of a fiber.\<close>
-
 theorem lawful_aggregate:
-  assumes E: "lawfulE E"
-    and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
-    and data_compact: "\<And>y. y \<in> pts S \<Longrightarrow> compact (rkey\<cdot>y)"
-  shows "lawfulE (aggregate f E)"
+  assumes E: "lawfulE E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
+  shows "lawfulE (aggregate R f E)"
 proof -
   interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
     by (fact E)
-  let ?m = "emind E" and ?D = "top_dims (emind E) (edims E)"
-  have kd: "\<bottom> \<squnion> X = X" for X :: "'k semi_factor" by (rule lattice_join_bot_left)
-  have ne: "afiber F (flod F) k \<noteq> {}" if "esem (aggregate f E) F k \<noteq> None" for F k
-    using agg_fold_nonempty[OF f] that by (auto simp: aggregate_simps)
-  text \<open>Through the full mask: rows apart at the inner minimal LOD are grouped alike.\<close>
-  have P: "rproj (flod F) y = rproj (flod F) z \<longleftrightarrow> rproj (flod F') y = rproj (flod F') z"
-    if e: "dims_equivs ?D F x (flod F) (flod F')"
-      and yz: "y \<in> insert x (mrows lattice_top F)" "z \<in> insert x (mrows lattice_top F)"
-      and n: "rproj ?m y \<noteq> rproj ?m z" for F F' x y z
+  let ?m = "emind E"
+  let ?t = "\<lambda>(a, \<rho>, g). (\<bottom>::'k semi_factor, \<rho>, obs_pair g (obs_key (a \<squnion> truncate \<rho> R)))"
+  have bj: "\<bottom> \<squnion> X = X" for X :: "'k semi_factor" by (rule lattice_join_bot_left)
+  have ok: "Rep_cfun (obs_key c) = (\<lambda>y. emb\<cdot>(rproj c y))" for c by (rule ext) (rule obs_key_apply)
+  text \<open>The fold entry reads the fiber.\<close>
+  have fiber: "group \<bottom> lattice_top F k = afiber F (flod F) k" if "proj (flod F)\<cdot>k = k" for F k
   proof -
-    have "dims_equiv (?D lattice_top) lattice_top F x (flod F) (flod F')"
-      by (rule dims_equivsD[OF e])
-    then have "dims_equiv ?m lattice_top F x (flod F) (flod F')"
-      by (rule dims_equiv_natd_le[OF top_dims_top])
-    then have "relspace.equiv_mod (insert x (mrows lattice_top F)) (rproj ?m) (rproj (flod F)) (rproj (flod F'))"
-      by (simp add: dims_equiv_def truncate_top)
-    with yz n show ?thesis unfolding relspace.equiv_mod_def by blast
+    have "proj (\<bottom> \<squnion> flod F)\<cdot>k = k" using that by (simp only: bj)
+    then show ?thesis by (simp add: group_top afiber_def bj)
   qed
-  text \<open>The inner dims hypothesis holds at every row of the frame.\<close>
-  have inner: "dims_equivs (edims E) F y (?m \<squnion> flod F) (?m \<squnion> flod F')"
-    if e: "dims_equivs ?D F x (flod F) (flod F')" and y: "y = x \<or> (y \<in> pts S \<and> frows F y)"
-    for F F' x y
-  proof (rule dims_equivsI)
-    fix \<rho>
-    have "dims_equiv (edims E \<rho>) \<rho> F x (flod F) (flod F')"
-      by (rule dims_equiv_natd_le[OF top_dims_ge dims_equivsD[OF e]])
-    then have x: "dims_equiv (edims E \<rho>) \<rho> F x (?m \<squnion> flod F) (?m \<squnion> flod F')"
-      by (rule dims_equiv_sup[OF subset_refl]) (simp_all add: truncate_sup lattice_join_commute)
-    have sub: "insert y (mrows \<rho> F) \<subseteq> insert x (mrows \<rho> F)" using y frows_mrows[of y F \<rho>] by blast
-    show "dims_equiv (edims E \<rho>) \<rho> F y (?m \<squnion> flod F) (?m \<squnion> flod F')"
-      by (rule dims_equiv_sub_row[OF sub x refl refl])
+  text \<open>An inner group is the outer group through the same upper part, cut down by the inner
+    key's lower part and requested part.\<close>
+  have ig: "group a \<rho> (finclude R F) (rproj (?m \<squnion> flod (finclude R F)) y)
+      = {y' \<in> group \<bottom> \<rho> F k. rproj (a \<squnion> truncate \<rho> R) y' = rproj (a \<squnion> truncate \<rho> R) y}"
+    if y: "rproj (flod F) y = k" and am: "a \<sqsubseteq> ?m" for a \<rho> F k y
+  proof -
+    let ?X = "?m \<squnion> flod (finclude R F)" and ?A = "a \<squnion> truncate \<rho> R" and ?L = "truncate \<rho> (flod F)"
+    have lod: "a \<squnion> truncate \<rho> (flod (finclude R F)) = ?A \<squnion> ?L" by (simp add: truncate_sup lattice_join_ac)
+    have mR: "?m \<squnion> R \<sqsubseteq> ?X" by (simp add: lattice_join_mono lattice_join_ge2)
+    have AX: "?A \<sqsubseteq> ?X" by (rule below_trans[OF lattice_join_mono[OF am truncate_below] mR])
+    have LX: "?L \<sqsubseteq> ?X"
+      by (rule below_trans[OF truncate_below]) (simp add: below_trans[OF lattice_join_ge1 lattice_join_ge2])
+    have kA: "proj ?A\<cdot>(rproj ?X y) = rproj ?A y" by (rule proj_le[OF AX])
+    have kL: "proj ?L\<cdot>(rproj ?X y) = proj ?L\<cdot>k"
+    proof -
+      have "proj ?L\<cdot>(rproj ?X y) = rproj ?L y" by (rule proj_le[OF LX])
+      also have "\<dots> = proj ?L\<cdot>(rproj (flod F) y)" by (rule proj_le[OF truncate_below, symmetric])
+      finally show ?thesis by (simp only: y)
+    qed
+    show ?thesis unfolding group_def lod proj_sup_eq kA kL by (auto simp: bj proj_bot)
   qed
-  have val: "esem E F (rproj (?m \<squnion> flod F) y) = esem E F' (rproj (?m \<squnion> flod F') y)"
-    if a: "amb F = amb F'" "slice F = slice F'" "dims_equivs ?D F x (flod F) (flod F')"
-      and y: "y \<in> pts S" "frows F y" for F F' x y
-    by (rule E.dims_law[OF a(1,2) y inner[OF a(3)]]) (use y in blast)
+  text \<open>Inner keys of a fiber correspond to their parts at \<open>emind E \<squnion> R\<close>.\<close>
+  have bij: "bij_betw (Rep_cfun (proj (?m \<squnion> R))) (rproj (?m \<squnion> flod (finclude R F)) ` afiber F (flod F) k)
+      (rproj (?m \<squnion> R) ` afiber F (flod F) k)" for F k
+  proof -
+    let ?X = "?m \<squnion> flod (finclude R F)" and ?Z = "afiber F (flod F) k"
+    have le: "?m \<squnion> R \<sqsubseteq> ?X" by (simp add: lattice_join_mono lattice_join_ge2)
+    have pr: "proj (?m \<squnion> R)\<cdot>(rproj ?X y) = rproj (?m \<squnion> R) y" for y by (rule proj_le[OF le])
+    show ?thesis
+    proof (rule bij_betw_imageI)
+      show "inj_on (Rep_cfun (proj (?m \<squnion> R))) (rproj ?X ` ?Z)"
+      proof (rule inj_onI)
+        fix \<kappa>1 \<kappa>2 assume k1: "\<kappa>1 \<in> rproj ?X ` ?Z" and k2: "\<kappa>2 \<in> rproj ?X ` ?Z"
+          and e: "proj (?m \<squnion> R)\<cdot>\<kappa>1 = proj (?m \<squnion> R)\<cdot>\<kappa>2"
+        obtain y1 where y1: "y1 \<in> ?Z" "\<kappa>1 = rproj ?X y1" using k1 by blast
+        obtain y2 where y2: "y2 \<in> ?Z" "\<kappa>2 = rproj ?X y2" using k2 by blast
+        have "rproj (?m \<squnion> R) y1 = rproj (?m \<squnion> R) y2" using e unfolding y1(2) y2(2) pr .
+        moreover have "rproj (flod F) y1 = rproj (flod F) y2" using y1(1) y2(1) by (simp add: afiber_def)
+        ultimately have "rproj ((?m \<squnion> R) \<squnion> flod F) y1 = rproj ((?m \<squnion> R) \<squnion> flod F) y2"
+          by (simp only: rproj_sup_eq)
+        moreover have "(?m \<squnion> R) \<squnion> flod F = ?X" by (simp add: lattice_join_ac)
+        ultimately show "\<kappa>1 = \<kappa>2" by (simp add: y1(2) y2(2))
+      qed
+      show "Rep_cfun (proj (?m \<squnion> R)) ` rproj ?X ` ?Z = rproj (?m \<squnion> R) ` ?Z"
+        by (simp only: image_image pr)
+    qed
+  qed
+  text \<open>The content of an inner entry at an inner key is read off the outer entry's content.\<close>
+  have inner: "content e (finclude R G) \<kappa>
+      = sel_snd (emb\<cdot>(proj (fst e \<squnion> truncate (fst (snd e)) R)\<cdot>p)) (content (?t e) G kG)"
+    if e: "e \<in> set (edims E)" and yZ: "y \<in> afiber G (flod G) kG"
+      and \<kappa>: "\<kappa> = rproj (?m \<squnion> flod (finclude R G)) y" and py: "proj (?m \<squnion> R)\<cdot>\<kappa> = p" for e G kG \<kappa> y p
+  proof -
+    obtain a \<rho> g where ae: "e = (a, \<rho>, g)" by (cases e) auto
+    have am: "a \<sqsubseteq> ?m" by (rule E.lower_below_mind[OF e[unfolded ae]])
+    let ?A = "a \<squnion> truncate \<rho> R"
+    have AmR: "?A \<sqsubseteq> ?m \<squnion> R" by (rule lattice_join_mono[OF am truncate_below])
+    have mR: "?m \<squnion> R \<sqsubseteq> ?m \<squnion> flod (finclude R G)" by (simp add: lattice_join_mono lattice_join_ge2)
+    have yA: "rproj ?A y = proj ?A\<cdot>p"
+    proof -
+      have "proj ?A\<cdot>p = proj ?A\<cdot>\<kappa>" unfolding py[symmetric] by (rule proj_le[OF AmR])
+      also have "\<dots> = rproj ?A y" unfolding \<kappa> by (rule proj_le[OF below_trans[OF AmR mR]])
+      finally show ?thesis by simp
+    qed
+    have gy: "rproj (flod G) y = kG" using yZ by (simp add: afiber_def)
+    have grp: "group a \<rho> (finclude R G) \<kappa> = {y' \<in> group \<bottom> \<rho> G kG. rproj ?A y' = proj ?A\<cdot>p}"
+      unfolding \<kappa> ig[OF gy am] yA ..
+    show ?thesis unfolding ae by (simp add: grp sel_snd_obs_pair obs_key_apply emb_eq_iff)
+  qed
   show ?thesis
-  proof (rule lawfulI, simp_all only: aggregate_simps(1,2) kd)
-    show "keyimg S F (flod F) k" if "esem (aggregate f E) F k \<noteq> None" for F k
-      using ne[OF that] by (auto simp: afiber_def keyimg_def)
-    show "esem (aggregate f E) (peg K F) K = esem (aggregate f E) F K" if cK: "compact K" for F K
+  proof (rule lawfulI, simp_all only: aggregate_simps)
+    show "truncate \<rho> \<bottom> \<sqsubseteq> a"
+      if "(a, \<rho>, g) \<in> set ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E))" for a \<rho> g
+      using that by (auto simp: lattice_meet_bot_right)
+    show "(\<bottom>::'k semi_factor) = fold (\<squnion>) (map fst ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E))) \<bottom>"
     proof -
-      have fib: "afiber (peg K F) (flod F) K = afiber F (flod F) K"
-        by (auto simp: afiber_def frows_peg[OF cK] intro: proj_below)
-      have v: "esem E (peg K F) \<kappa> = esem E F \<kappa>"
-        if kin: "\<kappa> \<in> rproj (?m \<squnion> flod F) ` afiber F (flod F) K" for \<kappa>
+      let ?es = "(\<bottom>::'k semi_factor, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E)"
+      text \<open>Every lower part is \<open>\<bottom>\<close>, and joining \<open>\<bottom>\<close>s onto \<open>\<bottom>\<close> gives \<open>\<bottom>\<close>.\<close>
+      have l: "map fst ?es = map (\<lambda>_. \<bottom>) ?es"
+        by (simp only: list.map(2) fst_conv) (simp add: map_map comp_def split_def)
+      show ?thesis by (simp only: l fold_join_bots)
+    qed
+    show "keyimg S F (\<bottom> \<squnion> flod F) k"
+      if "agg_fold f (esem E (finclude R F)) (rproj (?m \<squnion> flod (finclude R F)) ` afiber F (flod F) k) \<noteq> None"
+      for F k
+    proof -
+      have "afiber F (flod F) k \<noteq> {}" using agg_fold_nonempty[OF f that] by auto
+      then show ?thesis by (auto simp: afiber_def keyimg_def bj)
+    qed
+    show "agg_fold f (esem E (finclude R F)) (rproj (?m \<squnion> flod (finclude R F)) ` afiber F (flod F) k)
+        = agg_fold f (esem E (finclude R F')) (rproj (?m \<squnion> flod (finclude R F')) ` afiber F' (flod F') k')"
+      if k: "proj (\<bottom> \<squnion> flod F)\<cdot>k = k" "proj (\<bottom> \<squnion> flod F')\<cdot>k' = k'"
+        and e: "contents ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E)) F k
+              = contents ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E)) F' k'" for F F' k k'
+    proof -
+      have k1: "proj (flod F)\<cdot>k = k" and k2: "proj (flod F')\<cdot>k' = k'" using k by (simp_all only: bj)
+      have eh: "content (\<bottom>, lattice_top, obs_key (?m \<squnion> R)) F k = content (\<bottom>, lattice_top, obs_key (?m \<squnion> R)) F' k'"
+        and et: "contents (map ?t (edims E)) F k = contents (map ?t (edims E)) F' k'"
+        using e by (simp_all only: list.map list.inject)
+      have ptw: "content (?t e) F k = content (?t e) F' k'" if "e \<in> set (edims E)" for e
+        using et that by (simp add: map_eq_conv)
+      let ?Z = "afiber F (flod F) k" and ?Z' = "afiber F' (flod F') k'"
+      let ?K = "rproj (?m \<squnion> flod (finclude R F)) ` ?Z" and ?K' = "rproj (?m \<squnion> flod (finclude R F')) ` ?Z'"
+      let ?P = "rproj (?m \<squnion> R) ` ?Z" and ?\<pi> = "Rep_cfun (proj (?m \<squnion> R))"
+      have P: "rproj (?m \<squnion> R) ` ?Z' = ?P"
+      proof (rule emb_image_eq)
+        show "Rep_cfun emb ` rproj (?m \<squnion> R) ` ?Z' = Rep_cfun emb ` ?P"
+          using eh by (simp add: fiber[OF k1] fiber[OF k2] image_image ok)
+      qed
+      define \<psi> where "\<psi> = inv_into ?K ?\<pi>"
+      define \<psi>' where "\<psi>' = inv_into ?K' ?\<pi>"
+      have b: "bij_betw \<psi> ?P ?K" unfolding \<psi>_def by (rule bij_betw_inv_into[OF bij])
+      have b': "bij_betw \<psi>' ?P ?K'" unfolding \<psi>'_def using bij_betw_inv_into[OF bij[of F' k']] by (simp only: P)
+      have sP: "?\<pi> ` ?K = ?P" by (rule bij_betw_imp_surj_on[OF bij])
+      have sP': "?\<pi> ` ?K' = ?P" using bij_betw_imp_surj_on[OF bij[of F' k']] by (simp only: P)
+      have pt: "esem E (finclude R F) (\<psi> p) = esem E (finclude R F') (\<psi>' p)" if p: "p \<in> ?P" for p
       proof -
-        obtain y where y: "y \<in> pts S" "rproj (flod F) y = K" and \<kappa>: "\<kappa> = rproj (?m \<squnion> flod F) y"
-          using kin unfolding afiber_def by blast
-        have "K = proj (flod F)\<cdot>\<kappa>" unfolding \<kappa> y(2)[symmetric] by (simp add: proj_le lattice_join_ge2)
-        then have le: "K \<sqsubseteq> \<kappa>" by (simp add: proj_below)
-        have c: "compact \<kappa>" unfolding \<kappa> by (rule compact_proj_compact[OF data_compact[OF y(1)]])
-        show ?thesis by (rule E.peg_below[OF cK c le])
+        have pK: "\<psi> p \<in> ?K" unfolding \<psi>_def by (rule inv_into_into) (simp only: sP p)
+        have pK': "\<psi>' p \<in> ?K'" unfolding \<psi>'_def by (rule inv_into_into) (simp only: sP' p)
+        obtain y where y: "y \<in> ?Z" "\<psi> p = rproj (?m \<squnion> flod (finclude R F)) y" using pK by blast
+        obtain y' where y': "y' \<in> ?Z'" "\<psi>' p = rproj (?m \<squnion> flod (finclude R F')) y'" using pK' by blast
+        have py: "proj (?m \<squnion> R)\<cdot>(\<psi> p) = p" unfolding \<psi>_def by (rule f_inv_into_f) (simp only: sP p)
+        have py': "proj (?m \<squnion> R)\<cdot>(\<psi>' p) = p" unfolding \<psi>'_def by (rule f_inv_into_f) (simp only: sP' p)
+        show ?thesis
+        proof (rule E.content_law)
+          show "proj (?m \<squnion> flod (finclude R F))\<cdot>(\<psi> p) = \<psi> p" by (simp only: y(2) proj_idem)
+          show "proj (?m \<squnion> flod (finclude R F'))\<cdot>(\<psi>' p) = \<psi>' p" by (simp only: y'(2) proj_idem)
+          show "contents (edims E) (finclude R F) (\<psi> p) = contents (edims E) (finclude R F') (\<psi>' p)"
+          proof (rule map_cong[OF refl])
+            fix e assume e: "e \<in> set (edims E)"
+            show "content e (finclude R F) (\<psi> p) = content e (finclude R F') (\<psi>' p)"
+              by (simp only: inner[OF e y(1) y(2) py] inner[OF e y'(1) y'(2) py'] ptw[OF e])
+          qed
+        qed
       qed
-      show ?thesis unfolding aggregate_simps flod_peg fib by (rule agg_fold_cong[OF f refl v])
+      have "agg_fold f (esem E (finclude R F)) ?K = agg_fold f (esem E (finclude R F) \<circ> \<psi>) ?P"
+        by (rule agg_fold_bij[OF f b, symmetric])
+      also have "\<dots> = agg_fold f (esem E (finclude R F') \<circ> \<psi>') ?P"
+        by (rule agg_fold_cong[OF f refl]) (simp add: pt)
+      also have "\<dots> = agg_fold f (esem E (finclude R F')) ?K'"
+        by (rule agg_fold_bij[OF f b'])
+      finally show ?thesis .
     qed
-    show "esem (aggregate f E) F (rproj (flod F) x) = esem (aggregate f E) F' (rproj (flod F') x)"
-      if a: "amb F = amb F'" "slice F = slice F'" "x \<in> pts S" "frows F x"
-        "dims_equivs ?D F x (flod F) (flod F')" for F F' x
-    proof -
-      let ?L = "flod F" and ?L' = "flod F'"
-      let ?Z = "afiber F ?L (rproj ?L x)" and ?Z' = "afiber F' ?L' (rproj ?L' x)"
-      let ?g = "rproj (?m \<squnion> ?L)" and ?g' = "rproj (?m \<squnion> ?L')"
-      have fr: "frows F' = frows F" by (rule frows_cong) (simp_all add: a(1,2))
-      have Z: "y \<in> ?Z \<longleftrightarrow> y \<in> pts S \<and> frows F y \<and> rproj ?L y = rproj ?L x" for y
-        by (simp add: afiber_def)
-      have Z': "y \<in> ?Z' \<longleftrightarrow> y \<in> pts S \<and> frows F y \<and> rproj ?L' y = rproj ?L' x" for y
-        by (simp add: afiber_def fr)
-      have P': "rproj ?L y = rproj ?L z \<longleftrightarrow> rproj ?L' y = rproj ?L' z"
-        if "y \<in> insert x (?Z \<union> ?Z')" "z \<in> insert x (?Z \<union> ?Z')" "rproj ?m y \<noteq> rproj ?m z" for y z
-        by (rule P[OF a(5) _ _ that(3)]) (use that(1,2) in \<open>auto simp: Z Z' intro: frows_mrows\<close>)
-      have val': "esem E F (?g y) = esem E F' (?g' y)" if "y \<in> insert x ?Z" for y
-        by (rule val[OF a(1,2,5)]) (use that a(3,4) in \<open>auto simp: Z\<close>)
-      show ?thesis
-      proof (cases "\<exists>w\<in>?Z. rproj ?m w \<noteq> rproj ?m x")
-        case True
-        text \<open>Some row of the fiber is apart from \<open>x\<close>: then both fibers have the same rows.\<close>
-        then obtain w where w: "w \<in> ?Z" "rproj ?m w \<noteq> rproj ?m x" by blast
-        have wZ': "w \<in> ?Z'" using P'[of w x] w by (auto simp: Z Z')
-        have ZZ: "?Z' = ?Z"
-        proof (intro set_eqI iffI)
-          fix z assume z: "z \<in> ?Z'"
-          show "z \<in> ?Z"
-          proof (cases "rproj ?m z = rproj ?m x")
-            case False then show ?thesis using P'[of z x] z by (auto simp: Z Z')
-          next
-            case True
-            then have "rproj ?m z \<noteq> rproj ?m w" using w(2) by simp
-            then have "rproj ?L z = rproj ?L w" using P'[of z w] z wZ' by (auto simp: Z')
-            then show ?thesis using z w(1) by (auto simp: Z Z')
-          qed
-        next
-          fix z assume z: "z \<in> ?Z"
-          show "z \<in> ?Z'"
-          proof (cases "rproj ?m z = rproj ?m x")
-            case False then show ?thesis using P'[of z x] z by (auto simp: Z Z')
-          next
-            case True
-            then have "rproj ?m z \<noteq> rproj ?m w" using w(2) by simp
-            then have "rproj ?L' z = rproj ?L' w" using P'[of z w] z w(1) by (auto simp: Z)
-            then show ?thesis using z wZ' by (auto simp: Z Z')
-          qed
-        qed
-        have "agg_fold f (esem E F) (?g ` ?Z) = agg_fold f (esem E F') (?g' ` ?Z)"
-        proof (rule agg_fold_image_cong[OF f])
-          show "?g y = ?g z \<longleftrightarrow> ?g' y = ?g' z" if "y \<in> ?Z" "z \<in> ?Z" for y z
-          proof -
-            have "rproj ?L y = rproj ?L z" using that by (simp add: Z)
-            moreover have "y \<in> ?Z'" "z \<in> ?Z'" using that by (simp_all only: ZZ)
-            then have "rproj ?L' y = rproj ?L' z" by (simp add: Z')
-            ultimately show ?thesis by (simp add: rproj_sup_eq)
-          qed
-          show "esem E F (?g y) = esem E F' (?g' y)" if "y \<in> ?Z" for y
-            by (rule val') (simp add: that)
-        qed
-        then show ?thesis by (simp only: aggregate_simps ZZ)
-      next
-        case False
-        text \<open>All rows of the fiber agree with \<open>x\<close> at the inner minimal LOD: each fold reads
-          the entry at the inner key of \<open>x\<close>.\<close>
-        then have m: "rproj ?m z = rproj ?m x" if "z \<in> ?Z" for z using that by blast
-        have m': "rproj ?m z = rproj ?m x" if "z \<in> ?Z'" for z
-        proof (rule ccontr)
-          assume n: "rproj ?m z \<noteq> rproj ?m x"
-          then have "z \<in> ?Z" using P'[of z x] that by (auto simp: Z Z')
-          with n m show False by blast
-        qed
-        have one: "agg_fold f (esem E G) (rproj (?m \<squnion> flod G) ` afiber G (flod G) (rproj (flod G) x))
-                     = esem E G (rproj (?m \<squnion> flod G) x)"
-          if mx: "\<And>z. z \<in> afiber G (flod G) (rproj (flod G) x) \<Longrightarrow> rproj ?m z = rproj ?m x"
-            and xG: "frows G x"
-          for G :: "('k semi_factor, 'f, 'r) frame"
-        proof -
-          let ?A = "afiber G (flod G) (rproj (flod G) x)"
-          have gz: "rproj (?m \<squnion> flod G) z = rproj (?m \<squnion> flod G) x" if "z \<in> ?A" for z
-            using mx[OF that] that by (simp add: afiber_def rproj_sup_eq)
-          have xA: "x \<in> ?A" using a(3) xG by (simp add: afiber_def)
-          have "rproj (?m \<squnion> flod G) ` ?A = {rproj (?m \<squnion> flod G) x}"
-          proof (intro set_eqI iffI)
-            fix \<kappa> assume "\<kappa> \<in> rproj (?m \<squnion> flod G) ` ?A"
-            then show "\<kappa> \<in> {rproj (?m \<squnion> flod G) x}" using gz by blast
-          next
-            fix \<kappa> assume "\<kappa> \<in> {rproj (?m \<squnion> flod G) x}"
-            then show "\<kappa> \<in> rproj (?m \<squnion> flod G) ` ?A" using xA by blast
-          qed
-          then show ?thesis by (simp add: agg_fold_singleton[OF f])
-        qed
-        have x': "frows F' x" using a(4) by (simp add: fr)
-        have "agg_fold f (esem E F) (?g ` ?Z) = esem E F (?g x)" by (rule one[OF m a(4)])
-        moreover have "agg_fold f (esem E F') (?g' ` ?Z') = esem E F' (?g' x)" by (rule one[OF m' x'])
-        moreover have "esem E F (?g x) = esem E F' (?g' x)" by (rule val') simp
-        ultimately show ?thesis unfolding aggregate_simps by simp
-      qed
-    qed
-    show "esem (aggregate f E) F = esem (aggregate f E) F'"
-      if "amb F = amb F'" "slice F = slice F'" "flod F = flod F'" for F F'
-    proof -
-      have e: "esem E F = esem E F'" by (rule E.eff_law) (simp_all add: that)
-      have a: "afiber F = afiber F'"
-        using frows_cong[OF that(1,2)] by (simp add: afiber_def fun_eq_iff)
-      show ?thesis by (rule ext) (simp only: aggregate_simps e a that(3))
-    qed
-    show "compact (\<bottom> :: 'k semi_factor)" by simp
-    show "compact ?D" by (rule compact_top_dims[OF E.mind_compact E.dims_compact])
-    show "?D \<rho> \<sqsubseteq> ?D \<bottom>" for \<rho> by (rule top_dims_bot) (rule E.dims_bot)
   qed
 qed
 
