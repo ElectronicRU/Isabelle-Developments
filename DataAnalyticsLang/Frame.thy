@@ -96,7 +96,7 @@ definition fisolate :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_fa
   "fisolate F = \<lparr>flod = \<bottom>, amb = top, slice = \<^bold>1\<rparr>"
 
 definition ffor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
-  "ffor \<tau> G F = F\<lparr>flod := truncate \<tau> (flod F), slice := trunc_slice \<tau> (slice F) \<^bold>* G\<rparr>"
+  "ffor \<tau> G F = F\<lparr>flod := truncate \<tau> (flod F), slice := coarsen \<tau> (slice F) \<^bold>* G\<rparr>"
 
 definition peg :: "'k \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
   "peg K F = F\<lparr>slice := slice F \<^bold>* spin K\<rparr>"
@@ -138,14 +138,16 @@ proof -
   have bK: "proj ?b\<cdot>K = K" by (rule slod_spin_lives[OF cK])
   have abK: "lives_at (?a \<squnion> ?b) K"
     using lives_at_up[of ?b K "(?a \<squnion> ?b)"] bK by (simp add: lives_at_def lattice_join_ge2)
-  have c1: "coarsen (truncate \<tau> (?a \<squnion> ?b)) (slice F) = coarsen (truncate \<tau> ?a) (slice F)"
-    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup lattice_meet_absorb1 truncate_below)
   have "proj (truncate \<tau> (?a \<squnion> ?b))\<cdot>K = proj (truncate \<tau> c)\<cdot>K"
     by (rule truncate_proj_irrelevant[OF abK]) (simp add: lives_at_def K)
   then have c2: "coarsen (truncate \<tau> (?a \<squnion> ?b)) (spin K) = spin (proj (truncate \<tau> c)\<cdot>K)"
     by (simp add: coarsen_spin[OF cK])
+  have e: "truncate \<tau> (?a \<squnion> ?b) \<sqinter> ?b = truncate \<tau> ?b"
+    by (metis lattice_meet_assoc lattice_meet_commute lattice_meet_absorb1 lattice_join_ge2)
+  have c3: "coarsen \<tau> (spin K) = coarsen (truncate \<tau> (?a \<squnion> ?b)) (spin K)"
+    using coarsen_slod[of \<tau> "spin K"] coarsen_slod[of "truncate \<tau> (?a \<squnion> ?b)" "spin K"] e by simp
   show ?thesis
-    by (simp add: ffor_def peg_def coarsen_conj c1 c2 conj.assoc conj.commute conj.left_commute)
+    by (simp add: ffor_def peg_def coarsen_conj c3 c2 conj.assoc conj.commute conj.left_commute)
 qed
 
 text \<open>Pegging to a key, then to a finer one, is pegging to the finer one.\<close>
@@ -260,7 +262,7 @@ definition arows :: "'r sel \<Rightarrow> 'r set" where
   "arows \<phi> = {x \<in> pts S. selects \<phi> x}"
 
 definition mrows :: "'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r set" where
-  "mrows \<rho> F = {x \<in> arows (amb F). holds (trunc_slice \<rho> (slice F)) (rkey\<cdot>x)}"
+  "mrows \<rho> F = {x \<in> arows (amb F). holds (coarsen \<rho> (slice F)) (rkey\<cdot>x)}"
 
 abbreviation rproj :: "'k semi_factor \<Rightarrow> 'r \<Rightarrow> 'k" where
   "rproj L x \<equiv> proj L\<cdot>(rkey\<cdot>x)"
@@ -269,7 +271,7 @@ lemma mrows_cong: "amb F = amb F' \<Longrightarrow> slice F = slice F' \<Longrig
   by (simp add: mrows_def)
 
 lemma frows_mrows: "x \<in> pts S \<Longrightarrow> frows F x \<Longrightarrow> x \<in> mrows \<rho> F"
-  by (simp add: mrows_def arows_def frows_def holds_trunc_slice)
+  by (simp add: mrows_def arows_def frows_def holds_coarsen)
 
 text \<open>Reading at a join of LODs is reading at both.\<close>
 
@@ -498,14 +500,16 @@ qed
 text \<open>Through a mask, a pin still fixes the masked truncation of the key.\<close>
 
 lemma masked_pin:
-  assumes cK: "compact K" and K: "maximal_at c K" and h: "holds (trunc_slice \<rho> (spin K)) k"
+  assumes cK: "compact K" and K: "maximal_at c K" and h: "holds (coarsen \<rho> (spin K)) k"
   shows "proj (truncate \<rho> c)\<cdot>k = proj (truncate \<rho> c)\<cdot>K"
 proof -
   have "proj (truncate \<rho> (slod (spin K)))\<cdot>K = proj (truncate \<rho> c)\<cdot>K"
     by (rule truncate_proj_irrelevant)
       (simp_all add: lives_at_def slod_spin_lives[OF cK] maximal_at_lives[OF K])
-  then have "proj (truncate \<rho> c)\<cdot>K \<sqsubseteq> k"
-    using h by (simp add: coarsen_spin[OF cK] holds_spin[OF compact_proj_compact[OF cK]])
+  moreover have "holds (coarsen (truncate \<rho> (slod (spin K))) (spin K)) k"
+    using h by (simp only: coarsen_slod[of \<rho> "spin K"])
+  ultimately have "proj (truncate \<rho> c)\<cdot>K \<sqsubseteq> k"
+    by (simp add: coarsen_spin[OF cK] holds_spin[OF compact_proj_compact[OF cK]])
   then have "proj (truncate \<rho> c)\<cdot>K \<sqsubseteq> proj (truncate \<rho> c)\<cdot>k" by (metis monofun_cfun_arg proj_idem)
   then show ?thesis
     by (rule maximal_at_eq[OF maximal_at_proj[OF truncate_below K] proj_idem])
@@ -543,8 +547,8 @@ proof -
     have pin: "rproj (truncate \<rho> (kd F2)) y = proj (truncate \<rho> (kd F2))\<cdot>K2"
       if "y \<in> insert x (mrows \<rho> (peg K2 F2))" for y
     proof -
-      from that trunc_slice_conj[of \<rho> "slice F2" "spin K2"]
-      consider "y = x" | "holds (trunc_slice \<rho> (spin K2)) (rkey\<cdot>y)"
+      from that coarsen_conj[of \<rho> "slice F2" "spin K2"]
+      consider "y = x" | "holds (coarsen \<rho> (spin K2)) (rkey\<cdot>y)"
         by (auto simp: mrows_def)
       then show ?thesis
       proof cases
@@ -971,7 +975,7 @@ text \<open>Through any mask, the inner frame's masked rows are among the outer 
   expression itself.  \<open>FOR\<close> meets every mask of the dims with \<open>\<tau>\<close>.\<close>
 
 lemma mrows_ffor: "mrows \<rho> (ffor \<tau> G F) \<subseteq> mrows (\<rho> \<sqinter> \<tau>) F"
-  using trunc_slice_conj[of \<rho> "trunc_slice \<tau> (slice F)" G] trunc_slice_comp[of \<rho> \<tau> "slice F"]
+  using coarsen_conj[of \<rho> "coarsen \<tau> (slice F)" G] coarsen_coarsen[of \<rho> \<tau> "slice F"]
   by (auto simp: mrows_def ffor_def)
 
 lemma mask_kd_ffor:
@@ -1023,7 +1027,7 @@ proof -
       and k: "rproj (kd (ffor \<tau> G F)) y = rproj (kd (ffor \<tau> G F)) x" for F F' x y
   proof -
     have Gy: "holds G (rkey\<cdot>y)" using y(2) by (simp add: frows_def ffor_def)
-    have Gx: "\<not> holds G (rkey\<cdot>x)" using x by (simp add: frows_def ffor_def holds_trunc_slice)
+    have Gx: "\<not> holds G (rkey\<cdot>x)" using x by (simp add: frows_def ffor_def holds_coarsen)
     have n: "rproj (slod G) y \<noteq> rproj (slod G) x"
       using Gy Gx holds_lod[of G "rkey\<cdot>y"] holds_lod[of G "rkey\<cdot>x"] by auto
     have "rproj (mind \<squnion> truncate \<tau> (kd F)) y = rproj (mind \<squnion> truncate \<tau> (kd F)) x"

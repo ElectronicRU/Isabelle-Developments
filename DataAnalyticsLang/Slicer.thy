@@ -370,41 +370,8 @@ proof -
   then show ?thesis using holds_coarsen[OF assms(2)] by simp
 qed
 
-subsection \<open>Truncating slices\<close>
-
-text \<open>A truncation acts on a slice by coarsening it to the truncated LOD the slice is written
-  at.  This commutes with conjunction and composes, composition being meet.\<close>
-
-abbreviation trunc_slice :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f" where
-  "trunc_slice \<tau> f \<equiv> coarsen (truncate \<tau> (slod f)) f"
-
-lemma trunc_slice_top [simp]: "trunc_slice lattice_top f = f"
-  by (simp add: coarsen_inside lattice_meet_top_left)
-
-lemma holds_trunc_slice: "holds f k \<Longrightarrow> holds (trunc_slice \<tau> f) k"
-  by (rule holds_coarsen)
-
-lemma trunc_slice_conj: "trunc_slice \<tau> (a \<^bold>* b) = trunc_slice \<tau> a \<^bold>* trunc_slice \<tau> b"
-proof -
-  have "coarsen (truncate \<tau> (slod a \<squnion> slod b)) a = trunc_slice \<tau> a"
-    by (subst (1 2) coarsen_slod) (simp add: truncate_inf_sup lattice_meet_absorb1 truncate_below)
-  moreover have "coarsen (truncate \<tau> (slod a \<squnion> slod b)) b = trunc_slice \<tau> b"
-    by (subst (1 2) coarsen_slod)
-      (simp add: lattice_join_commute[of "slod a"] truncate_inf_sup lattice_meet_absorb1 truncate_below)
-  ultimately show ?thesis by (simp add: coarsen_conj)
-qed
-
-lemma trunc_slice_comp: "trunc_slice \<rho> (trunc_slice \<tau> f) = trunc_slice (\<rho> \<sqinter> \<tau>) f"
-proof -
-  let ?c = "trunc_slice \<tau> f"
-  have c: "slod ?c \<sqsubseteq> truncate \<tau> (slod f)" using slod_coarsen_target .
-  have "trunc_slice (\<rho> \<sqinter> \<tau>) f = coarsen (truncate \<rho> (truncate \<tau> (slod f))) ?c"
-    by (simp add: coarsen_coarsen lattice_meet_ac lattice_meet_idem)
-  also have "\<dots> = coarsen (truncate \<rho> (truncate \<tau> (slod f)) \<sqinter> slod ?c) ?c" by (rule coarsen_slod)
-  also have "truncate \<rho> (truncate \<tau> (slod f)) \<sqinter> slod ?c = truncate \<rho> (slod ?c)"
-    by (metis lattice_meet_commute lattice_meet_absorb1[OF c] truncate_inf)
-  finally show ?thesis by simp
-qed
+lemma coarsen_top [simp]: "coarsen lattice_top f = f"
+  by (rule coarsen_inside) simp
 
 end
 
