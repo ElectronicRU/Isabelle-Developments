@@ -28,22 +28,7 @@ theorem cpopen_Int: "cpopen A \<Longrightarrow> cpopen B \<Longrightarrow> cpope
   by auto
 
 theorem cpopen_Union: "\<forall>P \<in> U. cpopen P \<Longrightarrow> cpopen (\<Union>U)"
-  unfolding cpopen_def
-proof (safe)
-  assume "\<forall>P\<in>U. (\<forall>x\<in>P. \<forall>y. x \<sqsubseteq> y \<longrightarrow> y \<in> P) \<and>
-              adm (\<lambda>x. x \<notin> P)"
-  then have Pupward: "P \<in> U \<Longrightarrow> x \<in> P \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> y \<in> P"
-    and Padm: "\<forall>P \<in> U. adm (\<lambda>x. x \<notin> P)" for x y P
-    by simp_all
-  {
-    fix x y P assume "P \<in> U" "x \<in> P" "x \<sqsubseteq> y"
-    then have "y \<in> P" by (rule Pupward)
-    with \<open>P \<in> U\<close> show "y \<in> \<Union>U" ..
-  next
-    from Padm show "adm (\<lambda>x. x \<notin> \<Union>U)"
-      using adm_Inf by auto
-  }
-qed
+  unfolding cpopen_def by fastforce
 
 
 interpretation cpo_topology: topological_space cpopen

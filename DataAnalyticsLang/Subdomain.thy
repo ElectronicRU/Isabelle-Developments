@@ -768,43 +768,14 @@ proof -
   qed
 qed
 
-text \<open>The lub of a directed family of stable deflations is a stable deflation: a compact element
-  below an image element of the lub lies below an image element of some member, hence in that
-  member's image.\<close>
+text \<open>The lub of a directed family of stable deflations is a stable deflation: stable deflations
+  are admissible (@{thm [source] adm_stable_defl}), and admissible predicates are closed under
+  directed lubs.\<close>
 
 lemma stable_defl_directed_lub:
   assumes dir: "directed \<D>" and ne: "\<D> \<noteq> {}" and st: "\<And>d. d \<in> \<D> \<Longrightarrow> stable_defl d"
   shows "stable_defl (lub \<D>)"
-proof -
-  have defl: "deflation (lub \<D>)"
-    by (rule directed_admD[OF adm_deflation dir ne]) (blast intro: stable_defl.deflation[OF st])
-  have ub: "d \<sqsubseteq> lub \<D>" if "d \<in> \<D>" for d
-    using is_ubD[OF is_lubD1[OF directed_lub[OF dir]] that] .
-  have app: "(\<lambda>d. d\<cdot>y) ` \<D> <<| lub \<D>\<cdot>y" for y
-    by (rule cont_directed_is_lub[OF cont_Rep_cfun1 dir ne])
-  have dir_app: "directed ((\<lambda>d. d\<cdot>y) ` \<D>)" for y
-    by (rule directed_mono_image[OF _ dir]) (rule monofun_cfun_fun)
-  show ?thesis
-  proof (rule stable_deflI[OF defl])
-    fix x y assume fy: "lub \<D>\<cdot>y = y" and xy: "x \<sqsubseteq> y"
-    obtain C where C: "chain C" "\<forall>i. compact (C i)" "x = (\<Squnion>i. C i)"
-      by (rule obtain_compact_chain)
-    have "C i \<sqsubseteq> lub \<D>\<cdot>x" for i
-    proof -
-      have Cx: "C i \<sqsubseteq> x" using is_ub_thelub[OF C(1)] C(3) by simp
-      then have "C i \<sqsubseteq> lub ((\<lambda>d. d\<cdot>y) ` \<D>)"
-        using xy fy lub_eqI[OF app] by (auto intro: below_trans)
-      then obtain d where d: "d \<in> \<D>" and Cd: "C i \<sqsubseteq> d\<cdot>y"
-        using compact_directedD[OF dir_app _ C(2)[rule_format]] ne by blast
-      from Cd have "d\<cdot>(C i) = C i" by (rule stable_defl.lower_fixed[OF st[OF d]])
-      moreover have "d\<cdot>(C i) \<sqsubseteq> lub \<D>\<cdot>x"
-        using monofun_cfun[OF ub[OF d] Cx] .
-      ultimately show ?thesis by simp
-    qed
-    then have "x \<sqsubseteq> lub \<D>\<cdot>x" unfolding C(3) by (rule lub_below[OF C(1)])
-    then show "lub \<D>\<cdot>x = x" by (rule below_antisym[OF deflation.below[OF defl]])
-  qed
-qed
+  by (rule directed_admD[OF adm_stable_defl dir ne]) (simp add: st)
 
 section \<open>The domain of stable subdomains\<close>
 

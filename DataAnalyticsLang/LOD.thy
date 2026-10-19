@@ -411,11 +411,8 @@ lemma locally_finitely_detailed_deflI:
 
 lemma locally_finitely_detailed_defl_bottom:
   "locally_finitely_detailed_defl (\<bottom> :: 'a::{bifinite, distributive_cpo} \<rightarrow> 'a)"
-proof (rule locally_finitely_detailed_deflI[OF deflation_bottom])
-  fix k :: 'a assume "\<bottom>\<cdot>k = k"
-  then show "\<exists>e. semi_factor_defl e \<and> finitary e \<and> e\<cdot>k = k"
-    using semi_factor_defl_bottom finitary_bottom by (intro exI[of _ \<bottom>]) simp
-qed
+  by (rule locally_finitely_detailed_deflI[OF deflation_bottom])
+    (use semi_factor_defl_bottom finitary_bottom in auto)
 
 lemma locally_finitely_detailed_defl_ID:
   "locally_finitely_detailed_defl (ID :: 'a::locally_finitely_detailed \<rightarrow> 'a)"

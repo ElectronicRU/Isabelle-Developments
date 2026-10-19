@@ -309,11 +309,7 @@ proof (rule countable_subset)
 qed
 
 lemma semi_factor_compacts_enum: "\<exists>c :: nat \<Rightarrow> 'a::dI semi_factor. range c = {K. compact K}"
-proof
-  have "{K :: 'a semi_factor. compact K} \<noteq> {}" using compact_bottom by blast
-  then show "range (from_nat_into {K :: 'a semi_factor. compact K}) = {K. compact K}"
-    by (rule range_from_nat_into[OF _ countable_compact_semi_factors])
-qed
+  using range_from_nat_into[OF _ countable_compact_semi_factors] compact_bottom by blast
 
 instance semi_factor :: (dI) bifinite
   by (rule bifinite_algebraic_lattice[OF semi_factor_compacts_enum semi_factor_algebraic])

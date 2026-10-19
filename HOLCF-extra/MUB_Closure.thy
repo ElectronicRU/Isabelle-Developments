@@ -354,11 +354,7 @@ definition g :: "'a \<Rightarrow> 'a"
   where "g a = lub (Rep_compact_basis ` below_set a)"
 
 lemma below_set_nonempty: "below_set a \<noteq> {}"
-proof -
-  have "Rep_compact_basis compact_bot \<sqsubseteq> a"
-    by simp
-  with bot_in_S show ?thesis unfolding below_set_def by blast
-qed
+  using bot_in_S unfolding below_set_def by auto
 
 lemma below_set_directed: "directed (below_set a)"
 proof (rule directedI)

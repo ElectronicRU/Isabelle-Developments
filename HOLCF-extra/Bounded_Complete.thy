@@ -55,17 +55,7 @@ qed
 lemma glb: fixes S :: "'a set"
   assumes "S \<noteq> {}"
   shows "is_glb S (glb S)"
-proof -
-  from is_glb[OF assms] obtain s where 1: "is_glb S s" .
-  have 2: "a = s" if "is_glb S a" for a
-  proof -
-    from 1 that assms have "x \<sqsubseteq> a \<longleftrightarrow> x \<sqsubseteq> s" for x
-      by (simp add: is_glb_def)
-    from this[of a] this[of s] below_refl below_antisym show ?thesis by simp
-  qed
-  from 1 2 show ?thesis 
-    unfolding glb_def by (rule theI)
-qed
+  using is_glb[OF assms] by (blast intro: is_glb_glb)
 
 lemma glb_below: "x \<in> S \<Longrightarrow> glb S \<sqsubseteq> x"
   by (auto intro: glb is_glb_below)
@@ -1150,11 +1140,8 @@ proof -
     have "finite {w. min_ub (Cb a) (Cb b) w}"
       by (auto intro: min_ub_finite)
     moreover have "{w. min_ub (Cb a) (Cb b) (Cb w)} = Abs_compact_basis ` ..."
-      apply (intro subset_antisym image_subsetI subsetI image_eqI)
-        apply (rule Rep_compact_basis_inverse[symmetric])
-      apply simp
-      using Abs_compact_basis_inverse'[OF min_ub_compact, symmetric] apply simp
-      .
+      using Abs_compact_basis_inverse'[OF min_ub_compact, symmetric]
+      by (auto intro: Rep_compact_basis_inverse[symmetric])
 
     ultimately have "finite {w. min_ub (Rep_compact_basis a) (Rep_compact_basis b) (Rep_compact_basis w)}"
       using finite_imageI by simp
@@ -1341,10 +1328,7 @@ lemma bottom_joinable: "\<bottom> \<Up> (y::'a::bounded_complete)"
 lemma cfun_arg_joinable:
   fixes a b :: "'a::bounded_complete" and f :: "'a \<rightarrow> 'b::bounded_complete"
   assumes "a \<Up> b" shows "f\<cdot>a \<Up> f\<cdot>b"
-proof -
-  from assms obtain c where "a \<sqsubseteq> c" "b \<sqsubseteq> c" unfolding joinable_def by blast
-  then show ?thesis by (blast intro: joinableI monofun_cfun_arg)
-qed
+  using assms unfolding joinable_def by (blast intro: monofun_cfun_arg)
 
 text \<open>Deflations lie below @{term ID}, so any two are joinable.\<close>
 

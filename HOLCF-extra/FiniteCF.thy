@@ -18,13 +18,7 @@ next
     fix y
     assume "y \<in> insert a A" and "(if x \<sqsubseteq> a then a else x) \<sqsubseteq> y"
     thus "(if x \<sqsubseteq> a then a else x) = y"
-      apply auto
-      apply (frule (1) below_trans)
-      apply (frule (1) x_eq)
-      apply (rule below_antisym, assumption)
-      apply simp
-      apply (erule (1) x_eq)
-      done
+      by (auto split: if_splits intro: below_antisym dest: below_trans x_eq)
   next
     show "(if x \<sqsubseteq> a then a else x) \<in> insert a A"
       by (simp add: x)

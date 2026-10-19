@@ -155,15 +155,9 @@ proof -
   note fh = is_flat_cong.height1[OF f]
   note gh = is_flat_cong.height1[OF g]
   have sup1: "?R a b" if "f a b" for a b
-  proof -
-    have "sup f g a b" using that by simp
-    thus "?R a b" by (rule gen_upper)
-  qed
+    using that by (intro gen_upper) simp
   have sup2: "?R a b" if "g a b" for a b
-  proof -
-    have "sup f g a b" using that by simp
-    thus "?R a b" by (rule gen_upper)
-  qed
+    using that by (intro gen_upper) simp
   define U :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
     where "U = (\<lambda>x y. (\<forall>z. ?R x z) \<or> (?R x y \<and> ?R y x))"
   have Ucong: "is_cong U"

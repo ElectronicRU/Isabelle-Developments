@@ -53,10 +53,7 @@ qed
 
 lemma top_lub_Top:
 "Top \<in> X \<Longrightarrow> X <<| Top"
-  apply (intro is_lubI is_ubI)
-   apply simp
-  apply (fastforce dest: is_ubD)
-  .
+  by (intro is_lubI is_ubI) (auto dest: is_ubD)
 
 lemma lub_Top_iff: "range (S::nat\<Rightarrow>'a::cpo top) <<| Top \<longleftrightarrow> Top \<in> range S" if "chain S"
 proof (cases "Top \<in> range S")

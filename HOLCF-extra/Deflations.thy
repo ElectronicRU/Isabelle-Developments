@@ -34,13 +34,7 @@ lemma deflation_belowI_fixes:
   assumes d: "deflation d" and e: "deflation e"
     and fx: "\<And>x. e\<cdot>x = x \<Longrightarrow> d\<cdot>x = x"
   shows "e \<sqsubseteq> d"
-proof (rule cfun_belowI)
-  fix x
-  from e have "e\<cdot>(e\<cdot>x) = e\<cdot>x" by (rule deflation.idem)
-  hence "d\<cdot>(e\<cdot>x) = e\<cdot>x" by (rule fx)
-  moreover from e have "e\<cdot>x \<sqsubseteq> x" by (rule deflation.below)
-  ultimately show "e\<cdot>x \<sqsubseteq> d\<cdot>x" by (metis monofun_cfun_arg)
-qed
+  using e fx by (rule deflation.belowI)
 
 text \<open>The compact fixed points of a deflation, as a set of basis elements.  This set
   is MUB-closed (@{thm [source] deflation_fixes_mub_closed}) and contains @{term \<open>\<bottom>\<close>},
@@ -119,16 +113,7 @@ proof -
     thus "d\<cdot>x = x" using xa unfolding dfixes_def by simp
   qed
   show "L.d = d"
-  proof (rule below_antisym)
-    show "L.d \<sqsubseteq> d"
-    proof (rule deflation_belowI_fixes[OF defld defle])
-      fix x assume "L.d\<cdot>x = x" thus "d\<cdot>x = x" using eq_fixes by simp
-    qed
-    show "d \<sqsubseteq> L.d"
-    proof (rule deflation_belowI_fixes[OF defle defld])
-      fix x assume "d\<cdot>x = x" thus "L.d\<cdot>x = x" using eq_fixes by simp
-    qed
-  qed
+    by (rule below_antisym; rule deflation_belowI_fixes) (simp_all add: eq_fixes defld defle)
 qed
 
 text \<open>The MUB-closure of any set containing @{term \<open>\<bottom>\<close>} satisfies the locale
@@ -242,12 +227,7 @@ text \<open>Each finite deflation in the defining ideal of @{term A} lies below
 lemma Rep_fin_defl_below_cast:
   assumes "a \<in> Rep_defl A"
   shows "Rep_fin_defl a \<sqsubseteq> cast\<cdot>A"
-proof -
-  from assms have "defl_principal a \<sqsubseteq> A"
-    by (simp add: defl.principal_below_iff_mem_rep)
-  hence "cast\<cdot>(defl_principal a) \<sqsubseteq> cast\<cdot>A" by (rule monofun_cfun_arg)
-  thus ?thesis by (simp add: cast_defl_principal)
-qed
+  using assms by (metis cast_defl_principal cast_below_cast defl.principal_below_iff_mem_rep)
 
 text \<open>Larger algebraic deflations fix more compacts (this direction is just
   monotonicity of @{term cast}).\<close>
@@ -287,11 +267,7 @@ proof (unfold below_defl_def, rule subsetI)
   proof (rule Rep_fin_defl.compact_belowI)
     fix x assume cx: "compact x" and fx: "Rep_fin_defl a\<cdot>x = x"
     have caAx: "cast\<cdot>A\<cdot>x = x"
-    proof (rule below_antisym)
-      show "cast\<cdot>A\<cdot>x \<sqsubseteq> x" by (rule cast.below)
-      have "Rep_fin_defl a\<cdot>x \<sqsubseteq> cast\<cdot>A\<cdot>x" by (rule monofun_cfun_fun[OF ra])
-      with fx show "x \<sqsubseteq> cast\<cdot>A\<cdot>x" by simp
-    qed
+      using fx ra cast.belowD by fastforce
     let ?b = "Abs_compact_basis x"
     from cx have rb: "Rep_compact_basis ?b = x" by simp
     with caAx have "cast\<cdot>A\<cdot>(Rep_compact_basis ?b) = Rep_compact_basis ?b" by simp

@@ -297,8 +297,6 @@ notation
   and tattr_eval' (infix \<open>eval\<close> 100)
   and tattr_dims (\<open>\<D>\<close>)
 
-find_theorems name: tattr_eval
-
 lemma tattr_eval_const[simp]: "t eval \<star>c = c"
   by transfer' simp
 
@@ -608,10 +606,7 @@ lemma dcut_inf: "dcut (A \<inter> B) = dcut A \<sqinter> dcut B"
   by (rule arg_cong[where f = semi_factor_of_family]) (simp add: fun_eq_iff fun_meet lattice_meet_idem lattice_meet_bot_left lattice_meet_bot_right)
 
 lemma tcut_joinable: "tcut A\<cdot>t \<Up> tcut B\<cdot>t"
-proof (rule joinableI)
-  show "tcut A\<cdot>t \<sqsubseteq> tcut (A \<union> B)\<cdot>t" by (intro monofun_cfun_fun tcut_mono) auto
-  show "tcut B\<cdot>t \<sqsubseteq> tcut (A \<union> B)\<cdot>t" by (intro monofun_cfun_fun tcut_mono) auto
-qed
+  by (rule joinableI[OF tcut_deflation.below tcut_deflation.below])
 
 lemma tcut_join: "tcut A\<cdot>t \<squnion> tcut B\<cdot>t = tcut (A \<union> B)\<cdot>t"
   for t :: "('a, 'b::bounded_complete) tuple"
@@ -720,7 +715,7 @@ proof (rule ccontr)
         case True
         then obtain j where d: "d = f j" by blast
         have "(Y (Suc j))\<langle>d\<rangle> = K\<langle>d\<rangle>"
-          using f(1) by (auto simp: Y_def tcut_tget d dest: injD)
+          unfolding Y_def by (simp add: tcut_tget d inj_image_mem_iff[OF f(1)])
         then show ?thesis by (rule that)
       next
         case False

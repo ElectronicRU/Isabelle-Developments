@@ -10,17 +10,7 @@ definition lower_pd_set :: "('a::bifinite)\<flat> \<Rightarrow> 'a set"
 where "lower_pd_set X \<equiv> {x. x \<in>\<flat> X}"
 
 lemma lower_mem_equiv: "x \<in>\<flat> X \<longleftrightarrow> {x}\<flat> \<sqsubseteq> X"
-  unfolding lower_mem_def
-proof
-  assume "{x}\<flat> \<union>\<flat> X = X"
-  then have "{x}\<flat> \<union>\<flat> X \<sqsubseteq> X" by simp
-  then show "{x}\<flat> \<sqsubseteq> X" by simp
-next
-  assume "{x}\<flat> \<sqsubseteq> X"
-  then have "{x}\<flat> \<union>\<flat> X \<sqsubseteq> X" by simp
-  also have "X \<sqsubseteq> {x}\<flat> \<union>\<flat> X" by (rule lower_plus_below2)
-  finally show "{x}\<flat> \<union>\<flat> X = X" .
-qed
+  unfolding lower_mem_def by (simp add: lower_join_eq lower_pd_lattice.sup.absorb_iff2)
 
 lemma lower_mem_principal: "x \<in>\<flat> {y}\<flat> \<longleftrightarrow> x \<sqsubseteq> y"
   unfolding lower_mem_equiv by simp
@@ -85,14 +75,7 @@ proof (rule subset_antisym)
 qed
 
 lemma exists_approx: "\<exists>b. b \<in> approximants (a::'a::bifinite)"
-proof -
-  obtain approx :: "nat \<Rightarrow> 'a \<rightarrow> 'a" where "approx_chain approx" 
-    by (rule exE[OF bifinite])
-  then interpret approx_chain approx .
-  have "Abs_compact_basis (approx 0\<cdot>a) \<in> approximants a"
-    by (simp add: approximants_def approx_below)
-  then show ?thesis by auto
-qed
+  by (metis compact_basis.ideal_rep below.ideal_def)
 
 lemma set_approximants_ne: "A \<noteq> {} \<Longrightarrow> set_approximants A \<noteq> {}"
 proof -
@@ -142,10 +125,7 @@ next
     unfolding Rep_PDPlus by simp
   then have *: "PDPlus x y \<in> lower_pd_set_ideal A" by (simp add: lower_pd_set_ideal_mem)
   show "\<exists>z \<in> lower_pd_set_ideal A. x \<le>\<flat> z \<and> y \<le>\<flat> z"
-    apply (rule bexI[of _ "PDPlus x y"])
-    using PDPlus_lower_le PDPlus_commute[of x y] apply metis
-    apply (rule *)
-    .
+    using * PDPlus_lower_le PDPlus_commute[of x y] by metis
 next
   show "x \<le>\<flat> y \<Longrightarrow> y \<in> lower_pd_set_ideal A \<Longrightarrow> x \<in> lower_pd_set_ideal A"
     for x y

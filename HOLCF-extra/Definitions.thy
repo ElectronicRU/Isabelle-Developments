@@ -208,14 +208,8 @@ text \<open>The step function \<open>stepfn c y\<close> is \<open>y\<close> abov
 
 definition "stepfn c y \<equiv> (\<Lambda> x. if c \<sqsubseteq> x then y else \<bottom>)"
 
-lemma monofun_stepfn: "monofun (\<lambda>x::'a::cpo. if c \<sqsubseteq> x then y else \<bottom>)" (is "monofun ?f")
-proof (rule monofunI)
-  fix x1 x2 ::'a assume "x1 \<sqsubseteq> x2"
-  show "?f x1 \<sqsubseteq> ?f x2"
-    apply (cases "c \<sqsubseteq> x1")
-    using \<open>x1 \<sqsubseteq> x2\<close> below_trans[of c x1 x2] apply fastforce
-    by simp
-qed
+lemma monofun_stepfn: "monofun (\<lambda>x::'a::cpo. if c \<sqsubseteq> x then y else \<bottom>)"
+  by (rule monofunI) (auto dest: below_trans)
 
 lemma cont_stepfn: "cont (\<lambda>x::'a::cpo. if c \<sqsubseteq> x then y else \<bottom>)" (is "cont ?f") if "compact c"
 proof (rule contI2)

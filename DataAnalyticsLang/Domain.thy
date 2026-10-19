@@ -25,11 +25,7 @@ lemma map_concat_restrict_dom:
   and h:: "'col set"
   assumes "dom m \<inter> h = {}"
   shows "(m ++ n) |` h = n |` h"
-  using assms disjoint_iff
-    Map.restrict_in[of _ h] Map.restrict_out[of _ h]
-    Map.map_add_dom_app_simps[of _ m n]
-    ext
-  by (metis (no_types, lifting))
+  using assms unfolding restrict_map_def map_add_def fun_eq_iff by (auto split: option.split)
 
 lemma map_restrict_union:
   fixes m:: "'col \<rightharpoonup> 'val"
@@ -56,7 +52,7 @@ abbreviation "nil \<equiv> Map.empty"
 
 lemma disjoint_family_on_subset: fixes A B S shows
   "disjoint_family_on A S \<Longrightarrow> \<forall> x \<in> S. B x \<subseteq> A x \<Longrightarrow> disjoint_family_on B S"
-  by (force simp add: disjoint_family_on_def)
+  unfolding disjoint_family_on_def by blast
 
 locale unrestricted_rows =
   fixes
@@ -91,7 +87,7 @@ abbreviation factorized :: "('tab \<Rightarrow> ('col \<rightharpoonup> 'val)) \
   where "factorized g \<equiv> \<forall> t. dom (g t) \<subseteq> table_columns t"
 
 lemma choice_space_factorized[dest]: "g \<in> choice_space \<Longrightarrow> factorized g"
-  unfolding choice_space_def' using data_dom by force
+  unfolding choice_space_def' mem_Collect_eq by (metis data_dom dom_empty empty_subsetI)
 
 definition product :: "('tab \<Rightarrow> ('col \<rightharpoonup> 'val)) \<Rightarrow> ('col \<rightharpoonup> 'val)"
   where "product g c \<equiv> g (table_of c) c"
@@ -132,12 +128,7 @@ lemma factor_lim_table: "lim_table t m = factor m t"
   using factor_def table_columns_def by auto
 
 corollary factorized_factor: "factorized (factor m)"
-proof (rule, rule)
-  fix t :: 'tab and c :: 'col
-  assume "c \<in> dom (factor m t)"
-  also have "factor m t = lim_table t m" using factor_lim_table by simp
-  finally show "c \<in> table_columns t" by simp
-qed
+  by (metis factor_lim_table dom_restrict IntE subset_iff)
 
 corollary factorized_factor_set: "g \<in> factor ` S \<Longrightarrow> factorized g" for g
   using factorized_factor by auto

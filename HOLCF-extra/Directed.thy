@@ -200,11 +200,7 @@ qed
 lemma lub_subset_mono:
   assumes "A <<| a" "B <<| b" "A \<subseteq> B"
   shows "a \<sqsubseteq> b"
-proof -
-  from \<open>B <<| b\<close> have "B <| b" by (rule is_lubD1)
-  with \<open>A \<subseteq> B\<close> have "A <| b" unfolding is_ub_def by blast
-  with \<open>A <<| a\<close> show ?thesis by (rule is_lubD2)
-qed
+  using assms(3) by (intro lub_mono_general[OF assms(1,2)]) blast
 
 lemma obtain_directed_chain:
   fixes S :: "'a::bifinite set"

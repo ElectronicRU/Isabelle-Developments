@@ -227,12 +227,7 @@ proof -
   define B where "B = (\<lambda>i. approx i\<cdot>b)"
   have chs: "chain A" "chain B" unfolding A_def B_def by (rule ch)+
   have AB: "A i \<Up> B i" for i
-  proof -
-    have "approx i\<cdot>a \<sqsubseteq> approx i\<cdot>(a \<squnion> b)" "approx i\<cdot>b \<sqsubseteq> approx i\<cdot>(a \<squnion> b)"
-      by (rule monofun_cfun_arg[OF joinableD(1)[OF \<open>a \<Up> b\<close>]],
-          rule monofun_cfun_arg[OF joinableD(2)[OF \<open>a \<Up> b\<close>]])
-    then show ?thesis unfolding A_def B_def by (rule joinableI)
-  qed
+    unfolding A_def B_def using \<open>a \<Up> b\<close> by (rule cfun_arg_joinable)
   have j: "c \<sqinter> A i \<Up> c \<sqinter> B i" for i by (rule joinableI[OF meet_below1 meet_below1])
   have "c \<sqinter> (a \<squnion> b) = c \<sqinter> ((\<Squnion>i. A i) \<squnion> (\<Squnion>i. B i))" by (simp only: A_def B_def reach)
   also have "\<dots> = c \<sqinter> (\<Squnion>i. A i \<squnion> B i)" by (simp only: lub_join_chains(3)[OF chs AB])
