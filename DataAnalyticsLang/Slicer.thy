@@ -245,15 +245,45 @@ text \<open>Slices are given by their conjunction \<open>\<^bold>*\<close> and i
   reads a key only through its truncation to the slice's LOD, so it applies to keys finer than its
   LOD as well.  \<open>holds\<close> is the plain predicate.\<close>
 
-locale slice_eval = conj: semilattice_neutr conj sunit +
-  slod: semilattice_hom conj sunit "(\<squnion>)" \<bottom> slod +
-  sopen: semilattice_hom conj sunit inf top sopen
-  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor"
-    and sopen :: "'f \<Rightarrow> 'k sel" +
-  assumes sopen_lod: "selects (sopen f) (proj (slod f)\<cdot>k) \<longleftrightarrow> selects (sopen f) k"
-    and slod_compact: "compact (slod f)"
+text \<open>The slicer interface is a record of operations.  Besides evaluation, a slicer
+  \<^emph>\<open>coarsens\<close> slices to a given LOD and \<^emph>\<open>pins\<close> keys; their laws are explained below.\<close>
+
+record ('f, 'k) slicer_ops =
+  sl_conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f"
+  sl_unit :: 'f
+  sl_lod :: "'f \<Rightarrow> 'k semi_factor"
+  sl_open :: "'f \<Rightarrow> 'k sel"
+  sl_coarsen :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f"
+  sl_pin :: "'k \<Rightarrow> 'f"
+
+hide_const (open) slicer_ops.truncate
+
+locale slicer = conj: semilattice_neutr "sl_conj slicing" "sl_unit slicing" +
+  slod: semilattice_hom "sl_conj slicing" "sl_unit slicing" "(\<squnion>)" \<bottom> "sl_lod slicing" +
+  sopen: semilattice_hom "sl_conj slicing" "sl_unit slicing" inf top "sl_open slicing"
+  for slicing :: "('f, 'k::{dI, locally_finitely_detailed}) slicer_ops" +
+  assumes sopen_lod: "selects (sl_open slicing f) (proj (sl_lod slicing f)\<cdot>k) \<longleftrightarrow> selects (sl_open slicing f) k"
+    and slod_compact: "compact (sl_lod slicing f)"
+    and coarsen_conj: "sl_coarsen slicing A (sl_conj slicing a b) =
+      sl_conj slicing (sl_coarsen slicing A a) (sl_coarsen slicing A b)"
+    and coarsen_inside: "sl_lod slicing f \<sqsubseteq> A \<Longrightarrow> sl_coarsen slicing A f = f"
+    and slod_coarsen: "sl_lod slicing (sl_coarsen slicing A f) \<sqsubseteq> sl_lod slicing f \<sqinter> A"
+    and coarsen_cut: "selects (sl_open slicing f) k \<Longrightarrow>
+      selects (sl_open slicing (sl_coarsen slicing A f)) (proj A\<cdot>k)"
+    and coarsen_slod: "sl_coarsen slicing A f = sl_coarsen slicing (A \<sqinter> sl_lod slicing f) f"
+    and coarsen_coarsen: "sl_coarsen slicing A (sl_coarsen slicing B f) = sl_coarsen slicing (A \<sqinter> B) f"
+    and sopen_spin: "compact K \<Longrightarrow> selects (sl_open slicing (sl_pin slicing K)) k \<longleftrightarrow> K \<sqsubseteq> k"
+    and coarsen_spin: "compact K \<Longrightarrow> sl_coarsen slicing A (sl_pin slicing K) = sl_pin slicing (proj A\<cdot>K)"
+    and spin_join: "compact K1 \<Longrightarrow> compact K2 \<Longrightarrow> K1 \<Up> K2 \<Longrightarrow>
+      sl_pin slicing (K1 \<squnion> K2) = sl_conj slicing (sl_pin slicing K1) (sl_pin slicing K2)"
 begin
+
+abbreviation conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) where "conj \<equiv> sl_conj slicing"
+abbreviation sunit :: 'f (\<open>\<^bold>1\<close>) where "sunit \<equiv> sl_unit slicing"
+abbreviation slod :: "'f \<Rightarrow> 'k semi_factor" where "slod \<equiv> sl_lod slicing"
+abbreviation sopen :: "'f \<Rightarrow> 'k sel" where "sopen \<equiv> sl_open slicing"
+abbreviation coarsen :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f" where "coarsen \<equiv> sl_coarsen slicing"
+abbreviation spin :: "'k \<Rightarrow> 'f" where "spin \<equiv> sl_pin slicing"
 
 lemmas slod_conj [simp] = slod.hom_f and slod_unit [simp] = slod.hom_z
 
@@ -299,9 +329,7 @@ lemma holds_bot_lod:
   assumes "slod f = \<bottom>" shows "holds f k \<longleftrightarrow> holds f \<bottom>"
   using holds_lod[of f k] by (simp add: assms proj_bot)
 
-end
-
-subsection \<open>Slicers\<close>
+subsection \<open>Coarsening\<close>
 
 text \<open>A slicer adds \<^emph>\<open>coarsening\<close> of a slice to a given LOD.  \<open>GROUP BY ONLY\<close> coarsens to the new
   frame LOD; \<open>FOR\<close> coarsens to the slice's own LOD with dimensions dropped by a transformer.
@@ -313,17 +341,6 @@ text \<open>A slicer adds \<^emph>\<open>coarsening\<close> of a slice to a give
   It is \<^emph>\<open>not\<close> extensional: coarsening \<open>b = 2 \<and> b \<noteq> 2\<close> away from \<open>b\<close> gives \<open>True\<close>, coarsening
   \<open>False\<close> gives \<open>False\<close>.\<close>
 
-locale slicer = slice_eval conj sunit slod sopen
-  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel" +
-  fixes coarsen :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f"
-  assumes coarsen_conj: "coarsen A (a \<^bold>* b) = coarsen A a \<^bold>* coarsen A b"
-    and coarsen_inside: "slod f \<sqsubseteq> A \<Longrightarrow> coarsen A f = f"
-    and slod_coarsen: "slod (coarsen A f) \<sqsubseteq> slod f \<sqinter> A"
-    and coarsen_cut: "selects (sopen f) k \<Longrightarrow> selects (sopen (coarsen A f)) (proj A\<cdot>k)"
-    and coarsen_slod: "coarsen A f = coarsen (A \<sqinter> slod f) f"
-    and coarsen_coarsen: "coarsen A (coarsen B f) = coarsen (A \<sqinter> B) f"
-begin
 
 lemma holds_coarsen_cut: "holds f k \<Longrightarrow> holds (coarsen A f) (proj A\<cdot>k)"
   unfolding holds_def by (rule coarsen_cut)
@@ -373,8 +390,6 @@ qed
 lemma coarsen_top [simp]: "coarsen lattice_top f = f"
   by (rule coarsen_inside) simp
 
-end
-
 subsection \<open>Pins\<close>
 
 text \<open>\<open>spin K\<close> is the slice pinning the key \<open>K\<close>: on keys, the principal upset of \<open>K\<close>.  It is only
@@ -382,14 +397,6 @@ text \<open>\<open>spin K\<close> is the slice pinning the key \<open>K\<close>:
   at; nothing is assumed about it, but it is always one the key lives at.  Pins coarsen by
   truncating the key, and compatible pins conjoin to the pin of the join.\<close>
 
-locale pin_slicer = slicer conj sunit slod sopen coarsen
-  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel" and coarsen +
-  fixes spin :: "'k \<Rightarrow> 'f"
-  assumes sopen_spin: "compact K \<Longrightarrow> selects (sopen (spin K)) k \<longleftrightarrow> K \<sqsubseteq> k"
-    and coarsen_spin: "compact K \<Longrightarrow> coarsen A (spin K) = spin (proj A\<cdot>K)"
-    and spin_join: "compact K1 \<Longrightarrow> compact K2 \<Longrightarrow> K1 \<Up> K2 \<Longrightarrow> spin (K1 \<squnion> K2) = spin K1 \<^bold>* spin K2"
-begin
 
 lemma holds_spin: "compact K \<Longrightarrow> holds (spin K) k \<longleftrightarrow> K \<sqsubseteq> k"
   unfolding holds_def by (rule sopen_spin)

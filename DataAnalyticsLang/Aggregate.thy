@@ -95,8 +95,8 @@ begin
 
 text \<open>The rows of a frame in the fiber of a key at an LOD.\<close>
 
-definition afiber :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'r set" where
-  "afiber F c k = {y \<in> pts S. frows F y \<and> rproj c y = k}"
+definition afiber :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'r set" where
+  "afiber data F c k = {y \<in> lower_maximal data. frows F y \<and> rproj c y = k}"
 
 text \<open>\<open>aggregate R f E\<close> folds the inner entries over each fiber of the frame LOD, the inner
   expression being evaluated under the frame refined by the extra requested dimensions \<open>R\<close> (a
@@ -108,38 +108,38 @@ definition aggregate :: "'k semi_factor \<Rightarrow> ('v::pcpo \<rightarrow> 'v
   "aggregate R f E = \<lparr>emind = \<bottom>,
      edims = (\<bottom>, lattice_top, obs_key (emind E \<squnion> R)) #
        map (\<lambda>(a, \<rho>, g). (\<bottom>, \<rho>, obs_pair g (obs_key (a \<squnion> truncate \<rho> R)))) (edims E),
-     esem = \<lambda>F k. agg_fold f (esem E (finclude R F))
-       (rproj (emind E \<squnion> flod (finclude R F)) ` afiber F (flod F) k)\<rparr>"
+     esem = \<lambda>data F k. agg_fold f (esem E data (finclude R F))
+       (rproj (emind E \<squnion> flod (finclude R F)) ` afiber data F (flod F) k)\<rparr>"
 
 lemma aggregate_simps [simp]:
   "emind (aggregate R f E) = \<bottom>"
   "edims (aggregate R f E) = (\<bottom>, lattice_top, obs_key (emind E \<squnion> R)) #
        map (\<lambda>(a, \<rho>, g). (\<bottom>, \<rho>, obs_pair g (obs_key (a \<squnion> truncate \<rho> R)))) (edims E)"
-  "esem (aggregate R f E) F k = agg_fold f (esem E (finclude R F))
-       (rproj (emind E \<squnion> flod (finclude R F)) ` afiber F (flod F) k)"
+  "esem (aggregate R f E) data F k = agg_fold f (esem E data (finclude R F))
+       (rproj (emind E \<squnion> flod (finclude R F)) ` afiber data F (flod F) k)"
   by (simp_all add: aggregate_def)
 
 theorem lawful_aggregate:
-  assumes E: "lawfulE E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
-  shows "lawfulE (aggregate R f E)"
+  assumes E: "lawful E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
+  shows "lawful (aggregate R f E)"
 proof -
-  interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
+  interpret E: expr_sem slicing rules keying E
     by (fact E)
   let ?m = "emind E"
   let ?t = "\<lambda>(a, \<rho>, g). (\<bottom>::'k semi_factor, \<rho>, obs_pair g (obs_key (a \<squnion> truncate \<rho> R)))"
   have bj: "\<bottom> \<squnion> X = X" for X :: "'k semi_factor" by (rule lattice_join_bot_left)
-  have ok: "Rep_cfun (obs_key c) = (\<lambda>y. emb\<cdot>(rproj c y))" for c by (rule ext) (rule obs_key_apply)
+  have ok: "Rep_cfun (ofun (obs_key c)) = (\<lambda>y. emb\<cdot>(rproj c y))" for c by (rule ext) (rule obs_key_apply)
   text \<open>The fold entry reads the fiber.\<close>
-  have fiber: "group \<bottom> lattice_top F k = afiber F (flod F) k" if "proj (flod F)\<cdot>k = k" for F k
+  have fiber: "group data \<bottom> lattice_top F k = afiber data F (flod F) k" if "proj (flod F)\<cdot>k = k" for data F k
   proof -
     have "proj (\<bottom> \<squnion> flod F)\<cdot>k = k" using that by (simp only: bj)
     then show ?thesis by (simp add: group_top afiber_def bj)
   qed
   text \<open>An inner group is the outer group through the same upper part, cut down by the inner
     key's lower part and requested part.\<close>
-  have ig: "group a \<rho> (finclude R F) (rproj (?m \<squnion> flod (finclude R F)) y)
-      = {y' \<in> group \<bottom> \<rho> F k. rproj (a \<squnion> truncate \<rho> R) y' = rproj (a \<squnion> truncate \<rho> R) y}"
-    if y: "rproj (flod F) y = k" and am: "a \<sqsubseteq> ?m" for a \<rho> F k y
+  have ig: "group data a \<rho> (finclude R F) (rproj (?m \<squnion> flod (finclude R F)) y)
+      = {y' \<in> group data \<bottom> \<rho> F k. rproj (a \<squnion> truncate \<rho> R) y' = rproj (a \<squnion> truncate \<rho> R) y}"
+    if y: "rproj (flod F) y = k" and am: "a \<sqsubseteq> ?m" for data a \<rho> F k y
   proof -
     let ?X = "?m \<squnion> flod (finclude R F)" and ?A = "a \<squnion> truncate \<rho> R" and ?L = "truncate \<rho> (flod F)"
     have lod: "a \<squnion> truncate \<rho> (flod (finclude R F)) = ?A \<squnion> ?L" by (simp add: truncate_sup lattice_join_ac)
@@ -157,10 +157,10 @@ proof -
     show ?thesis unfolding group_def lod proj_sup_eq kA kL by (auto simp: bj proj_bot)
   qed
   text \<open>Inner keys of a fiber correspond to their parts at \<open>emind E \<squnion> R\<close>.\<close>
-  have bij: "bij_betw (Rep_cfun (proj (?m \<squnion> R))) (rproj (?m \<squnion> flod (finclude R F)) ` afiber F (flod F) k)
-      (rproj (?m \<squnion> R) ` afiber F (flod F) k)" for F k
+  have bij: "bij_betw (Rep_cfun (proj (?m \<squnion> R))) (rproj (?m \<squnion> flod (finclude R F)) ` afiber data F (flod F) k)
+      (rproj (?m \<squnion> R) ` afiber data F (flod F) k)" for data F k
   proof -
-    let ?X = "?m \<squnion> flod (finclude R F)" and ?Z = "afiber F (flod F) k"
+    let ?X = "?m \<squnion> flod (finclude R F)" and ?Z = "afiber data F (flod F) k"
     have le: "?m \<squnion> R \<sqsubseteq> ?X" by (simp add: lattice_join_mono lattice_join_ge2)
     have pr: "proj (?m \<squnion> R)\<cdot>(rproj ?X y) = rproj (?m \<squnion> R) y" for y by (rule proj_le[OF le])
     show ?thesis
@@ -183,10 +183,10 @@ proof -
     qed
   qed
   text \<open>The content of an inner entry at an inner key is read off the outer entry's content.\<close>
-  have inner: "content e (finclude R G) \<kappa>
-      = sel_snd (emb\<cdot>(proj (fst e \<squnion> truncate (fst (snd e)) R)\<cdot>p)) (content (?t e) G kG)"
-    if e: "e \<in> set (edims E)" and yZ: "y \<in> afiber G (flod G) kG"
-      and \<kappa>: "\<kappa> = rproj (?m \<squnion> flod (finclude R G)) y" and py: "proj (?m \<squnion> R)\<cdot>\<kappa> = p" for e G kG \<kappa> y p
+  have inner: "content data e (finclude R G) \<kappa>
+      = sel_snd (emb\<cdot>(proj (fst e \<squnion> truncate (fst (snd e)) R)\<cdot>p)) (content data (?t e) G kG)"
+    if e: "e \<in> set (edims E)" and yZ: "y \<in> afiber data G (flod G) kG"
+      and \<kappa>: "\<kappa> = rproj (?m \<squnion> flod (finclude R G)) y" and py: "proj (?m \<squnion> R)\<cdot>\<kappa> = p" for data e G kG \<kappa> y p
   proof -
     obtain a \<rho> g where ae: "e = (a, \<rho>, g)" by (cases e) auto
     have am: "a \<sqsubseteq> ?m" by (rule E.lower_below_mind[OF e[unfolded ae]])
@@ -200,12 +200,15 @@ proof -
       finally show ?thesis by simp
     qed
     have gy: "rproj (flod G) y = kG" using yZ by (simp add: afiber_def)
-    have grp: "group a \<rho> (finclude R G) \<kappa> = {y' \<in> group \<bottom> \<rho> G kG. rproj ?A y' = proj ?A\<cdot>p}"
+    have grp: "group data a \<rho> (finclude R G) \<kappa> = {y' \<in> group data \<bottom> \<rho> G kG. rproj ?A y' = proj ?A\<cdot>p}"
       unfolding \<kappa> ig[OF gy am] yA ..
     show ?thesis unfolding ae by (simp add: grp sel_snd_obs_pair obs_key_apply emb_eq_iff)
   qed
   show ?thesis
   proof (rule lawfulI, simp_all only: aggregate_simps)
+    show "supported g"
+      if "(a, \<rho>, g) \<in> set ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E))" for a \<rho> g
+      using that by (auto intro: supported_obs_key supported_obs_pair E.entries_supported)
     show "truncate \<rho> \<bottom> \<sqsubseteq> a"
       if "(a, \<rho>, g) \<in> set ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E))" for a \<rho> g
       using that by (auto simp: lattice_meet_bot_right)
@@ -217,26 +220,26 @@ proof -
         by (simp only: list.map(2) fst_conv) (simp add: map_map comp_def split_def)
       show ?thesis by (simp only: l fold_join_bots)
     qed
-    show "keyimg S F (\<bottom> \<squnion> flod F) k"
-      if "agg_fold f (esem E (finclude R F)) (rproj (?m \<squnion> flod (finclude R F)) ` afiber F (flod F) k) \<noteq> None"
-      for F k
+    show "keyimg data F (\<bottom> \<squnion> flod F) k"
+      if d: "conforms data" and "agg_fold f (esem E data (finclude R F)) (rproj (?m \<squnion> flod (finclude R F)) ` afiber data F (flod F) k) \<noteq> None"
+      for data F k
     proof -
-      have "afiber F (flod F) k \<noteq> {}" using agg_fold_nonempty[OF f that] by auto
+      have "afiber data F (flod F) k \<noteq> {}" using agg_fold_nonempty[OF f that(2)] by auto
       then show ?thesis by (auto simp: afiber_def keyimg_def bj)
     qed
-    show "agg_fold f (esem E (finclude R F)) (rproj (?m \<squnion> flod (finclude R F)) ` afiber F (flod F) k)
-        = agg_fold f (esem E (finclude R F')) (rproj (?m \<squnion> flod (finclude R F')) ` afiber F' (flod F') k')"
-      if k: "proj (\<bottom> \<squnion> flod F)\<cdot>k = k" "proj (\<bottom> \<squnion> flod F')\<cdot>k' = k'"
-        and e: "contents ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E)) F k
-              = contents ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E)) F' k'" for F F' k k'
+    show "agg_fold f (esem E data (finclude R F)) (rproj (?m \<squnion> flod (finclude R F)) ` afiber data F (flod F) k)
+        = agg_fold f (esem E data' (finclude R F')) (rproj (?m \<squnion> flod (finclude R F')) ` afiber data' F' (flod F') k')"
+      if d: "conforms data" and d': "conforms data'" and k: "proj (\<bottom> \<squnion> flod F)\<cdot>k = k" "proj (\<bottom> \<squnion> flod F')\<cdot>k' = k'"
+        and e: "contents data ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E)) F k
+              = contents data' ((\<bottom>, lattice_top, obs_key (?m \<squnion> R)) # map ?t (edims E)) F' k'" for data data' F F' k k'
     proof -
       have k1: "proj (flod F)\<cdot>k = k" and k2: "proj (flod F')\<cdot>k' = k'" using k by (simp_all only: bj)
-      have eh: "content (\<bottom>, lattice_top, obs_key (?m \<squnion> R)) F k = content (\<bottom>, lattice_top, obs_key (?m \<squnion> R)) F' k'"
-        and et: "contents (map ?t (edims E)) F k = contents (map ?t (edims E)) F' k'"
+      have eh: "content data (\<bottom>, lattice_top, obs_key (?m \<squnion> R)) F k = content data' (\<bottom>, lattice_top, obs_key (?m \<squnion> R)) F' k'"
+        and et: "contents data (map ?t (edims E)) F k = contents data' (map ?t (edims E)) F' k'"
         using e by (simp_all only: list.map list.inject)
-      have ptw: "content (?t e) F k = content (?t e) F' k'" if "e \<in> set (edims E)" for e
+      have ptw: "content data (?t e) F k = content data' (?t e) F' k'" if "e \<in> set (edims E)" for e
         using et that by (simp add: map_eq_conv)
-      let ?Z = "afiber F (flod F) k" and ?Z' = "afiber F' (flod F') k'"
+      let ?Z = "afiber data F (flod F) k" and ?Z' = "afiber data' F' (flod F') k'"
       let ?K = "rproj (?m \<squnion> flod (finclude R F)) ` ?Z" and ?K' = "rproj (?m \<squnion> flod (finclude R F')) ` ?Z'"
       let ?P = "rproj (?m \<squnion> R) ` ?Z" and ?\<pi> = "Rep_cfun (proj (?m \<squnion> R))"
       have P: "rproj (?m \<squnion> R) ` ?Z' = ?P"
@@ -247,10 +250,10 @@ proof -
       define \<psi> where "\<psi> = inv_into ?K ?\<pi>"
       define \<psi>' where "\<psi>' = inv_into ?K' ?\<pi>"
       have b: "bij_betw \<psi> ?P ?K" unfolding \<psi>_def by (rule bij_betw_inv_into[OF bij])
-      have b': "bij_betw \<psi>' ?P ?K'" unfolding \<psi>'_def using bij_betw_inv_into[OF bij[of F' k']] by (simp only: P)
+      have b': "bij_betw \<psi>' ?P ?K'" unfolding \<psi>'_def using bij_betw_inv_into[OF bij[of F' data' k']] by (simp only: P)
       have sP: "?\<pi> ` ?K = ?P" by (rule bij_betw_imp_surj_on[OF bij])
-      have sP': "?\<pi> ` ?K' = ?P" using bij_betw_imp_surj_on[OF bij[of F' k']] by (simp only: P)
-      have pt: "esem E (finclude R F) (\<psi> p) = esem E (finclude R F') (\<psi>' p)" if p: "p \<in> ?P" for p
+      have sP': "?\<pi> ` ?K' = ?P" using bij_betw_imp_surj_on[OF bij[of F' data' k']] by (simp only: P)
+      have pt: "esem E data (finclude R F) (\<psi> p) = esem E data' (finclude R F') (\<psi>' p)" if p: "p \<in> ?P" for p
       proof -
         have pK: "\<psi> p \<in> ?K" unfolding \<psi>_def by (rule inv_into_into) (simp only: sP p)
         have pK': "\<psi>' p \<in> ?K'" unfolding \<psi>'_def by (rule inv_into_into) (simp only: sP' p)
@@ -259,22 +262,22 @@ proof -
         have py: "proj (?m \<squnion> R)\<cdot>(\<psi> p) = p" unfolding \<psi>_def by (rule f_inv_into_f) (simp only: sP p)
         have py': "proj (?m \<squnion> R)\<cdot>(\<psi>' p) = p" unfolding \<psi>'_def by (rule f_inv_into_f) (simp only: sP' p)
         show ?thesis
-        proof (rule E.content_law)
+        proof (rule E.content_law[OF d d'])
           show "proj (?m \<squnion> flod (finclude R F))\<cdot>(\<psi> p) = \<psi> p" by (simp only: y(2) proj_idem)
           show "proj (?m \<squnion> flod (finclude R F'))\<cdot>(\<psi>' p) = \<psi>' p" by (simp only: y'(2) proj_idem)
-          show "contents (edims E) (finclude R F) (\<psi> p) = contents (edims E) (finclude R F') (\<psi>' p)"
+          show "contents data (edims E) (finclude R F) (\<psi> p) = contents data' (edims E) (finclude R F') (\<psi>' p)"
           proof (rule map_cong[OF refl])
             fix e assume e: "e \<in> set (edims E)"
-            show "content e (finclude R F) (\<psi> p) = content e (finclude R F') (\<psi>' p)"
+            show "content data e (finclude R F) (\<psi> p) = content data' e (finclude R F') (\<psi>' p)"
               by (simp only: inner[OF e y(1) y(2) py] inner[OF e y'(1) y'(2) py'] ptw[OF e])
           qed
         qed
       qed
-      have "agg_fold f (esem E (finclude R F)) ?K = agg_fold f (esem E (finclude R F) \<circ> \<psi>) ?P"
+      have "agg_fold f (esem E data (finclude R F)) ?K = agg_fold f (esem E data (finclude R F) \<circ> \<psi>) ?P"
         by (rule agg_fold_bij[OF f b, symmetric])
-      also have "\<dots> = agg_fold f (esem E (finclude R F') \<circ> \<psi>') ?P"
+      also have "\<dots> = agg_fold f (esem E data' (finclude R F') \<circ> \<psi>') ?P"
         by (rule agg_fold_cong[OF f refl]) (simp add: pt)
-      also have "\<dots> = agg_fold f (esem E (finclude R F')) ?K'"
+      also have "\<dots> = agg_fold f (esem E data' (finclude R F')) ?K'"
         by (rule agg_fold_bij[OF f b'])
       finally show ?thesis .
     qed

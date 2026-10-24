@@ -1,6 +1,6 @@
 session "HOLCF-extra" = HOLCF +
   options [document = pdf, document_output = "output"]
-  sessions "HOL-Eisbach"
+  sessions "HOL-Eisbach" "HOL-Library"
 (*theories [document = false]
     A
     B *)
@@ -23,6 +23,7 @@ session "HOLCF-extra" = HOLCF +
     LowerPD_Representation
     UpperPD_Representation
     Cpo_Topology
+    BagPD
   document_files
     "root.tex"
 

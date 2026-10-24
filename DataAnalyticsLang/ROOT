@@ -11,6 +11,8 @@ session DataAnalyticsLang = "HOLCF" +
     Congruence
     Slicer
     Relspace
+    Schema
+    Views
     Frame
     LOD
     Domain_Transfer
@@ -18,7 +20,7 @@ session DataAnalyticsLang = "HOLCF" +
     Content_Law
     Expr_Combinators
     Aggregate
-    Chase
+    Bag_Join
   document_files
     "root.tex"
     "root.bib"

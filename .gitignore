@@ -5,3 +5,6 @@
 
 # Isabelle build output
 output/
+
+# Editor swap files
+*.swp

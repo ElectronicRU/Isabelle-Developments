@@ -36,17 +36,17 @@ text \<open>A function of the key at an LOD \<open>c\<close>, at the frame's dat
 
 definition value_at :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> 'v::cpo) \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "value_at c g = \<lparr>emind = c, edims = [(c, lattice_top, obs_key c)],
-     esem = \<lambda>F k. if keyimg S F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None\<rparr>"
+     esem = \<lambda>data F k. if keyimg data F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None\<rparr>"
 
 lemma value_at_simps [simp]:
   "emind (value_at c g) = c" "edims (value_at c g) = [(c, lattice_top, obs_key c)]"
-  "esem (value_at c g) F k = (if keyimg S F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None)"
+  "esem (value_at c g) data F k = (if keyimg data F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None)"
   by (simp_all add: value_at_def)
 
 lemma content_key_top:
   assumes k: "proj (c \<squnion> flod G)\<cdot>k = k"
-  shows "content (c, lattice_top, obs_key c) G k
-    = (if keyimg S G (c \<squnion> flod G) k then {emb\<cdot>(proj c\<cdot>k)} else {})"
+  shows "content data (c, lattice_top, obs_key c) G k
+    = (if keyimg data G (c \<squnion> flod G) k then {emb\<cdot>(proj c\<cdot>k)} else {})"
 proof -
   have v: "rproj c y = proj c\<cdot>k" if "rproj (c \<squnion> flod G) y = k" for y
     using proj_le[OF lattice_join_ge1, of c "flod G" "rkey\<cdot>y"] that by simp
@@ -54,35 +54,37 @@ proof -
     by (auto simp: keyimg_group_top[OF k] group_top[OF k] obs_key_apply v image_iff)
 qed
 
-theorem lawful_value_at: "lawfulE (value_at c g)"
+theorem lawful_value_at: "lawful (value_at c g)"
 proof (rule lawfulI, simp_all only: value_at_simps)
+  show "supported f" if "(a, \<rho>, f) \<in> set [(c, lattice_top, obs_key c)]" for a \<rho> f
+    using that by (simp add: supported_obs_key)
   show "truncate \<rho> c \<sqsubseteq> a" if "(a, \<rho>, f) \<in> set [(c, lattice_top, obs_key c)]" for a \<rho> f
     using that by (simp add: truncate_top)
   show "c = fold (\<squnion>) (map fst [(c, lattice_top, obs_key c)]) \<bottom>" by (simp add: lattice_join_bot_right)
-  show "keyimg S F (c \<squnion> flod F) k"
-    if "(if keyimg S F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None) \<noteq> None" for F k
+  show "keyimg data F (c \<squnion> flod F) k"
+    if d: "conforms data" and "(if keyimg data F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None) \<noteq> None" for data F k
     using that by (simp split: if_splits)
-  show "(if keyimg S F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None)
-      = (if keyimg S F' (c \<squnion> flod F') k' then Some (g\<cdot>(proj c\<cdot>k')) else None)"
-    if k: "proj (c \<squnion> flod F)\<cdot>k = k" "proj (c \<squnion> flod F')\<cdot>k' = k'"
-      and e: "contents [(c, lattice_top, obs_key c)] F k = contents [(c, lattice_top, obs_key c)] F' k'"
-    for F F' k k'
+  show "(if keyimg data F (c \<squnion> flod F) k then Some (g\<cdot>(proj c\<cdot>k)) else None)
+      = (if keyimg data' F' (c \<squnion> flod F') k' then Some (g\<cdot>(proj c\<cdot>k')) else None)"
+    if d: "conforms data" and d': "conforms data'" and k: "proj (c \<squnion> flod F)\<cdot>k = k" "proj (c \<squnion> flod F')\<cdot>k' = k'"
+      and e: "contents data [(c, lattice_top, obs_key c)] F k = contents data' [(c, lattice_top, obs_key c)] F' k'"
+    for data data' F F' k k'
   proof -
-    have e1: "content (c, lattice_top, obs_key c) F k = content (c, lattice_top, obs_key c) F' k'"
+    have e1: "content data (c, lattice_top, obs_key c) F k = content data' (c, lattice_top, obs_key c) F' k'"
       using e by (simp only: list.map list.inject)
-    have e2: "(if keyimg S F (c \<squnion> flod F) k then {emb\<cdot>(proj c\<cdot>k)} else {})
-        = (if keyimg S F' (c \<squnion> flod F') k' then {emb\<cdot>(proj c\<cdot>k')} else {})"
+    have e2: "(if keyimg data F (c \<squnion> flod F) k then {emb\<cdot>(proj c\<cdot>k)} else {})
+        = (if keyimg data' F' (c \<squnion> flod F') k' then {emb\<cdot>(proj c\<cdot>k')} else {})"
       using e1 by (simp only: content_key_top[OF k(1)] content_key_top[OF k(2)])
     show ?thesis
-    proof (cases "keyimg S F (c \<squnion> flod F) k")
+    proof (cases "keyimg data F (c \<squnion> flod F) k")
       case True
-      then have F': "keyimg S F' (c \<squnion> flod F') k'" and "emb\<cdot>(proj c\<cdot>k) = emb\<cdot>(proj c\<cdot>k')"
+      then have F': "keyimg data' F' (c \<squnion> flod F') k'" and "emb\<cdot>(proj c\<cdot>k) = emb\<cdot>(proj c\<cdot>k')"
         using e2 by (simp_all split: if_splits)
       then have "proj c\<cdot>k = proj c\<cdot>k'" by (blast intro: emb_inj)
       then show ?thesis using True F' by simp
     next
       case False
-      then have "\<not> keyimg S F' (c \<squnion> flod F') k'" using e2 by (simp split: if_splits)
+      then have "\<not> keyimg data' F' (c \<squnion> flod F') k'" using e2 by (simp split: if_splits)
       then show ?thesis using False by simp
     qed
   qed
@@ -91,28 +93,30 @@ qed
 subsection \<open>Maps\<close>
 
 definition smap :: "('v::cpo \<rightarrow> 'w::cpo) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
-  "smap g E = \<lparr>emind = emind E, edims = edims E, esem = \<lambda>F k. map_option (Rep_cfun g) (esem E F k)\<rparr>"
+  "smap g E = \<lparr>emind = emind E, edims = edims E, esem = \<lambda>data F k. map_option (Rep_cfun g) (esem E data F k)\<rparr>"
 
 lemma smap_simps [simp]:
   "emind (smap g E) = emind E" "edims (smap g E) = edims E"
-  "esem (smap g E) F k = map_option (Rep_cfun g) (esem E F k)"
+  "esem (smap g E) data F k = map_option (Rep_cfun g) (esem E data F k)"
   by (simp_all add: smap_def)
 
-theorem lawful_smap: assumes "lawfulE E" shows "lawfulE (smap g E)"
+theorem lawful_smap: assumes "lawful E" shows "lawful (smap g E)"
 proof -
-  interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
+  interpret E: expr_sem slicing rules keying E
     by (fact assms)
   show ?thesis
   proof (rule lawfulI, simp_all only: smap_simps)
+    show "supported f" if "(a, \<rho>, f) \<in> set (edims E)" for a \<rho> f
+      by (rule E.entries_supported[OF that])
     show "truncate \<rho> (emind E) \<sqsubseteq> a" if "(a, \<rho>, f) \<in> set (edims E)" for a \<rho> f
       by (rule E.saturated[OF that])
     show "emind E = fold (\<squnion>) (map fst (edims E)) \<bottom>" by (rule E.mind_lub)
-    show "map_option (Rep_cfun g) (esem E F k) = map_option (Rep_cfun g) (esem E F' k')"
-      if "proj (emind E \<squnion> flod F)\<cdot>k = k" "proj (emind E \<squnion> flod F')\<cdot>k' = k'"
-        "contents (edims E) F k = contents (edims E) F' k'" for F F' k k'
+    show "map_option (Rep_cfun g) (esem E data F k) = map_option (Rep_cfun g) (esem E data' F' k')"
+      if d: "conforms data" and d': "conforms data'" and "proj (emind E \<squnion> flod F)\<cdot>k = k" "proj (emind E \<squnion> flod F')\<cdot>k' = k'"
+        "contents data (edims E) F k = contents data' (edims E) F' k'" for data data' F F' k k'
       by (simp only: E.content_law[OF that])
-    show "keyimg S F (emind E \<squnion> flod F) k" if "map_option (Rep_cfun g) (esem E F k) \<noteq> None" for F k
-      using that by (intro E.key_law) simp
+    show "keyimg data F (emind E \<squnion> flod F) k" if d: "conforms data" and "map_option (Rep_cfun g) (esem E data F k) \<noteq> None" for data F k
+      using that(2) by (intro E.key_law[OF d]) simp
   qed
 qed
 
@@ -127,49 +131,51 @@ abbreviation frestrict_key :: "'f \<Rightarrow> ('k semi_factor, 'f, 'r) frame \
 definition restrict :: "'f \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "restrict G E = \<lparr>emind = emind E,
      edims = map (\<lambda>(a, \<rho>, f). (a, \<rho>, obs_pair f (obs_holds G))) (edims E),
-     esem = \<lambda>F. esem E (frestrict_key G F)\<rparr>"
+     esem = \<lambda>data F. esem E data (frestrict_key G F)\<rparr>"
 
 lemma restrict_simps [simp]:
   "emind (restrict G E) = emind E"
   "edims (restrict G E) = map (\<lambda>(a, \<rho>, f). (a, \<rho>, obs_pair f (obs_holds G))) (edims E)"
-  "esem (restrict G E) F = esem E (frestrict_key G F)"
+  "esem (restrict G E) data F = esem E data (frestrict_key G F)"
   by (simp_all add: restrict_def)
 
 lemma group_frestrict_key:
-  "group a \<rho> (frestrict_key G F) k = {y \<in> group a \<rho> F k. holds G (rkey\<cdot>y)}"
+  "group data a \<rho> (frestrict_key G F) k = {y \<in> group data a \<rho> F k. holds G (rkey\<cdot>y)}"
   by (auto simp: group_def holds_def)
 
 lemma content_frestrict_key:
-  "content (a, \<rho>, f) (frestrict_key G F) k = sel_snd (emb\<cdot>TT) (content (a, \<rho>, obs_pair f (obs_holds G)) F k)"
+  "content data (a, \<rho>, f) (frestrict_key G F) k = sel_snd (emb\<cdot>TT) (content data (a, \<rho>, obs_pair f (obs_holds G)) F k)"
   by (simp add: sel_snd_obs_pair obs_holds_TT group_frestrict_key)
 
-theorem lawful_restrict: assumes "lawfulE E" shows "lawfulE (restrict G E)"
+theorem lawful_restrict: assumes "lawful E" shows "lawful (restrict G E)"
 proof -
-  interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
+  interpret E: expr_sem slicing rules keying E
     by (fact assms)
   let ?t = "\<lambda>(a, \<rho>, f). (a, \<rho>, obs_pair f (obs_holds G))"
   show ?thesis
   proof (rule lawfulI, simp_all only: restrict_simps)
+    show "supported f" if "(a, \<rho>, f) \<in> set (map ?t (edims E))" for a \<rho> f
+      using that by (auto intro: supported_obs_pair supported_obs_holds E.entries_supported)
     show "truncate \<rho> (emind E) \<sqsubseteq> a" if "(a, \<rho>, f) \<in> set (map ?t (edims E))" for a \<rho> f
       using that by (auto intro: E.saturated)
     show "emind E = fold (\<squnion>) (map fst (map ?t (edims E))) \<bottom>"
       using map_fst_tuple[of "\<lambda>\<rho>. \<rho>" "\<lambda>\<rho> f. obs_pair f (obs_holds G)" "edims E"]
       by (simp only: E.mind_lub[symmetric])
-    show "esem E (frestrict_key G F) k = esem E (frestrict_key G F') k'"
-      if k: "proj (emind E \<squnion> flod F)\<cdot>k = k" "proj (emind E \<squnion> flod F')\<cdot>k' = k'"
-        and e: "contents (map ?t (edims E)) F k = contents (map ?t (edims E)) F' k'" for F F' k k'
-    proof (rule E.content_law)
+    show "esem E data (frestrict_key G F) k = esem E data' (frestrict_key G F') k'"
+      if d: "conforms data" and d': "conforms data'" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k" "proj (emind E \<squnion> flod F')\<cdot>k' = k'"
+        and e: "contents data (map ?t (edims E)) F k = contents data' (map ?t (edims E)) F' k'" for data data' F F' k k'
+    proof (rule E.content_law[OF d d'])
       show "proj (emind E \<squnion> flod (frestrict_key G F))\<cdot>k = k" using k(1) by simp
       show "proj (emind E \<squnion> flod (frestrict_key G F'))\<cdot>k' = k'" using k(2) by simp
-      have inner: "contents (edims E) (frestrict_key G H) \<kappa>
-          = map (sel_snd (emb\<cdot>TT)) (contents (map ?t (edims E)) H \<kappa>)" for H \<kappa>
+      have inner: "contents data (edims E) (frestrict_key G H) \<kappa>
+          = map (sel_snd (emb\<cdot>TT)) (contents data (map ?t (edims E)) H \<kappa>)" for data H \<kappa>
         by (auto simp: content_def content_frestrict_key[simplified] split: prod.splits)
-      show "contents (edims E) (frestrict_key G F) k = contents (edims E) (frestrict_key G F') k'"
+      show "contents data (edims E) (frestrict_key G F) k = contents data' (edims E) (frestrict_key G F') k'"
         by (simp only: inner e)
     qed
-    show "keyimg S F (emind E \<squnion> flod F) k" if "esem E (frestrict_key G F) k \<noteq> None" for F k
+    show "keyimg data F (emind E \<squnion> flod F) k" if d: "conforms data" and "esem E data (frestrict_key G F) k \<noteq> None" for data F k
     proof -
-      have "keyimg S (frestrict_key G F) (emind E \<squnion> flod F) k"
+      have "keyimg data (frestrict_key G F) (emind E \<squnion> flod F) k"
         using E.key_law[OF that] by simp
       then show ?thesis by (rule keyimg_mono[rotated]) (simp add: frows_frestrict)
     qed
@@ -185,20 +191,20 @@ text \<open>\<open>E FOR \<tau> G\<close>: the inner expression under the frame 
 
 definition filtfor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "filtfor \<tau> G E = \<lparr>emind = emind E,
-     edims = (emind E, lattice_top, \<bottom>) #
+     edims = (emind E, lattice_top, obs_bot) #
        map (\<lambda>(a, \<rho>, f). (a, \<rho> \<sqinter> \<tau>, obs_pair f (obs_holds (coarsen \<rho> G)))) (edims E),
-     esem = \<lambda>F k. if keyimg S F (emind E \<squnion> flod F) k
-       then esem E (ffor \<tau> G F) (proj (emind E \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None\<rparr>"
+     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> flod F) k
+       then esem E data (ffor \<tau> G F) (proj (emind E \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None\<rparr>"
 
 abbreviation fixed :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "fixed D \<equiv> filtfor D \<^bold>1"
 
 lemma filtfor_simps [simp]:
   "emind (filtfor \<tau> G E) = emind E"
-  "edims (filtfor \<tau> G E) = (emind E, lattice_top, \<bottom>) #
+  "edims (filtfor \<tau> G E) = (emind E, lattice_top, obs_bot) #
        map (\<lambda>(a, \<rho>, f). (a, \<rho> \<sqinter> \<tau>, obs_pair f (obs_holds (coarsen \<rho> G)))) (edims E)"
-  "esem (filtfor \<tau> G E) F k = (if keyimg S F (emind E \<squnion> flod F) k
-       then esem E (ffor \<tau> G F) (proj (emind E \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None)"
+  "esem (filtfor \<tau> G E) data F k = (if keyimg data F (emind E \<squnion> flod F) k
+       then esem E data (ffor \<tau> G F) (proj (emind E \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None)"
   by (simp_all add: filtfor_def)
 
 text \<open>Inside the truncated frame, at the truncated key, a group is the outer group through the
@@ -206,8 +212,8 @@ text \<open>Inside the truncated frame, at the truncated key, a group is the out
 
 lemma group_ffor:
   assumes am: "a \<sqsubseteq> m"
-  shows "group a \<rho> (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
-       = {y \<in> group a (\<rho> \<sqinter> \<tau>) F k. holds (coarsen \<rho> G) (rkey\<cdot>y)}"
+  shows "group data a \<rho> (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
+       = {y \<in> group data a (\<rho> \<sqinter> \<tau>) F k. holds (coarsen \<rho> G) (rkey\<cdot>y)}"
 proof -
   let ?X = "a \<squnion> truncate (\<rho> \<sqinter> \<tau>) (flod F)"
   have lod: "a \<squnion> truncate \<rho> (flod (ffor \<tau> G F)) = ?X" by (simp add: truncate_inf_comp)
@@ -222,25 +228,25 @@ qed
 
 lemma content_ffor:
   assumes "a \<sqsubseteq> m"
-  shows "content (a, \<rho>, f) (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
-       = sel_snd (emb\<cdot>TT) (content (a, \<rho> \<sqinter> \<tau>, obs_pair f (obs_holds (coarsen \<rho> G))) F k)"
+  shows "content data (a, \<rho>, f) (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
+       = sel_snd (emb\<cdot>TT) (content data (a, \<rho> \<sqinter> \<tau>, obs_pair f (obs_holds (coarsen \<rho> G))) F k)"
   by (simp only: content_simp group_ffor[OF assms]) (simp add: sel_snd_obs_pair obs_holds_TT)
 
 lemma content_const_top:
   assumes "proj (c \<squnion> flod F)\<cdot>k = k"
-  shows "content (c, lattice_top, \<bottom>) F k = (if keyimg S F (c \<squnion> flod F) k then {\<bottom>} else {})"
+  shows "content data (c, lattice_top, obs_bot) F k = (if keyimg data F (c \<squnion> flod F) k then {\<bottom>} else {})"
   by (auto simp: keyimg_group_top[OF assms])
 
-theorem lawful_filtfor: assumes "lawfulE E" shows "lawfulE (filtfor \<tau> G E)"
+theorem lawful_filtfor: assumes "lawful E" shows "lawful (filtfor \<tau> G E)"
 proof -
-  interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
+  interpret E: expr_sem slicing rules keying E
     by (fact assms)
   let ?m = "emind E"
   let ?t = "\<lambda>(a, \<rho>, f). (a, \<rho> \<sqinter> \<tau>, obs_pair f (obs_holds (coarsen \<rho> G)))"
-  have inner: "contents (edims E) (ffor \<tau> G H) (proj (?m \<squnion> flod (ffor \<tau> G H))\<cdot>\<kappa>)
-      = map (sel_snd (emb\<cdot>TT)) (contents (map ?t (edims E)) H \<kappa>)" for H \<kappa>
+  have inner: "contents data (edims E) (ffor \<tau> G H) (proj (?m \<squnion> flod (ffor \<tau> G H))\<cdot>\<kappa>)
+      = map (sel_snd (emb\<cdot>TT)) (contents data (map ?t (edims E)) H \<kappa>)" for data H \<kappa>
   proof -
-    have "content e (ffor \<tau> G H) (proj (?m \<squnion> flod (ffor \<tau> G H))\<cdot>\<kappa>) = sel_snd (emb\<cdot>TT) (content (?t e) H \<kappa>)"
+    have "content data e (ffor \<tau> G H) (proj (?m \<squnion> flod (ffor \<tau> G H))\<cdot>\<kappa>) = sel_snd (emb\<cdot>TT) (content data (?t e) H \<kappa>)"
       if e: "e \<in> set (edims E)" for e
     proof -
       obtain a \<rho> f where ae: "e = (a, \<rho>, f)" by (cases e) auto
@@ -251,7 +257,9 @@ proof -
   qed
   show ?thesis
   proof (rule lawfulI, simp_all only: filtfor_simps)
-    show "truncate \<rho> ?m \<sqsubseteq> a" if "(a, \<rho>, f) \<in> set ((?m, lattice_top, \<bottom>) # map ?t (edims E))" for a \<rho> f
+    show "supported f" if "(a, \<rho>, f) \<in> set ((?m, lattice_top, obs_bot) # map ?t (edims E))" for a \<rho> f
+      using that by (auto intro: supported_obs_bot supported_obs_pair supported_obs_holds E.entries_supported)
+    show "truncate \<rho> ?m \<sqsubseteq> a" if "(a, \<rho>, f) \<in> set ((?m, lattice_top, obs_bot) # map ?t (edims E))" for a \<rho> f
     proof -
       from that consider "a = ?m" "\<rho> = lattice_top" | \<rho>0 f0 where "(a, \<rho>0, f0) \<in> set (edims E)" "\<rho> = \<rho>0 \<sqinter> \<tau>"
         by auto
@@ -266,7 +274,7 @@ proof -
         finally show ?thesis .
       qed
     qed
-    show "?m = fold (\<squnion>) (map fst ((?m, lattice_top, \<bottom>) # map ?t (edims E))) \<bottom>"
+    show "?m = fold (\<squnion>) (map fst ((?m, lattice_top, obs_bot) # map ?t (edims E))) \<bottom>"
     proof -
       have a: "fold (\<squnion>) (map fst (edims E)) ?m = ?m"
         by (rule fold_join_absorb) (auto intro: E.lower_below_mind)
@@ -274,26 +282,26 @@ proof -
       show ?thesis
         by (simp only: list.map(2) mf fst_conv fold.simps(2) comp_apply a lattice_join_bot_right)
     qed
-    show "keyimg S F (?m \<squnion> flod F) k"
-      if "(if keyimg S F (?m \<squnion> flod F) k
-          then esem E (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None) \<noteq> None" for F k
+    show "keyimg data F (?m \<squnion> flod F) k"
+      if d: "conforms data" and "(if keyimg data F (?m \<squnion> flod F) k
+          then esem E data (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None) \<noteq> None" for data F k
       using that by (simp split: if_splits)
-    show "(if keyimg S F (?m \<squnion> flod F) k
-          then esem E (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None)
-        = (if keyimg S F' (?m \<squnion> flod F') k'
-          then esem E (ffor \<tau> G F') (proj (?m \<squnion> flod (ffor \<tau> G F'))\<cdot>k') else None)"
-      if k: "proj (?m \<squnion> flod F)\<cdot>k = k" "proj (?m \<squnion> flod F')\<cdot>k' = k'"
-        and e: "contents ((?m, lattice_top, \<bottom>) # map ?t (edims E)) F k
-              = contents ((?m, lattice_top, \<bottom>) # map ?t (edims E)) F' k'" for F F' k k'
+    show "(if keyimg data F (?m \<squnion> flod F) k
+          then esem E data (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k) else None)
+        = (if keyimg data' F' (?m \<squnion> flod F') k'
+          then esem E data' (ffor \<tau> G F') (proj (?m \<squnion> flod (ffor \<tau> G F'))\<cdot>k') else None)"
+      if d: "conforms data" and d': "conforms data'" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" "proj (?m \<squnion> flod F')\<cdot>k' = k'"
+        and e: "contents data ((?m, lattice_top, obs_bot) # map ?t (edims E)) F k
+              = contents data' ((?m, lattice_top, obs_bot) # map ?t (edims E)) F' k'" for data data' F F' k k'
     proof -
-      have eh: "content (?m, lattice_top, \<bottom>) F k = content (?m, lattice_top, \<bottom>) F' k'"
-        and et: "contents (map ?t (edims E)) F k = contents (map ?t (edims E)) F' k'"
+      have eh: "content data (?m, lattice_top, obs_bot) F k = content data' (?m, lattice_top, obs_bot) F' k'"
+        and et: "contents data (map ?t (edims E)) F k = contents data' (map ?t (edims E)) F' k'"
         using e by (simp_all only: list.map list.inject)
-      have g: "keyimg S F (?m \<squnion> flod F) k \<longleftrightarrow> keyimg S F' (?m \<squnion> flod F') k'"
+      have g: "keyimg data F (?m \<squnion> flod F) k \<longleftrightarrow> keyimg data' F' (?m \<squnion> flod F') k'"
         using eh by (simp only: content_const_top[OF k(1)] content_const_top[OF k(2)]) (simp split: if_splits)
-      have v: "esem E (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
-          = esem E (ffor \<tau> G F') (proj (?m \<squnion> flod (ffor \<tau> G F'))\<cdot>k')"
-        by (rule E.content_law) (simp_all only: proj_idem inner et)
+      have v: "esem E data (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
+          = esem E data' (ffor \<tau> G F') (proj (?m \<squnion> flod (ffor \<tau> G F'))\<cdot>k')"
+        by (rule E.content_law[OF d d']) (simp_all only: proj_idem inner et)
       show ?thesis using g v by simp
     qed
   qed
@@ -312,28 +320,28 @@ definition collect_shift :: "'k semi_factor \<Rightarrow> ('k, 'r) entry \<Right
 definition collect :: "('k, 'f, 'r, 'a::domain) expr list \<Rightarrow> ('k, 'f, 'r, 'a ltuple) expr" where
   "collect Es = (let M = fold (\<squnion>) (map emind Es) \<bottom> in
      \<lparr>emind = M, edims = concat (map (\<lambda>E. map (collect_shift M) (edims E)) Es),
-      esem = \<lambda>F k. map_option ltuple_of (those (map (\<lambda>E. esem E (finclude M F) k) Es))\<rparr>)"
+      esem = \<lambda>data F k. map_option ltuple_of (those (map (\<lambda>E. esem E data (finclude M F) k) Es))\<rparr>)"
 
 lemma collect_simps:
   "emind (collect Es) = fold (\<squnion>) (map emind Es) \<bottom>"
   "edims (collect Es) = concat (map (\<lambda>E. map (collect_shift (emind (collect Es))) (edims E)) Es)"
-  "esem (collect Es) F k
-     = map_option ltuple_of (those (map (\<lambda>E. esem E (finclude (emind (collect Es)) F) k) Es))"
+  "esem (collect Es) data F k
+     = map_option ltuple_of (those (map (\<lambda>E. esem E data (finclude (emind (collect Es)) F) k) Es))"
   by (simp_all add: collect_def Let_def)
 
-lemma content_collect_shift: "content (collect_shift M e) F k = content e (finclude M F) k"
+lemma content_collect_shift: "content data (collect_shift M e) F k = content data e (finclude M F) k"
 proof (cases e)
   case (fields a \<rho> f)
   have lod: "(a \<squnion> truncate \<rho> M) \<squnion> truncate \<rho> (flod F) = a \<squnion> truncate \<rho> (flod (finclude M F))"
     by (simp add: truncate_sup lattice_join_ac)
-  have "group (a \<squnion> truncate \<rho> M) \<rho> F k = group a \<rho> (finclude M F) k"
+  have "group data (a \<squnion> truncate \<rho> M) \<rho> F k = group data a \<rho> (finclude M F) k"
     by (rule group_cong) (simp_all only: amb_finclude slice_finclude lod)
   then show ?thesis by (simp add: fields collect_shift_def)
 qed
 
 theorem lawful_collect:
-  assumes ne: "Es \<noteq> []" and law: "\<And>E. E \<in> set Es \<Longrightarrow> lawfulE E"
-  shows "lawfulE (collect Es)"
+  assumes ne: "Es \<noteq> []" and law: "\<And>E. E \<in> set Es \<Longrightarrow> lawful E"
+  shows "lawful (collect Es)"
 proof -
   let ?M = "fold (\<squnion>) (map emind Es) \<bottom>"
   have mE: "emind E \<sqsubseteq> ?M" if "E \<in> set Es" for E
@@ -347,6 +355,9 @@ proof -
   have M: "emind (collect Es) = ?M" by (simp add: collect_simps)
   show ?thesis
   proof (rule lawfulI, simp_all only: collect_simps M)
+    show "supported f"
+      if "(a, \<rho>, f) \<in> set (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es))" for a \<rho> f
+      using that by (auto simp: collect_shift_def intro: lawful_supported[OF law])
     show "truncate \<rho> ?M \<sqsubseteq> a"
       if "(a, \<rho>, f) \<in> set (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es))" for a \<rho> f
       using that by (auto simp: collect_shift_def split: prod.splits intro: lattice_join_ge2)
@@ -357,7 +368,7 @@ proof -
       proof (rule fold_join_least)
         fix x assume "x \<in> set (map emind Es)"
         then obtain E where E: "E \<in> set Es" and x: "x = emind E" by auto
-        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
+        interpret E: expr_sem slicing rules keying E
           by (rule law[OF E])
         show "x \<sqsubseteq> ?R" unfolding x E.mind_lub
         proof (rule fold_join_least)
@@ -374,41 +385,41 @@ proof -
         fix x assume "x \<in> set (map fst (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es)))"
         then obtain E a \<rho> f where E: "E \<in> set Es" and e: "(a, \<rho>, f) \<in> set (edims E)"
           and x: "x = a \<squnion> truncate \<rho> ?M" by (auto simp: collect_shift_def split: prod.splits)
-        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
+        interpret E: expr_sem slicing rules keying E
           by (rule law[OF E])
         have "a \<sqsubseteq> ?M" by (rule below_trans[OF E.lower_below_mind[OF e] mE[OF E]])
         then show "x \<sqsubseteq> ?M" unfolding x by (rule lattice_join_least[OF _ truncate_below])
       qed simp
     qed
-    show "map_option ltuple_of (those (map (\<lambda>E. esem E (finclude ?M F) k) Es))
-        = map_option ltuple_of (those (map (\<lambda>E. esem E (finclude ?M F') k') Es))"
-      if k: "proj (?M \<squnion> flod F)\<cdot>k = k" "proj (?M \<squnion> flod F')\<cdot>k' = k'"
-        and e: "contents (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es)) F k
-              = contents (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es)) F' k'" for F F' k k'
+    show "map_option ltuple_of (those (map (\<lambda>E. esem E data (finclude ?M F) k) Es))
+        = map_option ltuple_of (those (map (\<lambda>E. esem E data' (finclude ?M F') k') Es))"
+      if d: "conforms data" and d': "conforms data'" and k: "proj (?M \<squnion> flod F)\<cdot>k = k" "proj (?M \<squnion> flod F')\<cdot>k' = k'"
+        and e: "contents data (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es)) F k
+              = contents data' (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es)) F' k'" for data data' F F' k k'
     proof -
-      have c: "contents (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es)) G \<kappa>
-          = concat (map (\<lambda>E. contents (edims E) (finclude ?M G) \<kappa>) Es)" for G \<kappa>
+      have c: "contents data (concat (map (\<lambda>E. map (collect_shift ?M) (edims E)) Es)) G \<kappa>
+          = concat (map (\<lambda>E. contents data (edims E) (finclude ?M G) \<kappa>) Es)" for data G \<kappa>
         by (simp add: map_concat map_map comp_def content_collect_shift)
-      have blocks: "contents (edims E) (finclude ?M F) k = contents (edims E) (finclude ?M F') k'"
+      have blocks: "contents data (edims E) (finclude ?M F) k = contents data' (edims E) (finclude ?M F') k'"
         if E: "E \<in> set Es" for E
         by (rule concat_map_blocks[where xs = Es, OF e[unfolded c c] _ E]) simp
-      have "esem E (finclude ?M F) k = esem E (finclude ?M F') k'" if E: "E \<in> set Es" for E
+      have "esem E data (finclude ?M F) k = esem E data' (finclude ?M F') k'" if E: "E \<in> set Es" for E
       proof -
-        interpret E: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E" "edims E" "esem E"
+        interpret E: expr_sem slicing rules keying E
           by (rule law[OF E])
-        show ?thesis by (rule E.content_law[OF _ _ blocks[OF E]]) (simp_all only: kd[OF E] k)
+        show ?thesis by (rule E.content_law[OF d d' _ _ blocks[OF E]]) (simp_all only: kd[OF E] k)
       qed
       then show ?thesis by (simp cong: map_cong)
     qed
-    show "keyimg S F (?M \<squnion> flod F) k"
-      if "map_option ltuple_of (those (map (\<lambda>E. esem E (finclude ?M F) k) Es)) \<noteq> None" for F k
+    show "keyimg data F (?M \<squnion> flod F) k"
+      if d: "conforms data" and "map_option ltuple_of (those (map (\<lambda>E. esem E data (finclude ?M F) k) Es)) \<noteq> None" for data F k
     proof -
       obtain E0 where E0: "E0 \<in> set Es" using ne by (cases Es) auto
-      interpret E0: expr_sem conj sunit slod sopen coarsen spin rkey S "emind E0" "edims E0" "esem E0"
+      interpret E0: expr_sem slicing rules keying E0
         by (rule law[OF E0])
-      have "esem E0 (finclude ?M F) k \<noteq> None"
+      have "esem E0 data (finclude ?M F) k \<noteq> None"
         using that E0 by (auto simp: those_not_None_iff simp del: not_None_eq)
-      then have "keyimg S (finclude ?M F) (emind E0 \<squnion> flod (finclude ?M F)) k" by (rule E0.key_law)
+      then have "keyimg data (finclude ?M F) (emind E0 \<squnion> flod (finclude ?M F)) k" by (rule E0.key_law[OF d])
       then show ?thesis by (simp only: kd[OF E0] keyimg_cong[OF frows_finclude])
     qed
   qed

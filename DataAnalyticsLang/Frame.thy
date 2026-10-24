@@ -1,6 +1,8 @@
 theory Frame
-  imports Slicer
+  imports Slicer Views
 begin
+
+default_sort type
 
 section \<open>Frames\<close>
 
@@ -53,14 +55,13 @@ lemma amb_frestrict [simp]: "amb (frestrict \<phi> F) = inf (amb F) \<phi>"
 
 section \<open>Frame semantics\<close>
 
-text \<open>Rows have keys, via \<open>rkey\<close>; a frame selects the rows in its ambient filter whose key its
-  slice holds at.\<close>
+text \<open>A dataspace fixes a slicer and a schema with keys; datasets are elements of the lower
+  powerdomain of rows, their data points the maximal members.  Rows have keys, via \<open>rkey\<close>; a frame
+  selects the rows in its ambient filter whose key its slice holds at.\<close>
 
-locale frame_sem = pin_slicer conj sunit slod sopen coarsen spin
-  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and slod :: "'f \<Rightarrow> 'k::{dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel"
-    and coarsen spin +
-  fixes rkey :: "'r::pcpo \<rightarrow> 'k"
+locale dataspace = slicer slicing + keyed_schema rules keying
+  for slicing :: "('f, 'k::{domain, dI, locally_finitely_detailed}) slicer_ops"
+    and rules :: "'r::{bifinite, distributive_cpo} schema_rules" and keying :: "('r, 'k) keying"
 begin
 
 definition frows :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> bool" where
@@ -115,42 +116,32 @@ section \<open>Key images\<close>
 
 text \<open>The keys a frame has at an LOD are the projections of the data points it selects.\<close>
 
-context frame_sem
+context dataspace
 begin
 
-definition keyimg :: "'r set \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> bool" where
-  "keyimg S F c k \<longleftrightarrow> (\<exists>x\<in>pts S. frows F x \<and> k = proj c\<cdot>(rkey\<cdot>x))"
+definition keyimg :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> bool" where
+  "keyimg data F c k \<longleftrightarrow> (\<exists>x\<in>lower_maximal data. frows F x \<and> k = proj c\<cdot>(rkey\<cdot>x))"
 
-lemma keyimg_cong: "frows F = frows F' \<Longrightarrow> keyimg S F c = keyimg S F' c"
+lemma keyimg_cong: "frows F = frows F' \<Longrightarrow> keyimg data F c = keyimg data F' c"
   by (simp add: keyimg_def fun_eq_iff)
 
-lemma keyimg_mono: "(\<And>r. frows F r \<Longrightarrow> frows F' r) \<Longrightarrow> keyimg S F c k \<Longrightarrow> keyimg S F' c k"
+lemma keyimg_mono: "(\<And>r. frows F r \<Longrightarrow> frows F' r) \<Longrightarrow> keyimg data F c k \<Longrightarrow> keyimg data F' c k"
   unfolding keyimg_def by blast
 
 text \<open>Keys conform to the slice.\<close>
 
-lemma keyimg_slicer: "keyimg S F c k \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
+lemma keyimg_slicer: "keyimg data F c k \<Longrightarrow> \<exists>k'. k \<sqsubseteq> k' \<and> holds (slice F) k'"
   unfolding keyimg_def frows_def using proj_below by blast
 
-lemma keyimg_peg_iff: "compact K \<Longrightarrow> keyimg S (peg K F) c K \<longleftrightarrow> keyimg S F c K"
+lemma keyimg_peg_iff: "compact K \<Longrightarrow> keyimg data (peg K F) c K \<longleftrightarrow> keyimg data F c K"
   unfolding keyimg_def by (auto simp: frows_peg proj_below)
 
 end
 
-section \<open>Dataspaces\<close>
-
-locale dataspace = frame_sem conj sunit slod sopen coarsen spin rkey
-  for conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) and sunit :: 'f (\<open>\<^bold>1\<close>)
-    and slod :: "'f \<Rightarrow> 'k::{domain, dI, locally_finitely_detailed} semi_factor" and sopen :: "'f \<Rightarrow> 'k sel"
-    and coarsen spin and rkey :: "'r::pcpo \<rightarrow> 'k" +
-  fixes S :: "'r set"
-  assumes dataset_S: "dataset S"
+context dataspace
 begin
 
 text \<open>An LOD is read on rows through their keys; reading at a join of LODs is reading at both.\<close>
-
-abbreviation rproj :: "'k semi_factor \<Rightarrow> 'r \<Rightarrow> 'k" where
-  "rproj L x \<equiv> proj L\<cdot>(rkey\<cdot>x)"
 
 lemma rproj_sup_eq: "rproj (a \<squnion> b) y = rproj (a \<squnion> b) z \<longleftrightarrow> rproj a y = rproj a z \<and> rproj b y = rproj b z"
 proof
