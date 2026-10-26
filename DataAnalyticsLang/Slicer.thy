@@ -261,7 +261,7 @@ hide_const (open) slicer_ops.truncate
 locale slicer = conj: semilattice_neutr "sl_conj slicing" "sl_unit slicing" +
   slod: semilattice_hom "sl_conj slicing" "sl_unit slicing" "(\<squnion>)" \<bottom> "sl_lod slicing" +
   sopen: semilattice_hom "sl_conj slicing" "sl_unit slicing" inf top "sl_open slicing"
-  for slicing :: "('f, 'k::{dI, locally_finitely_detailed}) slicer_ops" +
+  for slicing :: "('f, 'k::lod_domain) slicer_ops" +
   assumes sopen_lod: "selects (sl_open slicing f) (proj (sl_lod slicing f)\<cdot>k) \<longleftrightarrow> selects (sl_open slicing f) k"
     and slod_compact: "compact (sl_lod slicing f)"
     and coarsen_conj: "sl_coarsen slicing A (sl_conj slicing a b) =
@@ -273,9 +273,6 @@ locale slicer = conj: semilattice_neutr "sl_conj slicing" "sl_unit slicing" +
     and coarsen_slod: "sl_coarsen slicing A f = sl_coarsen slicing (A \<sqinter> sl_lod slicing f) f"
     and coarsen_coarsen: "sl_coarsen slicing A (sl_coarsen slicing B f) = sl_coarsen slicing (A \<sqinter> B) f"
     and sopen_spin: "compact K \<Longrightarrow> selects (sl_open slicing (sl_pin slicing K)) k \<longleftrightarrow> K \<sqsubseteq> k"
-    and coarsen_spin: "compact K \<Longrightarrow> sl_coarsen slicing A (sl_pin slicing K) = sl_pin slicing (proj A\<cdot>K)"
-    and spin_join: "compact K1 \<Longrightarrow> compact K2 \<Longrightarrow> K1 \<Up> K2 \<Longrightarrow>
-      sl_pin slicing (K1 \<squnion> K2) = sl_conj slicing (sl_pin slicing K1) (sl_pin slicing K2)"
 begin
 
 abbreviation conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) where "conj \<equiv> sl_conj slicing"
@@ -394,8 +391,9 @@ subsection \<open>Pins\<close>
 
 text \<open>\<open>spin K\<close> is the slice pinning the key \<open>K\<close>: on keys, the principal upset of \<open>K\<close>.  It is only
   specified for compact keys, whose upsets are open.  The slicer picks the LOD a pin is written
-  at; nothing is assumed about it, but it is always one the key lives at.  Pins coarsen by
-  truncating the key, and compatible pins conjoin to the pin of the join.\<close>
+  at; nothing is assumed about it, but it is always one the key lives at.  Nothing is assumed of
+  coarsened pins either: by @{thm [source] coarsen_cut} they hold above the truncated key, and a
+  syntactic slicer may lose more (coarsening \<open>date = d\<close> to the month drops it).\<close>
 
 
 lemma holds_spin: "compact K \<Longrightarrow> holds (spin K) k \<longleftrightarrow> K \<sqsubseteq> k"
@@ -409,6 +407,9 @@ proof -
   then have "K \<sqsubseteq> proj (slod (spin K))\<cdot>K" by (simp only: holds_spin[OF assms])
   then show ?thesis using proj_below by (rule below_antisym[rotated])
 qed
+
+lemma holds_coarsen_spin: "compact K \<Longrightarrow> proj A\<cdot>K \<sqsubseteq> k \<Longrightarrow> holds (coarsen A (spin K)) k"
+  by (rule holds_up[OF holds_coarsen_cut]) (simp_all add: holds_spin)
 
 text \<open>A slice below a pin only holds above the pinned key.\<close>
 

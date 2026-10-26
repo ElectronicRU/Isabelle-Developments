@@ -794,7 +794,7 @@ lemma compact_tupleI:
   shows "compact K"
 proof (rule compactI)
   have "(\<not> K \<sqsubseteq> u) \<longleftrightarrow> (\<exists>d\<in>tsupp K. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)" for u
-    by (auto simp: tuple_below_iff tsupp_def)
+    by (auto simp: tuple_below_iff tsupp_def) (metis minimal)
   moreover have "adm (\<lambda>u. \<exists>d\<in>tsupp K. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)"
     using assms(1) proof (rule adm_finite_bex)
     show "adm (\<lambda>u. \<not> K\<langle>d\<rangle> \<sqsubseteq> u\<langle>d\<rangle>)" for d

@@ -132,6 +132,16 @@ instance top :: (bounded_complete) lattice_complete
 instance "fun" :: (type, lattice_complete) lattice_complete
   by intro_classes (rule exI[of _ "\<lambda>_. lattice_top"], simp add: fun_below_iff)
 
+instance prod :: (lattice_complete, lattice_complete) lattice_complete
+  by intro_classes (rule exI[of _ "(lattice_top, lattice_top)"], simp add: below_prod_def)
+
+lemma lattice_top_prod: "lattice_top = (lattice_top :: 'a::lattice_complete, lattice_top :: 'b::lattice_complete)"
+  by (rule below_antisym) (simp add: below_prod_def, rule below_lattice_top)
+
+lemma lattice_join_prod: "x \<squnion> y = (fst x \<squnion> fst y, snd x \<squnion> snd y)"
+  for x y :: "'a::lattice_complete \<times> 'b::lattice_complete"
+  by (rule prod_join[OF joinable_lattice])
+
 lemma lattice_top_fun: "lattice_top = (\<lambda>_. lattice_top :: 'b::lattice_complete)"
   by (rule below_antisym) (simp add: fun_below_iff, rule below_lattice_top)
 

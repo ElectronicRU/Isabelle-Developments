@@ -6,19 +6,6 @@ context po begin
 
 definition below_strict (infix \<open>\<sqsubset>\<close> 50) where "a \<sqsubset> b = (a \<sqsubseteq> b \<and> \<not>(b \<sqsubseteq> a))"
 
-text \<open>Being a least element, without assuming one exists.\<close>
-
-definition is_bot :: "'a \<Rightarrow> bool" where "is_bot x \<longleftrightarrow> (\<forall>y. x \<sqsubseteq> y)"
-
-text \<open>Classical rules for @{const is_bot} are stated at \<open>po\<close> level only and never mention \<open>\<bottom>\<close>
-  (see @{text is_bot_iff} below for why).\<close>
-
-lemma is_botI [intro]: "(\<And>y. x \<sqsubseteq> y) \<Longrightarrow> is_bot x"
-  by (simp add: is_bot_def)
-
-lemma is_botD [dest]: "is_bot x \<Longrightarrow> x \<sqsubseteq> y"
-  by (simp add: is_bot_def)
-
 text \<open>Stated as a fact rather than a \<open>sublocale\<close>: a sublocale into a locale with derived constants
   breaks later subclasses whose assumptions need a finer sort (Isabelle class bug).\<close>
 
@@ -135,27 +122,6 @@ lemmas po_locale_eqs [class_locale_eqs] =
   po_class.is_ub_dict[symmetric] po_class.is_lub_dict[symmetric] po_class.lub_dict[symmetric]
   po_class.is_glb_dict[symmetric] po_class.glb_dict[symmetric]
   po_class.meet_dict[symmetric] po_class.join_dict[symmetric]
-
-text \<open>In a pcpo, @{const is_bot} is just \<open>x = \<bottom>\<close>.  Deliberately \<open>[simp]\<close> only, not \<open>[iff]\<close>: as a
-  classical rule it is tried by @{method blast}, which ignores sort constraints during search and
-  so applies this \<open>pcpo\<close>-only equation at merely \<open>po\<close> types, blowing up on goals as simple as an
-  \<open>obtain\<close> of a non-least element.\<close>
-
-lemma is_bot_iff [simp]: "is_bot (x::'a::pcpo) \<longleftrightarrow> x = \<bottom>"
-  by (auto simp: is_bot_def intro: bottomI)
-
-text \<open>The safe half as a classical rule: it only consumes an existing (hence well-sorted)
-  hypothesis \<open>x = \<bottom>\<close>, never produces one.\<close>
-
-lemma bottom_is_bot [dest]: "x = \<bottom> \<Longrightarrow> is_bot x"
-  by simp
-
-text \<open>For tableau provers, which substitute equations \<open>x = \<bottom>\<close> away and are then left with this.
-  Unsafe \<open>[intro]\<close> only: as \<open>[intro!]\<close> it hangs @{method blast} on \<open>po\<close>-level goals (blast's own
-  unknowns get committed to an ill-sorted \<open>\<bottom>\<close>).\<close>
-
-lemma is_bot_bottom [intro]: "is_bot (\<bottom>::'a::pcpo)"
-  by simp
 
 lemma (in pcpo) join_bottom[simp]: "\<bottom> \<squnion> a = a" "a \<squnion> \<bottom> = a"
   by (simp_all add: join_absorb join_absorb2)

@@ -58,6 +58,12 @@ qed
 class locally_finitely_detailed = bifinite + distributive_cpo +
   assumes compact_level: "compact k \<Longrightarrow> \<exists>F. finitary_semi_factor F \<and> k \<downharpoonright> F = k"
 
+text \<open>The domains of rows and keys: locally finitely detailed with algebraic semi-factors.  For
+  now the latter is property I of dI-domains; it is meant to weaken to algebraicity of the
+  semi-factors alone, which separated sums also give.\<close>
+
+class lod_domain = dI + locally_finitely_detailed
+
 subsection \<open>Levels through the constructions\<close>
 
 
@@ -730,7 +736,7 @@ lemma compact_proj_lub:
   by (rule compact_finite_lub[OF _ _ semi_factor_p_lub_is_lub]) (use assms in auto)
 
 lemma compact_proj_principal:
-  fixes k :: "'a::{dI, locally_finitely_detailed}"
+  fixes k :: "'a::lod_domain"
   assumes "compact k"
   shows "compact (x \<downharpoonright> semi_factor_principal k)"
 proof -
@@ -741,7 +747,7 @@ proof -
 qed
 
 theorem compact_semi_factor_proj:
-  fixes K :: "'a::{dI, locally_finitely_detailed} semi_factor"
+  fixes K :: "'a::lod_domain semi_factor"
   assumes "compact K"
   shows "compact (x \<downharpoonright> K)"
 proof -
@@ -779,7 +785,7 @@ lemma proj_slide: "proj a\<cdot>y = y \<Longrightarrow> proj a\<cdot>x \<sqsubse
   by (rule semi_factor_defl.slide[OF semi_factor_defl_semi_factor_p])
 
 lemma proj_compact: "compact a \<Longrightarrow> compact (proj a\<cdot>k)"
-  for a :: "'k::{dI, locally_finitely_detailed} semi_factor"
+  for a :: "'k::lod_domain semi_factor"
   by (rule compact_semi_factor_proj)
 
 lemma compact_lives: "compact k \<Longrightarrow> \<exists>c. compact c \<and> proj c\<cdot>k = k" for k :: "'k::dI"
@@ -827,7 +833,7 @@ lemma lives_at_proj: "lives_at a (proj a\<cdot>k)"
   unfolding lives_at_def by simp
 
 lemma compact_iff_lives: "compact k \<longleftrightarrow> (\<exists>c. compact c \<and> lives_at c k)"
-  for k :: "'k::{dI, locally_finitely_detailed}"
+  for k :: "'k::lod_domain"
   unfolding lives_at_def by (metis compact_lives proj_compact)
 
 lemma lods_of_nonempty: "compact k \<Longrightarrow> lods_of k \<noteq> {}" for k :: "'k::dI"
@@ -876,7 +882,7 @@ lemma maximal_at_lives: "maximal_at c k \<Longrightarrow> proj c\<cdot>k = k"
   by (simp add: maximal_at_def)
 
 lemma maximal_at_compact: "maximal_at c k \<Longrightarrow> compact c \<Longrightarrow> compact k"
-  for c :: "'k::{dI, locally_finitely_detailed} semi_factor"
+  for c :: "'k::lod_domain semi_factor"
   by (metis maximal_at_lives proj_compact)
 
 text \<open>A key below one living at the same LOD is that key, when it is maximal there.\<close>
@@ -973,57 +979,54 @@ text \<open>A \<^emph>\<open>mask\<close> is a semi-factor, possibly non-compact
   truncations, i.e. of maps obeying \<open>\<tau> (x \<sqinter> y) = x \<sqinter> \<tau> y\<close>, which on a complete lattice
   are exactly the meets with a fixed element.)\<close>
 
-abbreviation truncate :: "'l::lattice_complete \<Rightarrow> 'l \<Rightarrow> 'l" where
-  "truncate m x \<equiv> m \<sqinter> x"
-
-lemma truncate_inf: "truncate \<tau> (x \<sqinter> y) = x \<sqinter> truncate \<tau> y"
+lemma truncate_inf: "\<tau> \<sqinter> (x \<sqinter> y) = x \<sqinter> (\<tau> \<sqinter> y)" for \<tau> :: "'l::lattice_complete"
   by (rule lattice_meet_left_commute)
 
 context
   fixes \<tau> :: "'l::{lattice_complete, distributive_cpo}"
 begin
 
-lemma truncate_below: "truncate \<tau> x \<sqsubseteq> x"
+lemma truncate_below: "(\<tau> \<sqinter> x) \<sqsubseteq> x"
   by (rule lattice_meet_le2)
 
-lemma truncate_idem: "truncate \<tau> (truncate \<tau> x) = truncate \<tau> x"
+lemma truncate_idem: "(\<tau> \<sqinter> (\<tau> \<sqinter> x)) = (\<tau> \<sqinter> x)"
   by (rule lattice_meet_left_idem)
 
-lemma truncate_mono: "x \<sqsubseteq> y \<Longrightarrow> truncate \<tau> x \<sqsubseteq> truncate \<tau> y"
+lemma truncate_mono: "x \<sqsubseteq> y \<Longrightarrow> (\<tau> \<sqinter> x) \<sqsubseteq> (\<tau> \<sqinter> y)"
   by (rule lattice_meet_mono[OF below_refl])
 
-lemma truncate_inf_hom: "truncate \<tau> (x \<sqinter> y) = truncate \<tau> x \<sqinter> truncate \<tau> y"
+lemma truncate_inf_hom: "(\<tau> \<sqinter> (x \<sqinter> y)) = (\<tau> \<sqinter> x) \<sqinter> (\<tau> \<sqinter> y)"
   by (simp add: lattice_meet_ac)
 
-lemma truncate_sup: "truncate \<tau> (x \<squnion> y) = truncate \<tau> x \<squnion> truncate \<tau> y"
+lemma truncate_sup: "(\<tau> \<sqinter> (x \<squnion> y)) = (\<tau> \<sqinter> x) \<squnion> (\<tau> \<sqinter> y)"
   by (rule lattice_meet_join_distrib1)
 
-lemma truncate_bot: "truncate \<tau> \<bottom> = \<bottom>"
+lemma truncate_bot: "(\<tau> \<sqinter> \<bottom>) = \<bottom>"
   by (rule lattice_meet_bot_right)
 
-lemma truncate_fix_down: "truncate \<tau> c = c \<Longrightarrow> d \<sqsubseteq> c \<Longrightarrow> truncate \<tau> d = d"
+lemma truncate_fix_down: "(\<tau> \<sqinter> c) = c \<Longrightarrow> d \<sqsubseteq> c \<Longrightarrow> (\<tau> \<sqinter> d) = d"
   by (metis lattice_meet_absorb2 lattice_meet_le1 below_trans)
 
-lemma truncate_fix_sup: "truncate \<tau> c = c \<Longrightarrow> truncate \<tau> d = d \<Longrightarrow> truncate \<tau> (c \<squnion> d) = c \<squnion> d"
+lemma truncate_fix_sup: "(\<tau> \<sqinter> c) = c \<Longrightarrow> (\<tau> \<sqinter> d) = d \<Longrightarrow> (\<tau> \<sqinter> (c \<squnion> d)) = c \<squnion> d"
   by (simp add: truncate_sup)
 
-lemma truncate_greatest: "truncate \<tau> c = c \<Longrightarrow> c \<sqsubseteq> x \<Longrightarrow> c \<sqsubseteq> truncate \<tau> x"
+lemma truncate_greatest: "(\<tau> \<sqinter> c) = c \<Longrightarrow> c \<sqsubseteq> x \<Longrightarrow> c \<sqsubseteq> (\<tau> \<sqinter> x)"
   by (metis truncate_mono)
 
 text \<open>Within \<open>a\<close>, truncating more than \<open>a\<close> is truncating \<open>a\<close>.\<close>
 
-lemma truncate_inf_sup: "truncate \<tau> (a \<squnion> b) \<sqinter> a = truncate \<tau> a"
+lemma truncate_inf_sup: "(\<tau> \<sqinter> (a \<squnion> b)) \<sqinter> a = (\<tau> \<sqinter> a)"
   by (metis lattice_meet_assoc lattice_meet_commute lattice_meet_join_absorb)
 
 end
 
-lemma truncate_inf_comp: "truncate (\<rho> \<sqinter> \<tau>) x = truncate \<rho> (truncate \<tau> x)"
+lemma truncate_inf_comp: "(\<rho> \<sqinter> \<tau>) \<sqinter> x = \<rho> \<sqinter> (\<tau> \<sqinter> x)" for x :: "'l::lattice_complete"
   by (rule lattice_meet_assoc)
 
-lemma truncate_top: "truncate lattice_top x = x"
+lemma truncate_top: "lattice_top \<sqinter> x = x" for x :: "'l::lattice_complete"
   by (rule lattice_meet_top_left)
 
-lemma truncate_bot_trunc: "truncate \<bottom> x = \<bottom>"
+lemma truncate_bot_trunc: "\<bottom> \<sqinter> x = \<bottom>" for x :: "'l::lattice_complete"
   by (rule lattice_meet_bot_left)
 
 subsection \<open>Masks acting on keys\<close>
@@ -1032,14 +1035,14 @@ text \<open>A mask acts on keys by projection, through any LOD the key lives at.
 
 lemma truncate_proj_irrelevant:
   assumes c: "lives_at c k" and c': "lives_at c' k"
-  shows "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c')\<cdot>k"
+  shows "proj ((\<tau> \<sqinter> c))\<cdot>k = proj ((\<tau> \<sqinter> c'))\<cdot>k"
 proof -
-  have e: "truncate \<tau> c \<sqinter> c' = truncate \<tau> c' \<sqinter> c" by (metis truncate_inf lattice_meet_commute)
-  have "proj (truncate \<tau> c)\<cdot>k = proj (truncate \<tau> c)\<cdot>(proj c'\<cdot>k)" using c' by (simp add: lives_at_def)
-  also have "\<dots> = proj (truncate \<tau> c \<sqinter> c')\<cdot>k" by (simp only: proj_inf)
-  also have "\<dots> = proj (truncate \<tau> c' \<sqinter> c)\<cdot>k" by (simp only: e)
-  also have "\<dots> = proj (truncate \<tau> c')\<cdot>(proj c\<cdot>k)" by (simp only: proj_inf)
-  also have "\<dots> = proj (truncate \<tau> c')\<cdot>k" using c by (simp add: lives_at_def)
+  have e: "(\<tau> \<sqinter> c) \<sqinter> c' = (\<tau> \<sqinter> c') \<sqinter> c" by (metis truncate_inf lattice_meet_commute)
+  have "proj ((\<tau> \<sqinter> c))\<cdot>k = proj ((\<tau> \<sqinter> c))\<cdot>(proj c'\<cdot>k)" using c' by (simp add: lives_at_def)
+  also have "\<dots> = proj ((\<tau> \<sqinter> c) \<sqinter> c')\<cdot>k" by (simp only: proj_inf)
+  also have "\<dots> = proj ((\<tau> \<sqinter> c') \<sqinter> c)\<cdot>k" by (simp only: e)
+  also have "\<dots> = proj ((\<tau> \<sqinter> c'))\<cdot>(proj c\<cdot>k)" by (simp only: proj_inf)
+  also have "\<dots> = proj ((\<tau> \<sqinter> c'))\<cdot>k" using c by (simp add: lives_at_def)
   finally show ?thesis .
 qed
 
@@ -1048,7 +1051,7 @@ definition truncate_key :: "'k::{bifinite, distributive_cpo} semi_factor \<Right
 
 lemma truncate_key_eq:
   assumes c: "lives_at c k"
-  shows "truncate_key \<tau> k = proj (truncate \<tau> c)\<cdot>k"
+  shows "truncate_key \<tau> k = proj ((\<tau> \<sqinter> c))\<cdot>k"
   using c by (simp add: truncate_key_def proj_inf lives_at_def)
 
 subsection \<open>Compact maps\<close>

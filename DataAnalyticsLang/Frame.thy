@@ -32,7 +32,7 @@ text \<open>The level-of-detail constructs act on the frame an inner expression 
 definition finclude :: "'l::po \<Rightarrow> ('l, 'f::type, 'r::pcpo) frame \<Rightarrow> ('l, 'f, 'r) frame" where
   "finclude D F = F\<lparr>flod := flod F \<squnion> D\<rparr>"
 
-lemma flod_finclude [simp]: "flod (finclude D F) = flod F \<squnion> D"
+lemma flod_finclude: "flod (finclude D F) = flod F \<squnion> D"
   by (simp add: finclude_def)
 
 lemma amb_finclude [simp]: "amb (finclude D F) = amb F"
@@ -60,8 +60,8 @@ text \<open>A dataspace fixes a slicer and a schema with keys; datasets are elem
   selects the rows in its ambient filter whose key its slice holds at.\<close>
 
 locale dataspace = slicer slicing + keyed_schema rules keying
-  for slicing :: "('f, 'k::{domain, dI, locally_finitely_detailed}) slicer_ops"
-    and rules :: "'r::{bifinite, distributive_cpo} schema_rules" and keying :: "('r, 'k) keying"
+  for slicing :: "('f, 'k::{domain, lod_domain}) slicer_ops"
+    and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying"
 begin
 
 definition frows :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r \<Rightarrow> bool" where
@@ -77,9 +77,9 @@ lemma frows_frestrict: "frows (frestrict \<phi> F) r \<longleftrightarrow> frows
   by (auto simp: frows_def)
 
 definition ffor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> ('k semi_factor, 'f, 'r) frame" where
-  "ffor \<tau> G F = F\<lparr>flod := truncate \<tau> (flod F), slice := coarsen \<tau> (slice F) \<^bold>* G\<rparr>"
+  "ffor \<tau> G F = F\<lparr>flod := (\<tau> \<sqinter> flod F), slice := coarsen \<tau> (slice F) \<^bold>* G\<rparr>"
 
-lemma flod_ffor [simp]: "flod (ffor \<tau> G F) = truncate \<tau> (flod F)"
+lemma flod_ffor [simp]: "flod (ffor \<tau> G F) = (\<tau> \<sqinter> flod F)"
   and amb_ffor [simp]: "amb (ffor \<tau> G F) = amb F"
   and slice_ffor [simp]: "slice (ffor \<tau> G F) = coarsen \<tau> (slice F) \<^bold>* G"
   by (simp_all add: ffor_def)

@@ -1,6 +1,6 @@
 session DataAnalyticsLang = "HOLCF" +
   options [document = pdf, document_output = "output"]
-  sessions "HOLCF-extra" "Order_Lattice_Props"
+  sessions "HOLCF-extra" "HOLCF-Library"
   theories
     Typing
     Domain
@@ -19,7 +19,10 @@ session DataAnalyticsLang = "HOLCF" +
     Value
     Content_Law
     Expr_Combinators
+    Key_Reduction
     Aggregate
+    Ast
+    Ast_Semantics
     Bag_Join
   document_files
     "root.tex"
