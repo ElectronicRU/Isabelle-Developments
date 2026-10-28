@@ -31,7 +31,7 @@ definition faithful :: "('a::pcpo \<rightarrow> 'a) \<Rightarrow> bool" where
 lemma finitary_bottom: "finitary \<bottom>"
   by (simp add: finitary_def)
 
-text \<open>Over a locally finitely detailed dI-domain the compact semi-factors, which are the levels of
+text \<open>Over a locally finitely detailed domain with principals the compact semi-factors, which are the levels of
   detail, are finitary (\<open>compact_semi_factor_proj\<close> below).  The constructions act on
   the deflations; @{const semi_factor_of_defl} turns the result back into a semi-factor.\<close>
 
@@ -58,11 +58,10 @@ qed
 class locally_finitely_detailed = bifinite + distributive_cpo +
   assumes compact_level: "compact k \<Longrightarrow> \<exists>F. finitary_semi_factor F \<and> k \<downharpoonright> F = k"
 
-text \<open>The domains of rows and keys: locally finitely detailed with algebraic semi-factors.  For
-  now the latter is property I of dI-domains; it is meant to weaken to algebraicity of the
-  semi-factors alone, which separated sums also give.\<close>
+text \<open>The domains of rows and keys: locally finitely detailed, with principal semi-factors of
+  compacts, hence algebraic semi-factors (@{class principal_semifactor}; dI-domains have them).\<close>
 
-class lod_domain = dI + locally_finitely_detailed
+class lod_domain = principal_semifactor + locally_finitely_detailed
 
 subsection \<open>Levels through the constructions\<close>
 
@@ -692,7 +691,7 @@ section \<open>Projections onto semi-factors\<close>
 
 text \<open>Levels of detail are compact semi-factors of the key domain, acting on keys by projection;
   masks are arbitrary semi-factors.  The facts are stated for all semi-factors, with compactness
-  of the semi-factor (and locally finitely detailed dI keys) where compactness of keys is needed.
+  of the semi-factor (and keys of class @{class lod_domain}) where compactness of keys is needed.
   (They took over the names of the facts of the retired locale \<open>lod_space\<close>.)\<close>
 
 abbreviation proj :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> 'k \<rightarrow> 'k" where
@@ -700,13 +699,13 @@ abbreviation proj :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow>
 
 subsection \<open>Compact semi-factors project to compact keys\<close>
 
-text \<open>Over a dI-domain every compact semi-factor is a finite join of principals of compacts
+text \<open>With principal semi-factors every compact semi-factor is a finite join of principals of compacts
   (@{thm [source] compact_semi_factor_finite_join}).  Over a locally finitely detailed one the
   principal of a compact lies below a semi-factor all of whose elements are compact, and finite
   joins keep that property.  So compact semi-factors project every key to a compact one.
   (Without local finite detail this fails: in the separated sum of the powerset of the naturals
   and a point, the principal of the point is the whole domain.)  Projections of compact keys are
-  compact over any dI-domain, everything below a compact element being compact.\<close>
+  compact as well: a compact key lives at its principal, whose projections are compact.\<close>
 
 lemma compact_finite_lub:
   fixes u :: "'a::cpo"
@@ -757,8 +756,17 @@ proof -
     by (rule compact_proj_lub) (use A(1,2) in \<open>auto intro: compact_proj_principal\<close>)
 qed
 
-lemma compact_proj_compact: "compact k \<Longrightarrow> compact (k \<downharpoonright> (F :: 'a::dI semi_factor))"
-  by (rule compact_below_compact[OF _ deflation.below[OF deflation_semi_factor_p]])
+lemma compact_proj_compact:
+  fixes F :: "'a::lod_domain semi_factor"
+  assumes k: "compact k"
+  shows "compact (k \<downharpoonright> F)"
+proof -
+  let ?P = "semi_factor_principal k"
+  have "k \<downharpoonright> F = (k \<downharpoonright> ?P) \<downharpoonright> F" by (simp only: semi_factor_principal_self)
+  also have "\<dots> = k \<downharpoonright> (?P \<sqinter> F)" by (rule semi_factor_proj_comp)
+  finally show ?thesis
+    by (simp only:) (rule compact_proj_below[OF lattice_meet_le1 compact_proj_principal[OF k]])
+qed
 
 lemma proj_inf: "proj (a \<sqinter> b)\<cdot>k = proj a\<cdot>(proj b\<cdot>k)"
   by (simp add: semi_factor_proj_comp lattice_meet_commute)
@@ -788,7 +796,7 @@ lemma proj_compact: "compact a \<Longrightarrow> compact (proj a\<cdot>k)"
   for a :: "'k::lod_domain semi_factor"
   by (rule compact_semi_factor_proj)
 
-lemma compact_lives: "compact k \<Longrightarrow> \<exists>c. compact c \<and> proj c\<cdot>k = k" for k :: "'k::dI"
+lemma compact_lives: "compact k \<Longrightarrow> \<exists>c. compact c \<and> proj c\<cdot>k = k" for k :: "'k::principal_semifactor"
   by (blast intro: compact_semi_factor_principal semi_factor_principal_self)
 
 lemma proj_join: "x \<Up> y \<Longrightarrow> proj a\<cdot>(x \<squnion> y) = proj a\<cdot>x \<squnion> proj a\<cdot>y"
@@ -836,7 +844,7 @@ lemma compact_iff_lives: "compact k \<longleftrightarrow> (\<exists>c. compact c
   for k :: "'k::lod_domain"
   unfolding lives_at_def by (metis compact_lives proj_compact)
 
-lemma lods_of_nonempty: "compact k \<Longrightarrow> lods_of k \<noteq> {}" for k :: "'k::dI"
+lemma lods_of_nonempty: "compact k \<Longrightarrow> lods_of k \<noteq> {}" for k :: "'k::principal_semifactor"
   unfolding lods_of_def lives_at_def using compact_lives by blast
 
 text \<open>Projection keeps maximal keys maximal among the keys living at the LOD.\<close>
