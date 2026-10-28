@@ -1,5 +1,5 @@
 theory Slicer
-  imports ValsetBase Congruence LOD "HOL-Library.FSet"
+  imports Row LOD "HOL-Library.FSet"
 begin
 
 default_sort type
@@ -38,9 +38,6 @@ text \<open>The kernel order of a projection \<open>p\<close> on keys (in practi
 
 definition kern :: "(('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> 'r \<Rightarrow> 'r \<Rightarrow> bool" where
   "kern p x y \<longleftrightarrow> p\<cdot>(keyof\<cdot>x) \<sqsubseteq> p\<cdot>(keyof\<cdot>y)"
-
-lemma is_cong_kern: "is_cong (kern p)"
-  unfolding kern_def by unfold_locales (auto intro: below_trans monofun_cfun_arg)
 
 lemma kern_bot: "kern \<bottom> x y"
   by (simp add: kern_def)

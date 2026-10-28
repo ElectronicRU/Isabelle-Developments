@@ -8,16 +8,13 @@ session DataAnalyticsLang = "HOLCF-extra" +
     Domain
     Interp
     Subdomain
-    Semi_Factor_DI
-    ValsetBase
-    Congruence
+    Algebraic_Semi_Factor
+    Row
     Slicer
-    Relspace
     Schema
     Views
     Frame
     LOD
-    Domain_Transfer
     Value
     Content_Law
     Expr_Combinators

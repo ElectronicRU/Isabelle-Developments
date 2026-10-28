@@ -39,7 +39,7 @@ Other theories present (WIP / not yet in ROOT): `Cpo_Topology`, `Interval_Space`
 
 ### `DataAnalyticsLang/` — a domain-theoretic data-analytics language
 ROOT builds: `Typing`, `Domain`, `Interp`. Depends on session `HOLCF-extra`.
-Other theories present (WIP): `Subdomain`, `StrongIdeal`, `ValsetBase`, `Valsets`.
+Other theories present (WIP): `Subdomain`, `StrongIdeal`, `Row`, `Valsets`.
 Theme: powerdomains for partial information / approximate queries (cf. the
 Buneman–Jung–Ohori & Libkin papers indexed below).
 

@@ -1,5 +1,5 @@
 theory LOD
-  imports ValsetBase "HOLCF-extra.Filter_Sum" "HOLCF-extra.Domain_Order_Derive" Semi_Factor_DI
+  imports Row "HOLCF-extra.Filter_Sum" "HOLCF-extra.Domain_Order_Derive" Algebraic_Semi_Factor
     "HOL-Library.FSet"
 begin
 

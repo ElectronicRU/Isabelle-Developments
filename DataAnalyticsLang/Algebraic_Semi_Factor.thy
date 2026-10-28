@@ -1,4 +1,4 @@
-theory Semi_Factor_DI
+theory Algebraic_Semi_Factor
   imports Subdomain "HOLCF-extra.DI" "HOLCF-extra.Algebraic_Lattice" "HOL-Library.Countable_Set"
 begin
 
