@@ -641,6 +641,93 @@ proof -
   qed
 qed
 
+text \<open>The plain gate leaves a lawful covering expression alone: its entries are saturated, so
+  raising does not change them, the frame refinement does not change its contents, and off the
+  realised keys it is absent already by the key law.\<close>
+
+theorem gate_lawful_covering:
+  assumes EL: "lawful E" and cov: "covering E"
+  shows "edims (gate \<bottom> E) = edims E" and "csem (gate \<bottom> E) = csem E"
+    and "conforms data \<Longrightarrow> esem (gate \<bottom> E) data F k = esem E data F k"
+proof -
+  let ?m = "emind E"
+  have g: "gate \<bottom> E = gate_raise \<bottom> E" using cov by (simp add: gate_def)
+  have "map (include_entry ?m) (edims E) = edims E"
+    by (rule map_idI) (rule include_entry_saturated[OF lawful_saturated[OF EL]])
+  then show "edims (gate \<bottom> E) = edims E" by (simp add: g)
+  show "csem (gate \<bottom> E) = csem E" by (simp add: g)
+  assume d: "conforms data"
+  have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
+  show "esem (gate \<bottom> E) data F k = esem E data F k"
+  proof (cases "keyimg data F (?m \<squnion> flod F) k")
+    case True
+    then obtain x where kx: "k = rproj (kd E F) x" by (auto simp: keyimg_def)
+    have kd: "kd E (finclude ?m F) = kd E F"
+    proof -
+      have "?m \<squnion> (flod F \<squnion> ?m) = (?m \<squnion> flod F) \<squnion> ?m" by (metis lattice_join_assoc)
+      also have "\<dots> = ?m \<squnion> flod F" by (rule lattice_join_absorb1[OF lattice_join_ge1])
+      finally show ?thesis by (simp only: flod_finclude)
+    qed
+    have k: "proj (kd E F)\<cdot>k = k" by (simp add: kx)
+    have "esem E data (finclude ?m F) k = esem E data F k"
+      using contents_kd[OF EL amb_finclude slice_finclude kd]
+      by (simp only: semilawful_csem[OF ES d k] semilawful_csem[OF ES d k[folded kd]])
+    then show ?thesis using True by (simp add: g)
+  next
+    case False
+    have "esem E data F k = None" using lawful_key_law[OF EL d] False by blast
+    then show ?thesis using False by (simp add: g)
+  qed
+qed
+
+text \<open>Covering is necessary, given rich enough data.  A lawful expression present at every
+  realised key cannot see the same contents at a realised and at an unrealised key.  If no entry of
+  a row-level expression has upper part \<open>\<top>\<close>, rich data gives exactly such a pair: over keys that are
+  tuples of independent dimensions with rows equal to keys, take the rows that differ from a key
+  \<open>k\<close> in exactly one dimension.  Then \<open>k\<close> is not realised, but every group LOD misses a dimension, so
+  every fiber at \<open>k\<close> holds the row changed there, and a row entry reads only the part of it its
+  group fixes, which is \<open>k\<close>'s; adding the row \<open>k\<close> itself changes no content.  (The construction is
+  not yet formalised; the general case needs views keyed within their group LODs: subdividing
+  entries can jointly reveal a realising row.)\<close>
+
+definition total :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+  "total E \<longleftrightarrow> (\<forall>data F k. conforms data \<longrightarrow> keyimg data F (kd E F) k \<longrightarrow> esem E data F k \<noteq> None)"
+
+theorem lawful_total_separates:
+  assumes EL: "lawful E" and T: "total E" and d: "conforms data" "conforms data'"
+    and k: "proj (kd E F)\<cdot>k = k"
+    and nk: "\<not> keyimg data F (kd E F) k" and rk: "keyimg data' F (kd E F) k"
+  shows "contents data (edims E) F k \<noteq> contents data' (edims E) F k"
+proof
+  assume c: "contents data (edims E) F k = contents data' (edims E) F k"
+  have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
+  have "esem E data F k = None" using lawful_key_law[OF EL d(1)] nk by blast
+  moreover have "esem E data' F k \<noteq> None" using T d(2) rk by (simp add: total_def)
+  ultimately show False by (simp add: semilawful_csem[OF ES d(1) k] semilawful_csem[OF ES d(2) k] c)
+qed
+
+text \<open>The entry-level half of the construction: a row entry's content at a key is the point
+  content of any row of its fiber, so two datasets whose fibers are both non-empty and carry the
+  same section at the view's key give the same content.\<close>
+
+lemma row_entry_content_eq:
+  assumes e: "entry_wf e" and r: "row_entry e" and d: "conforms data" "conforms data'"
+    and x: "x \<in> efiber data e F k" and x': "x' \<in> efiber data' e F k"
+    and s: "cpair e x = cpair e x'"
+  shows "content data e F k = content data' e F k"
+proof -
+  have one: "cgraph D e F k = {cpair e y}" if dD: "conforms D" and y: "y \<in> efiber D e F k" for D y
+  proof -
+    let ?G = "sel_at (esel e) (flod F)" and ?Y = "group D (elower e) (eupper e) F k"
+    have yY: "y \<in> ?Y" and gy: "eguard e\<cdot>y = TT" using y by (simp_all add: efiber_def)
+    have "cpair e ` {z \<in> ?Y. eguard e\<cdot>z = TT} = (if eguard e\<cdot>y = TT then {cpair e y} else {})"
+      by (rule row_entry_image[OF e r dD _ yY lattice_join_ge1[of "elower e" "eupper e \<sqinter> flod F"]])
+        (use yY in \<open>auto simp: group_def\<close>)
+    then show ?thesis using gy by (simp add: cgraph_def efiber_def)
+  qed
+  show ?thesis unfolding content_def one[OF d(1) x] one[OF d(2) x'] s ..
+qed
+
 subsection \<open>Collect\<close>
 
 text \<open>The components are evaluated under the frame itself, each at its own key; their entries are
