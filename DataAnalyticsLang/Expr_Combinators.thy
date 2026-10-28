@@ -588,6 +588,59 @@ lemma gate_simps [simp]:
 theorem lawful_gate: "semilawful E \<Longrightarrow> lawful (gate M E)"
   unfolding gate_def by (simp add: lawful_gate_raise lawful_gate_presence)
 
+text \<open>Gating is idempotent: a gated expression covers, so gating it again only raises its entries,
+  which are raised already.  A lawful covering expression is left alone by the plain gate: its
+  entries are saturated, so raising does not change them, and the presence test and the frame
+  refinement are already implied by the key law.\<close>
+
+lemma include_entry_saturated: "eupper e \<sqinter> m \<sqsubseteq> elower e \<Longrightarrow> include_entry m e = e"
+  by (simp add: include_entry_def lattice_join_absorb1)
+
+lemma include_entry_idem: "include_entry m (include_entry m e) = include_entry m e"
+  by (rule include_entry_saturated) (simp add: lattice_join_ge2)
+
+lemma covering_gate: "covering (gate M E)"
+proof (cases "covering E")
+  case True
+  then obtain t where "t \<in> set (edims E)" "eupper t = lattice_top" by (auto simp: covering_def)
+  then show ?thesis using True by (force simp: gate_def covering_def)
+qed (simp add: gate_def covering_def)
+
+lemma finclude_finclude_same: "finclude (m :: 'k semi_factor) (finclude m F) = finclude m F"
+proof -
+  have "flod F \<squnion> m \<squnion> m = flod F \<squnion> m" by (rule lattice_join_absorb1[OF lattice_join_ge2])
+  then show ?thesis by (simp add: finclude_def)
+qed
+
+lemma keyimg_finclude: "keyimg data (finclude m F) c k = keyimg data F c k"
+  by (simp add: keyimg_def frows_def)
+
+theorem gate_idem: "gate M (gate M E) = gate M E"
+proof -
+  let ?m = "emind E \<squnion> M"
+  have mM: "?m \<squnion> M = ?m" by (rule lattice_join_absorb1[OF lattice_join_ge2])
+  have kd: "?m \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
+  proof -
+    have "?m \<squnion> (flod F \<squnion> ?m) = (?m \<squnion> flod F) \<squnion> ?m" by (metis lattice_join_assoc)
+    also have "\<dots> = ?m \<squnion> flod F" by (rule lattice_join_absorb1[OF lattice_join_ge1])
+    finally show ?thesis by (simp only: flod_finclude)
+  qed
+  have head: "include_entry ?m (mk_entry (sel ?m lattice_top) gtrue \<bottom>) = mk_entry (sel ?m lattice_top) gtrue \<bottom>"
+    by (rule include_entry_saturated) (simp add: truncate_top)
+  have es: "esem (gate_raise M (gate M E)) = esem (gate M E)"
+    by (simp add: fun_eq_iff mM kd keyimg_finclude finclude_finclude_same)
+  show ?thesis
+  proof (cases "covering E")
+    case True
+    show ?thesis unfolding gate_def[of M "gate M E"] using covering_gate[of M E] es True
+      by (simp add: gate_def mM include_entry_idem comp_def)
+  next
+    case False
+    show ?thesis unfolding gate_def[of M "gate M E"] using covering_gate[of M E] es False
+      by (simp add: gate_def mM include_entry_idem comp_def head)
+  qed
+qed
+
 subsection \<open>Collect\<close>
 
 text \<open>The components are evaluated under the frame itself, each at its own key; their entries are
