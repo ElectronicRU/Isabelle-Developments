@@ -6,11 +6,13 @@ default_sort type
 
 section \<open>The content law\<close>
 
-text \<open>An expression reads its data through a finite list of \<^emph>\<open>generalized tables\<close>.  An entry's
-  \<^emph>\<open>selector\<close> \<open>(a, \<rho>)\<close> picks the fiber: the rows of the frame whose key agrees with the key at hand
-  at \<open>a \<squnion> \<rho> \<sqinter> L\<close>, for the frame LOD \<open>L\<close>, among the rows passing the ambient filter and the slice
-  coarsened to \<open>\<rho>\<close>.  Its guard cuts the fiber down, and its \<^emph>\<open>view\<close> \<open>(c, \<kappa>)\<close> reads the rest: the
-  content maps each row's key at \<open>\<kappa>\<close> to its section at \<open>c\<close>, which the key determines.  The
+text \<open>An expression reads its data through two finite lists of \<^emph>\<open>generalized tables\<close>.  An entry's
+  \<^emph>\<open>selector\<close> \<open>(a, \<rho>)\<close> picks the fiber: the rows whose key agrees with the key at hand at
+  \<open>a \<squnion> \<rho> \<sqinter> L\<close>, for the frame LOD \<open>L\<close>.  A \<^emph>\<open>guard entry\<close> cuts its fiber down by the frame's
+  filters (the ambient filter and the slice coarsened to \<open>\<rho>\<close>) and its guard, and records the keys
+  of the remaining rows: presence, ignoring the values.  A \<^emph>\<open>value entry\<close> reads its whole fiber
+  through a view \<open>(c, \<kappa>)\<close>: the content maps each row's key at \<open>\<kappa>\<close> to its section at \<open>c\<close>, which
+  the key determines.  The frame's filters only reach the data through the guards.  The
   \<^emph>\<open>content law\<close> says that the semantics at a key is a function of these contents.\<close>
 
 subsection \<open>Observations\<close>
@@ -98,8 +100,13 @@ definition gsel :: "'r::pcpo guard \<Rightarrow> 'r sel" where
 lemma selects_gsel [simp]: "selects (gsel \<gamma>) y \<longleftrightarrow> \<gamma>\<cdot>y = TT"
   by (simp add: gsel_def)
 
-text \<open>An entry: a selector, picking the fiber; a guard, cutting it down; and a view, whose key
-  part keys the content and whose section is recorded at each key.\<close>
+text \<open>An entry: a selector, picking the fiber; a key part, keying the content; and a payload.  A
+  \<^emph>\<open>guard entry\<close> carries a guard.  Its content is the set of keys, at its key part, of the rows
+  of its group (the fiber cut down by the frame's filters) passing the guard: it ignores the values,
+  and it is the only place where the frame's filters act.  A \<^emph>\<open>value entry\<close> carries a section.  Its
+  content maps each key, at its key part, of the rows of its fiber (all rows of the dataset at the
+  selector) to their section there, which the key determines.  Presence comes from the guards,
+  values from the value entries.\<close>
 
 record 'k selector =
   lower_part :: "'k semi_factor"
@@ -115,36 +122,75 @@ text \<open>A selector is the affine LOD map \<open>L \<mapsto> a \<squnion> \<r
 abbreviation sel_at :: "('k::{bifinite, distributive_cpo}) selector \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor" where
   "sel_at S L \<equiv> lower_part S \<squnion> (upper_part S \<sqinter> L)"
 
-record ('k::"{domain, distributive_cpo}", 'r::"{domain, distributive_cpo}") entry =
+record ('k::"{domain, distributive_cpo}", 'p) entry =
   esel :: "'k selector"
-  eguard :: "'r guard"
-  eview :: "('r, 'k) view"
+  ekeys :: "'k semi_factor"
+  epay :: 'p
 
 hide_const (open) entry.truncate
 
-abbreviation elower :: "('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo}) entry \<Rightarrow> 'k semi_factor" where
+abbreviation elower :: "('k::{domain, distributive_cpo}, 'p) entry \<Rightarrow> 'k semi_factor" where
   "elower e \<equiv> lower_part (esel e)"
 
-abbreviation eupper :: "('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo}) entry \<Rightarrow> 'k semi_factor" where
+abbreviation eupper :: "('k::{domain, distributive_cpo}, 'p) entry \<Rightarrow> 'k semi_factor" where
   "eupper e \<equiv> upper_part (esel e)"
 
-abbreviation ekeys :: "('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo}) entry \<Rightarrow> 'k semi_factor" where
-  "ekeys e \<equiv> snd (eview e)"
+abbreviation eguard :: "('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo} guard) entry \<Rightarrow> 'r guard" where
+  "eguard e \<equiv> epay e"
 
-abbreviation ecols :: "('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo}) entry \<Rightarrow> 'r semi_factor" where
-  "ecols e \<equiv> fst (eview e)"
+abbreviation ecols :: "('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo} semi_factor) entry \<Rightarrow> 'r semi_factor" where
+  "ecols e \<equiv> epay e"
 
-abbreviation mk_entry ::
-  "'k selector \<Rightarrow> 'r guard \<Rightarrow> ('r, 'k) view \<Rightarrow> ('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo}) entry" where
-  "mk_entry S \<gamma> v \<equiv> \<lparr>esel = S, eguard = \<gamma>, eview = v\<rparr>"
+abbreviation eview :: "('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo} semi_factor) entry \<Rightarrow> ('r, 'k) view" where
+  "eview e \<equiv> (ecols e, ekeys e)"
+
+abbreviation mk_guard ::
+  "'k selector \<Rightarrow> 'r guard \<Rightarrow> 'k semi_factor \<Rightarrow> ('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo} guard) entry" where
+  "mk_guard S \<gamma> \<kappa> \<equiv> \<lparr>esel = S, ekeys = \<kappa>, epay = \<gamma>\<rparr>"
+
+abbreviation mk_value ::
+  "'k selector \<Rightarrow> 'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo} semi_factor) entry" where
+  "mk_value S c \<kappa> \<equiv> \<lparr>esel = S, ekeys = \<kappa>, epay = c\<rparr>"
+
+text \<open>An expression's content semantics takes the guards' contents, sets of keys, as a plain
+  argument, and is continuous in the value entries' contents.\<close>
 
 record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::cpo) expr =
   emind :: "'k semi_factor"
-  edims :: "('k, 'r) entry list"
+  eguards :: "('k, 'r guard) entry list"
+  evalues :: "('k, 'r semi_factor) entry list"
   esem :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<rightharpoonup> 'v"
-  csem :: "('k \<Rightarrow> 'r option) list \<rightarrow> 'v option"
+  csem :: "'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<rightarrow> 'v option"
 
 hide_const (open) expr.truncate
+
+text \<open>The selectors of all of an expression's entries.\<close>
+
+abbreviation esels :: "('k::{domain, distributive_cpo}, 'f, 'r::{bifinite, distributive_cpo}, 'v::cpo) expr \<Rightarrow> 'k selector list" where
+  "esels E \<equiv> map esel (eguards E) @ map esel (evalues E)"
+
+lemma esels_guardI: "e \<in> set (eguards E) \<Longrightarrow> esel e \<in> set (esels E)"
+  by simp
+
+lemma esels_valueI: "e \<in> set (evalues E) \<Longrightarrow> esel e \<in> set (esels E)"
+  by simp
+
+text \<open>Selector transformers: raising the lower part by the masked part of an LOD, and meeting the
+  upper part with one.\<close>
+
+definition include_sel :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> 'k selector \<Rightarrow> 'k selector" where
+  "include_sel M S = sel (sel_at S M) (upper_part S)"
+
+definition trunc_sel :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> 'k selector \<Rightarrow> 'k selector" where
+  "trunc_sel \<tau> S = sel (lower_part S) (upper_part S \<sqinter> \<tau>)"
+
+lemma include_sel_simps [simp]:
+  "lower_part (include_sel M S) = sel_at S M" "upper_part (include_sel M S) = upper_part S"
+  by (simp_all add: include_sel_def)
+
+lemma trunc_sel_simps [simp]:
+  "lower_part (trunc_sel \<tau> S) = lower_part S" "upper_part (trunc_sel \<tau> S) = upper_part S \<sqinter> \<tau>"
+  by (simp_all add: trunc_sel_def)
 
 text \<open>Contents are maps from keys to sections.  A graph, a single-valued set of pairs, gives one;
   the value it records at a key is \<open>cval\<close>.\<close>
@@ -396,67 +442,112 @@ qed
 lemma keyed_view_bot_view: "keyed_view (\<bottom> :: ('r, 'k) view)"
   unfolding inst_prod_pcpo by (rule keyed_view_key)
 
-text \<open>An entry is \<^emph>\<open>well-formed\<close> when its view is keyed.  Then the view's key part determines
+text \<open>A value entry is \<^emph>\<open>well-formed\<close> when its view is keyed.  Then the view's key part determines
   its section on the rows of a conforming dataset: contents are graphs.  This is a property of the
   expression, independent of the frame.\<close>
 
-definition entry_wf :: "('k, 'r) entry \<Rightarrow> bool" where
+definition entry_wf :: "('k, 'r semi_factor) entry \<Rightarrow> bool" where
   "entry_wf e \<longleftrightarrow> keyed_view (eview e)"
 
-lemma entry_wf_view: "keyed_view v \<Longrightarrow> entry_wf (mk_entry S \<gamma> v)"
+lemma entry_wf_view: "keyed_view (c, \<kappa>) \<Longrightarrow> entry_wf (mk_value S c \<kappa>)"
   by (simp add: entry_wf_def)
 
-lemma entry_wf_guard: "entry_wf e \<Longrightarrow> entry_wf (e\<lparr>eguard := \<gamma>\<rparr>)"
-  by (simp add: entry_wf_def)
+text \<open>The \<^emph>\<open>fiber\<close> of a selector: the rows whose key agrees with the key at hand at the group LOD.
+  The \<^emph>\<open>group\<close> cuts it down by the frame's filters, the slice coarsened to the upper part.\<close>
+
+definition fiber :: "'r lower_pd \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
+  "fiber data a \<rho> F k = {y \<in> lower_maximal data. rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k}"
 
 definition group :: "'r lower_pd \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
   "group data a \<rho> F k = {y \<in> lower_maximal data. selects (amb F) y \<and> holds (coarsen \<rho> (slice F)) (rkey\<cdot>y) \<and>
      rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k}"
 
-text \<open>The fiber of an entry: the rows of its group passing its guard.  Its content graph pairs
-  each row's key at the view's key part with its section at the view's columns; the content is
-  that graph as a map.\<close>
+lemma group_fiber:
+  "group data a \<rho> F k = {y \<in> fiber data a \<rho> F k. selects (amb F) y \<and> holds (coarsen \<rho> (slice F)) (rkey\<cdot>y)}"
+  by (auto simp: group_def fiber_def)
 
-definition efiber :: "'r lower_pd \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
-  "efiber data e F k = {y \<in> group data (elower e) (eupper e) F k. eguard e\<cdot>y = TT}"
+lemma group_sub_fiber: "group data a \<rho> F k \<subseteq> fiber data a \<rho> F k"
+  by (auto simp: group_def fiber_def)
 
-definition cpair :: "('k, 'r) entry \<Rightarrow> 'r \<Rightarrow> 'k \<times> 'r" where
+text \<open>A guard entry's fiber is its group passing its guard; its content is the set of keys of its
+  rows at its key part.\<close>
+
+definition gfiber :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
+  "gfiber data e F k = {y \<in> group data (elower e) (eupper e) F k. eguard e\<cdot>y = TT}"
+
+definition gcontent :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
+  "gcontent data e F k = (\<lambda>y. rproj (ekeys e) y) ` gfiber data e F k"
+
+abbreviation gcontents :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set list" where
+  "gcontents data gs F k \<equiv> map (\<lambda>e. gcontent data e F k) gs"
+
+text \<open>The content of a guard passing every row is the image of its group.\<close>
+
+lemma gcontent_gtrue: "gcontent data (mk_guard S gtrue \<kappa>) F k = (\<lambda>y. rproj \<kappa> y) ` group data (lower_part S) (upper_part S) F k"
+  by (simp add: gcontent_def gfiber_def)
+
+lemma gcontent_gtrue_bot:
+  "gcontent data (mk_guard S gtrue \<bottom>) F k = (if group data (lower_part S) (upper_part S) F k = {} then {} else {\<bottom>})"
+  unfolding gcontent_gtrue by (simp add: proj_bot image_constant_conv)
+
+text \<open>A value entry's fiber is its selector's; its content graph pairs each row's key at the key
+  part with its section at the columns, and the content is that graph as a map.\<close>
+
+definition vfiber :: "'r lower_pd \<Rightarrow> ('k, 'r semi_factor) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
+  "vfiber data e F k = fiber data (elower e) (eupper e) F k"
+
+definition cpair :: "('k, 'r semi_factor) entry \<Rightarrow> 'r \<Rightarrow> 'k \<times> 'r" where
   "cpair e y = (rproj (ekeys e) y, y \<downharpoonright> ecols e)"
 
 lemma cpair_vpart: "cpair e y = (snd (vpart (eview e) y), fst (vpart (eview e) y))"
   by (simp add: cpair_def vpart_def)
 
-definition cgraph :: "'r lower_pd \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<times> 'r) set" where
-  "cgraph data e F k = cpair e ` efiber data e F k"
+definition cgraph :: "'r lower_pd \<Rightarrow> ('k, 'r semi_factor) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<times> 'r) set" where
+  "cgraph data e F k = cpair e ` vfiber data e F k"
 
-definition content :: "'r lower_pd \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> 'r option" where
+definition content :: "'r lower_pd \<Rightarrow> ('k, 'r semi_factor) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> 'r option" where
   "content data e F k = gmap (cgraph data e F k)"
 
-abbreviation contents :: "'r lower_pd \<Rightarrow> ('k, 'r) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
+abbreviation contents :: "'r lower_pd \<Rightarrow> ('k, 'r semi_factor) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
   "contents data es F k \<equiv> map (\<lambda>e. content data e F k) es"
 
-text \<open>The \<^emph>\<open>point family\<close> at a row and a key: each entry's content as if its fiber were that one
-  row with that key.  A fiber of one row gives the point content.\<close>
+text \<open>The \<^emph>\<open>point families\<close> at a row and a key: each entry's content as if its fiber were that
+  one row with that key.  A fiber of one row gives the point content.\<close>
 
-definition point :: "('k, 'r) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
+definition gpoint :: "('k, 'r guard) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> 'k set list" where
+  "gpoint gs p = map (\<lambda>e. {proj (ekeys e)\<cdot>(snd p)}) gs"
+
+definition point :: "('k, 'r semi_factor) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
   "point es p = map (\<lambda>e. [proj (ekeys e)\<cdot>(snd p) \<mapsto> fst p \<downharpoonright> ecols e]) es"
+
+lemma gpoint_simps [simp]:
+  "gpoint [] p = []" "gpoint (e # gs) p = {proj (ekeys e)\<cdot>(snd p)} # gpoint gs p"
+  "gpoint (gs @ gs') p = gpoint gs p @ gpoint gs' p" "length (gpoint gs p) = length gs"
+  by (simp_all add: gpoint_def)
 
 lemma point_simps [simp]:
   "point [] p = []" "point (e # es) p = [proj (ekeys e)\<cdot>(snd p) \<mapsto> fst p \<downharpoonright> ecols e] # point es p"
   "point (es @ es') p = point es p @ point es' p" "length (point es p) = length es"
   by (simp_all add: point_def)
 
+lemma gpoint_concat: "gpoint (concat gss) p = concat (map (\<lambda>gs. gpoint gs p) gss)"
+  by (induct gss) simp_all
+
 lemma point_concat: "point (concat ess) p = concat (map (\<lambda>es. point es p) ess)"
   by (induct ess) simp_all
 
-lemma content_single_fiber: "efiber data e F k = {y} \<Longrightarrow> content data e F k = hd (point [e] (y, rkey\<cdot>y))"
+lemma content_single_fiber: "vfiber data e F k = {y} \<Longrightarrow> content data e F k = hd (point [e] (y, rkey\<cdot>y))"
   by (simp add: content_def cgraph_def cpair_def)
 
-text \<open>A \<^emph>\<open>row entry\<close> keys its view within its lower part, where its guard is keyed: rows of a
-  fiber, which agree there, agree on the whole content pair, so its content has at most one key.\<close>
+text \<open>A \<^emph>\<open>row entry\<close> keys its content within its lower part, and a row guard entry's guard is keyed
+  there too: rows of a fiber, which agree there, agree on what the entry reads, so its content has
+  at most one key.\<close>
 
-definition row_entry :: "('k, 'r) entry \<Rightarrow> bool" where
-  "row_entry e \<longleftrightarrow> ekeys e \<sqsubseteq> elower e \<and> guard_keyed (elower e) (eguard e)"
+definition row_entry :: "('k, 'r semi_factor) entry \<Rightarrow> bool" where
+  "row_entry e \<longleftrightarrow> ekeys e \<sqsubseteq> elower e"
+
+definition row_guard_entry :: "('k, 'r guard) entry \<Rightarrow> bool" where
+  "row_guard_entry e \<longleftrightarrow> ekeys e \<sqsubseteq> elower e \<and> guard_keyed (elower e) (eguard e)"
 
 lemma rproj_agree: "s \<sqsubseteq> G \<Longrightarrow> rproj G y = rproj G x \<Longrightarrow> rproj s y = rproj s x"
   by (metis proj_le)
@@ -464,57 +555,59 @@ lemma rproj_agree: "s \<sqsubseteq> G \<Longrightarrow> rproj G y = rproj G x \<
 lemma row_entry_image:
   assumes e: "entry_wf e" and r: "row_entry e" and d: "conforms data" and Y: "Y \<subseteq> lower_maximal data"
     and x: "x \<in> Y" and aG: "elower e \<sqsubseteq> G" and agree: "\<And>y. y \<in> Y \<Longrightarrow> rproj G y = rproj G x"
-  shows "cpair e ` {y \<in> Y. eguard e\<cdot>y = TT} = (if eguard e\<cdot>x = TT then {cpair e x} else {})"
+  shows "cpair e ` Y = {cpair e x}"
 proof -
-  have sG: "ekeys e \<sqsubseteq> G" and gk: "guard_keyed (elower e) (eguard e)"
-    using r aG unfolding row_entry_def by (blast intro: below_trans)+
+  have sG: "ekeys e \<sqsubseteq> G" using r aG unfolding row_entry_def by (rule below_trans)
   have xm: "x \<in> lower_maximal data" using x Y by blast
   have kv: "keyed_view (eview e)" using e by (simp add: entry_wf_def)
-  let ?g = "\<lambda>y. eguard e\<cdot>y"
-  have g: "?g y = ?g x" if y: "y \<in> Y" for y
-    using guard_agree[OF gk d xm _ aG agree[OF y]] y Y by blast
+  have sG': "snd (eview e) \<sqsubseteq> G" using sG by simp
   have h: "cpair e y = cpair e x" if y: "y \<in> Y" for y
-    using rproj_agree[OF sG agree[OF y]] view_agree[OF kv d xm _ sG agree[OF y]] y Y
-    unfolding cpair_def by blast
+    using rproj_agree[OF sG agree[OF y]] view_agree[OF kv d xm _ sG' agree[OF y]] y Y
+    unfolding cpair_def by force
+  show ?thesis using x h by blast
+qed
+
+lemma row_guard_entry_image:
+  assumes r: "row_guard_entry e" and d: "conforms data" and Y: "Y \<subseteq> lower_maximal data"
+    and x: "x \<in> Y" and aG: "elower e \<sqsubseteq> G" and agree: "\<And>y. y \<in> Y \<Longrightarrow> rproj G y = rproj G x"
+  shows "(\<lambda>y. rproj (ekeys e) y) ` {y \<in> Y. eguard e\<cdot>y = TT} = (if eguard e\<cdot>x = TT then {rproj (ekeys e) x} else {})"
+proof -
+  have sG: "ekeys e \<sqsubseteq> G" and gk: "guard_keyed (elower e) (eguard e)"
+    using r aG unfolding row_guard_entry_def by (blast intro: below_trans)+
+  have xm: "x \<in> lower_maximal data" using x Y by blast
+  have g: "eguard e\<cdot>y = eguard e\<cdot>x" if y: "y \<in> Y" for y
+    using guard_agree[OF gk d xm _ aG agree[OF y]] y Y by blast
+  have h: "rproj (ekeys e) y = rproj (ekeys e) x" if y: "y \<in> Y" for y
+    by (rule rproj_agree[OF sG agree[OF y]])
   show ?thesis
-  proof (cases "?g x = TT")
+  proof (cases "eguard e\<cdot>x = TT")
     case True
-    have "{y \<in> Y. ?g y = TT} = Y"
-    proof (rule set_eqI, rule iffI)
-      fix y assume "y \<in> Y"
-      then show "y \<in> {y \<in> Y. ?g y = TT}" using True by (simp add: g)
-    qed simp
-    moreover have "cpair e ` Y = (\<lambda>_. cpair e x) ` Y" by (rule image_cong[OF refl h])
-    moreover have "Y \<noteq> {}" using x by blast
-    ultimately show ?thesis using True by (simp only: image_constant_conv if_False) simp
+    have s: "{y \<in> Y. eguard e\<cdot>y = TT} = Y" using True g by auto
+    have i: "(\<lambda>y. rproj (ekeys e) y) ` Y = (\<lambda>_. rproj (ekeys e) x) ` Y" by (rule image_cong[OF refl h])
+    have ne: "Y \<noteq> {}" using x by blast
+    show ?thesis unfolding s i by (simp add: image_constant_conv ne True)
   next
     case False
-    have "{y \<in> Y. ?g y = TT} = {}"
-    proof (rule equals0I)
-      fix y assume "y \<in> {y \<in> Y. ?g y = TT}"
-      then have y: "y \<in> Y" "?g y = TT" by simp_all
-      then have "?g x = TT" by (simp only: g[OF y(1)])
-      then show False using False by simp
-    qed
+    have "{y \<in> Y. eguard e\<cdot>y = TT} = {}" using False g by auto
     then show ?thesis using False by simp
   qed
 qed
 
-text \<open>Content graphs of well-formed entries are single-valued.\<close>
+text \<open>Content graphs of well-formed value entries are single-valued.\<close>
 
 lemma cgraph_single_valued:
   assumes e: "entry_wf e" and d: "conforms data"
   shows "single_valued (cgraph data e F k)"
 proof (rule single_valuedI)
   fix q u u' assume u: "(q, u) \<in> cgraph data e F k" and u': "(q, u') \<in> cgraph data e F k"
-  obtain y where y: "y \<in> efiber data e F k" "q = rproj (ekeys e) y" "u = y \<downharpoonright> ecols e"
+  obtain y where y: "y \<in> vfiber data e F k" "q = rproj (ekeys e) y" "u = y \<downharpoonright> ecols e"
     using u unfolding cgraph_def cpair_def by blast
-  obtain y' where y': "y' \<in> efiber data e F k" "q = rproj (ekeys e) y'" "u' = y' \<downharpoonright> ecols e"
+  obtain y' where y': "y' \<in> vfiber data e F k" "q = rproj (ekeys e) y'" "u' = y' \<downharpoonright> ecols e"
     using u' unfolding cgraph_def cpair_def by blast
   have m: "y \<in> lower_maximal data" "y' \<in> lower_maximal data"
-    using y(1) y'(1) by (auto simp: efiber_def group_def)
+    using y(1) y'(1) by (auto simp: vfiber_def fiber_def)
   have kv: "keyed_view (eview e)" using e by (simp add: entry_wf_def)
-  have "y' \<downharpoonright> ecols e = y \<downharpoonright> ecols e"
+  have "y' \<downharpoonright> fst (eview e) = y \<downharpoonright> fst (eview e)"
     by (rule view_agree[OF kv d m(1) m(2) below_refl]) (use y(2) y'(2) in simp)
   then show "u = u'" using y(3) y'(3) by simp
 qed
@@ -525,14 +618,15 @@ lemma graph_content: "entry_wf e \<Longrightarrow> conforms data \<Longrightarro
 subsection \<open>Conformance relative to an expression\<close>
 
 text \<open>Graph-ness only compares rows within a fiber, which agree at the group LOD.  So what a dataset
-  must satisfy for an entry, under a frame, is that within the rows the key at the group LOD joined
-  with the view's key part determines the view's section.  Raising the frame weakens this; a
-  conforming dataset satisfies it under every frame, by the keyedness of the view.\<close>
+  must satisfy for a value entry, under a frame, is that within the rows the key at the group LOD
+  joined with the view's key part determines the view's section.  Raising the frame weakens this; a
+  conforming dataset satisfies it under every frame, by the keyedness of the view.  Guard entries
+  ask nothing of the dataset.\<close>
 
-definition entry_conf :: "('k, 'r) entry \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
+definition entry_conf :: "('k, 'r semi_factor) entry \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
   "entry_conf e data F \<longleftrightarrow> vfd (lower_maximal data) (\<bottom>, sel_at (esel e) (flod F) \<squnion> ekeys e) (ecols e, \<bottom>)"
 
-definition fconf :: "('k, 'r) entry list \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
+definition fconf :: "('k, 'r semi_factor) entry list \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
   "fconf es data F \<longleftrightarrow> (\<forall>e\<in>set es. entry_conf e data F)"
 
 lemma vfd_trans: "vfd P u v \<Longrightarrow> vfd P v w \<Longrightarrow> vfd P u w"
@@ -554,13 +648,13 @@ qed
 lemma fconf_conforms: "(\<And>e. e \<in> set es \<Longrightarrow> entry_wf e) \<Longrightarrow> conforms data \<Longrightarrow> fconf es data F"
   unfolding fconf_def by (blast intro: entry_conf_conforms)
 
-text \<open>An entry reading no columns is conforming everywhere.\<close>
+text \<open>A value entry reading no columns is conforming everywhere.\<close>
 
 lemma entry_conf_key_pure: "ecols e = \<bottom> \<Longrightarrow> entry_conf e data F"
   unfolding entry_conf_def by (rule vfd_refl) (simp add: below_prod_def)
 
-text \<open>So the laws of an expression whose entries read no columns hold on every dataset and under
-  every frame: such an expression may be evaluated anywhere.\<close>
+text \<open>So the laws of an expression whose value entries read no columns hold on every dataset and
+  under every frame: such an expression may be evaluated anywhere.\<close>
 
 lemma fconf_key_pure: "(\<And>e. e \<in> set es \<Longrightarrow> ecols e = \<bottom>) \<Longrightarrow> fconf es data F"
   unfolding fconf_def by (blast intro: entry_conf_key_pure)
@@ -571,12 +665,12 @@ lemma cgraph_single_valued_conf:
 proof (rule single_valuedI)
   fix q u u' assume u: "(q, u) \<in> cgraph data e F k" and u': "(q, u') \<in> cgraph data e F k"
   let ?G = "sel_at (esel e) (flod F)"
-  obtain y where y: "y \<in> efiber data e F k" "q = rproj (ekeys e) y" "u = y \<downharpoonright> ecols e"
+  obtain y where y: "y \<in> vfiber data e F k" "q = rproj (ekeys e) y" "u = y \<downharpoonright> ecols e"
     using u unfolding cgraph_def cpair_def by blast
-  obtain y' where y': "y' \<in> efiber data e F k" "q = rproj (ekeys e) y'" "u' = y' \<downharpoonright> ecols e"
+  obtain y' where y': "y' \<in> vfiber data e F k" "q = rproj (ekeys e) y'" "u' = y' \<downharpoonright> ecols e"
     using u' unfolding cgraph_def cpair_def by blast
   have m: "y \<in> lower_maximal data" "y' \<in> lower_maximal data" and g: "rproj ?G y' = rproj ?G y"
-    using y(1) y'(1) by (auto simp: efiber_def group_def)
+    using y(1) y'(1) by (auto simp: vfiber_def fiber_def)
   have "rproj (?G \<squnion> ekeys e) y' = rproj (?G \<squnion> ekeys e) y"
     using g y(2) y'(2) by (simp only: rproj_sup_eq)
   then have "vpart (\<bottom>, ?G \<squnion> ekeys e) y' = vpart (\<bottom>, ?G \<squnion> ekeys e) y" by (simp add: semi_factor_p_bot)
@@ -620,35 +714,59 @@ lemma vpart_section: "fst (vsec v) \<sqsubseteq> c \<Longrightarrow> vpart v (y 
   by (simp add: vpart_def proj_le[OF below_trans[OF lattice_join_ge1]]
       rproj_section[OF below_trans[OF lattice_join_ge2]])
 
-text \<open>The content of an entry is computed from the point section at any section covering the
-  group LOD's support, the frame and the entry's view, and read by the guard.\<close>
+text \<open>The content of a value entry is computed from the point section at any section covering the
+  group LOD's support and the entry's view.\<close>
 
 lemma content_section:
-  assumes F: "frame_reads c F" and G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
-    and fc: "fst (vsec (eview e)) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)"
+  assumes G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c" and fc: "fst (vsec (eview e)) \<sqsubseteq> c"
   shows "content data e F k = gmap (cpair e ` {z \<in> pts_section c data.
+    rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k})"
+proof -
+  let ?G = "sel_at (esel e) (flod F)"
+  let ?P = "\<lambda>z. rproj ?G z = proj ?G\<cdot>k"
+  have P: "?P (y \<downharpoonright> c) \<longleftrightarrow> ?P y" for y by (simp add: rproj_section[OF G])
+  have h: "cpair e (y \<downharpoonright> c) = cpair e y" for y by (simp only: cpair_vpart vpart_section[OF fc])
+  have "vfiber data e F k = {y \<in> lower_maximal data. ?P y}" by (auto simp: vfiber_def fiber_def)
+  moreover have "cpair e ` {y \<in> lower_maximal data. ?P y} = cpair e ` {z \<in> pts_section c data. ?P z}"
+    unfolding pts_section_def by (rule image_filter_factor) (fact P h)+
+  ultimately show ?thesis unfolding content_def cgraph_def by simp
+qed
+
+text \<open>The content of a guard entry is computed from the point section at any section covering the
+  group LOD's support, the frame and the entry's key part, and read by the guard.\<close>
+
+lemma gcontent_section:
+  assumes F: "frame_reads c F" and G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
+    and kc: "csupp (ekeys e) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)"
+  shows "gcontent data e F k = (\<lambda>z. rproj (ekeys e) z) ` {z \<in> pts_section c data.
     selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and>
     rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k \<and>
-    eguard e\<cdot>z = TT})"
+    eguard e\<cdot>z = TT}"
 proof -
   let ?G = "sel_at (esel e) (flod F)"
   let ?P = "\<lambda>z. selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and> rproj ?G z = proj ?G\<cdot>k \<and>
     eguard e\<cdot>z = TT"
-  let ?h = "cpair e"
   have sl: "csupp (slod (coarsen (eupper e) (slice F))) \<sqsubseteq> c"
     using F csupp_mono[OF below_trans[OF slod_coarsen lattice_meet_le1]] unfolding frame_reads_def
     by (blast intro: below_trans)
   have P: "?P (y \<downharpoonright> c) \<longleftrightarrow> ?P y" for y
     using F unfolding frame_reads_def sel_reads_def
     by (simp add: holds_section[OF sl] rproj_section[OF G] gc[unfolded guard_reads_def])
-  have h: "?h (y \<downharpoonright> c) = ?h y" for y by (simp only: cpair_vpart vpart_section[OF fc])
-  have "efiber data e F k = {y \<in> lower_maximal data. ?P y}" by (auto simp: efiber_def group_def)
-  moreover have "?h ` {y \<in> lower_maximal data. ?P y} = ?h ` {z \<in> pts_section c data. ?P z}"
+  have h: "rproj (ekeys e) (y \<downharpoonright> c) = rproj (ekeys e) y" for y by (rule rproj_section[OF kc])
+  have "gfiber data e F k = {y \<in> lower_maximal data. ?P y}" by (auto simp: gfiber_def group_def)
+  moreover have "(\<lambda>z. rproj (ekeys e) z) ` {y \<in> lower_maximal data. ?P y}
+      = (\<lambda>z. rproj (ekeys e) z) ` {z \<in> pts_section c data. ?P z}"
     unfolding pts_section_def by (rule image_filter_factor) (fact P h)+
-  ultimately show ?thesis unfolding content_def cgraph_def by simp
+  ultimately show ?thesis unfolding gcontent_def by simp
 qed
 
-text \<open>Groups with the same parameters and rows coincide.\<close>
+text \<open>Fibers and groups with the same parameters and rows coincide.\<close>
+
+lemma fiber_cong:
+  assumes "a \<squnion> (\<rho> \<sqinter> flod F) = a' \<squnion> (\<rho> \<sqinter> flod F')"
+    and "proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k = proj (a' \<squnion> (\<rho> \<sqinter> flod F'))\<cdot>k'"
+  shows "fiber data a \<rho> F k = fiber data a' \<rho> F' k'"
+  using assms unfolding fiber_def by simp
 
 lemma group_cong:
   assumes "amb F = amb F'" "slice F = slice F'"
@@ -699,13 +817,13 @@ qed simp
 
 subsection \<open>The laws\<close>
 
-text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed entries, its minimal LOD is the join of their lower
-  parts, its content semantics is \<^emph>\<open>strict\<close> (absent as soon as one of its contents is empty: an
-  empty fiber gives no value), and its presence and values are its content semantics of its
-  contents, at every key of its key LOD and every conforming dataset (the content law).  A \<^emph>\<open>lawful\<close> one is moreover
-  \<^emph>\<open>saturated\<close> (each lower part covers the part of the minimal LOD its upper part keeps, so groups
-  depend on the frame LOD only through the key LOD) and has entries only at the frame's data keys
-  (the key law).\<close>
+text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed value entries, its minimal LOD is the join of its
+  entries' lower parts, its content semantics is \<^emph>\<open>strict\<close> (absent as soon as one of its guards'
+  contents is empty), and its presence and values are its content semantics of its contents, at
+  every key of its key LOD and every dataset conforming relative to its value entries (the content
+  law).  A \<^emph>\<open>lawful\<close> one is moreover \<^emph>\<open>saturated\<close> (each lower part covers the part of the minimal
+  LOD its upper part keeps, so groups depend on the frame LOD only through the key LOD) and has
+  entries only at the frame's data keys (the key law).\<close>
 
 context dataspace
 begin
@@ -713,85 +831,95 @@ begin
 abbreviation kd :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
   "kd E F \<equiv> emind E \<squnion> flod F"
 
+text \<open>The content semantics of an expression at its contents.\<close>
+
+abbreviation csem_at :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option" where
+  "csem_at E data F k \<equiv> csem E (gcontents data (eguards E) F k)\<cdot>(contents data (evalues E) F k)"
+
 definition cstrict :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "cstrict E \<longleftrightarrow> (\<forall>Xs. length Xs = length (edims E) \<longrightarrow> csem E\<cdot>Xs \<noteq> None \<longrightarrow> Map.empty \<notin> set Xs)"
+  "cstrict E \<longleftrightarrow> (\<forall>Gs Xs. length Gs = length (eguards E) \<longrightarrow> length Xs = length (evalues E) \<longrightarrow>
+     csem E Gs\<cdot>Xs \<noteq> None \<longrightarrow> {} \<notin> set Gs)"
 
 lemma cstrictI:
-  "(\<And>Xs. length Xs = length (edims E) \<Longrightarrow> csem E\<cdot>Xs \<noteq> None \<Longrightarrow> Map.empty \<notin> set Xs) \<Longrightarrow> cstrict E"
+  "(\<And>Gs Xs. length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> csem E Gs\<cdot>Xs \<noteq> None \<Longrightarrow>
+     {} \<notin> set Gs) \<Longrightarrow> cstrict E"
   unfolding cstrict_def by blast
 
-lemma cstrictD: "cstrict E \<Longrightarrow> length Xs = length (edims E) \<Longrightarrow> Map.empty \<in> set Xs \<Longrightarrow> csem E\<cdot>Xs = None"
+lemma cstrictD:
+  "cstrict E \<Longrightarrow> length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> {} \<in> set Gs \<Longrightarrow>
+     csem E Gs\<cdot>Xs = None"
   unfolding cstrict_def by blast
 
 definition semilawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map elower (edims E)) \<bottom> \<and> (\<forall>e\<in>set (edims E). entry_wf e) \<and> cstrict E \<and>
-     (\<forall>data F k. fconf (edims E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k))"
+  "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom> \<and> (\<forall>e\<in>set (evalues E). entry_wf e) \<and>
+     cstrict E \<and>
+     (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem_at E data F k)"
 
 definition lawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "lawful E \<longleftrightarrow> semilawful E \<and> (\<forall>e\<in>set (edims E). (eupper e \<sqinter> emind E) \<sqsubseteq> elower e) \<and>
-     (\<forall>data F k. fconf (edims E) data F \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow> keyimg data F (kd E F) k)"
+  "lawful E \<longleftrightarrow> semilawful E \<and> (\<forall>S\<in>set (esels E). (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S) \<and>
+     (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow> keyimg data F (kd E F) k)"
 
 lemma semilawfulI:
-  assumes "emind E = fold (\<squnion>) (map elower (edims E)) \<bottom>"
-    and "\<And>e. e \<in> set (edims E) \<Longrightarrow> entry_wf e"
-    and "\<And>data F k. \<lbrakk>fconf (edims E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
-           esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
+  assumes "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
+    and "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_wf e"
+    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem_at E data F k"
     and "cstrict E"
   shows "semilawful E"
   unfolding semilawful_def using assms by blast
 
-lemma semilawful_mind_lub: "semilawful E \<Longrightarrow> emind E = fold (\<squnion>) (map elower (edims E)) \<bottom>"
+lemma semilawful_mind_lub: "semilawful E \<Longrightarrow> emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
   unfolding semilawful_def by blast
 
-lemma semilawful_wf: "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> entry_wf e"
+lemma semilawful_wf: "semilawful E \<Longrightarrow> e \<in> set (evalues E) \<Longrightarrow> entry_wf e"
   unfolding semilawful_def by blast
 
 lemma semilawful_cstrict: "semilawful E \<Longrightarrow> cstrict E"
   unfolding semilawful_def by blast
 
-lemma semilawful_keyed: "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> keyed_view (eview e)"
+lemma semilawful_keyed: "semilawful E \<Longrightarrow> e \<in> set (evalues E) \<Longrightarrow> keyed_view (eview e)"
   using semilawful_wf unfolding entry_wf_def by blast
 
 lemma semilawful_csem_conf:
-  "\<lbrakk>semilawful E; fconf (edims E) data F; proj (kd E F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
+  "\<lbrakk>semilawful E; fconf (evalues E) data F; proj (kd E F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem_at E data F k"
   unfolding semilawful_def by blast
 
-lemma semilawful_fconf: "semilawful E \<Longrightarrow> conforms data \<Longrightarrow> fconf (edims E) data F"
+lemma semilawful_fconf: "semilawful E \<Longrightarrow> conforms data \<Longrightarrow> fconf (evalues E) data F"
   by (rule fconf_conforms[OF semilawful_wf])
 
 lemma semilawful_csem:
-  "\<lbrakk>semilawful E; conforms data; proj (kd E F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
+  "\<lbrakk>semilawful E; conforms data; proj (kd E F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem_at E data F k"
   by (rule semilawful_csem_conf[OF _ semilawful_fconf])
 
 text \<open>Equal contents give equal values, across datasets and frames.\<close>
 
 lemma semilawful_content_law:
   "\<lbrakk>semilawful E; conforms data; conforms data'; proj (kd E F)\<cdot>k = k; proj (kd E F')\<cdot>k' = k';
-    contents data (edims E) F k = contents data' (edims E) F' k'\<rbrakk> \<Longrightarrow> esem E data F k = esem E data' F' k'"
+    gcontents data (eguards E) F k = gcontents data' (eguards E) F' k';
+    contents data (evalues E) F k = contents data' (evalues E) F' k'\<rbrakk> \<Longrightarrow> esem E data F k = esem E data' F' k'"
   by (simp only: semilawful_csem)
 
-text \<open>Refined contents give refined values, across datasets and frames: the content semantics is
-  continuous.\<close>
+text \<open>Refined value contents under the same guard contents give refined values, across datasets
+  and frames: the content semantics is continuous in the values.\<close>
 
 lemma semilawful_mono:
   "\<lbrakk>semilawful E; conforms data; conforms data'; proj (kd E F)\<cdot>k = k; proj (kd E F')\<cdot>k' = k';
-    contents data (edims E) F k \<sqsubseteq> contents data' (edims E) F' k'\<rbrakk> \<Longrightarrow> esem E data F k \<sqsubseteq> esem E data' F' k'"
+    gcontents data (eguards E) F k = gcontents data' (eguards E) F' k';
+    contents data (evalues E) F k \<sqsubseteq> contents data' (evalues E) F' k'\<rbrakk> \<Longrightarrow> esem E data F k \<sqsubseteq> esem E data' F' k'"
   by (simp only: semilawful_csem monofun_cfun_arg)
 
 lemma lawful_semiI:
   assumes "semilawful E"
-    and "\<And>e. e \<in> set (edims E) \<Longrightarrow> (eupper e \<sqinter> emind E) \<sqsubseteq> elower e"
-    and "\<And>data F k. fconf (edims E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
+    and "\<And>S. S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
+    and "\<And>data F k. fconf (evalues E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
   shows "lawful E"
   unfolding lawful_def using assms by blast
 
 lemma lawfulI:
-  assumes "\<And>e. e \<in> set (edims E) \<Longrightarrow> (eupper e \<sqinter> emind E) \<sqsubseteq> elower e"
-    and "emind E = fold (\<squnion>) (map elower (edims E)) \<bottom>"
-    and "\<And>e. e \<in> set (edims E) \<Longrightarrow> entry_wf e"
-    and "\<And>data F k. \<lbrakk>fconf (edims E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
-           esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
-    and "\<And>data F k. fconf (edims E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
+  assumes "\<And>S. S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
+    and "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
+    and "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_wf e"
+    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem_at E data F k"
+    and "\<And>data F k. fconf (evalues E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
     and "cstrict E"
   shows "lawful E"
   by (rule lawful_semiI[OF semilawfulI[OF assms(2-4,6)] assms(1,5)])
@@ -799,57 +927,79 @@ lemma lawfulI:
 lemma lawful_semilawful: "lawful E \<Longrightarrow> semilawful E"
   unfolding lawful_def by blast
 
-lemma lawful_saturated: "lawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> (eupper e \<sqinter> emind E) \<sqsubseteq> elower e"
+lemma lawful_saturated: "lawful E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
   unfolding lawful_def by blast
 
-lemma lawful_key_law_conf: "lawful E \<Longrightarrow> fconf (edims E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
+lemma lawful_key_law_conf: "lawful E \<Longrightarrow> fconf (evalues E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
   unfolding lawful_def by blast
 
 lemma lawful_key_law: "lawful E \<Longrightarrow> conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
   by (rule lawful_key_law_conf[OF _ semilawful_fconf[OF lawful_semilawful]])
 
-lemma lawful_keyed: "lawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> keyed_view (eview e)"
+lemma lawful_keyed: "lawful E \<Longrightarrow> e \<in> set (evalues E) \<Longrightarrow> keyed_view (eview e)"
   by (rule semilawful_keyed[OF lawful_semilawful])
 
 lemma lower_below_mind:
-  assumes E: "semilawful E" and e: "e \<in> set (edims E)"
-  shows "elower e \<sqsubseteq> emind E"
+  assumes E: "semilawful E" and S: "S \<in> set (esels E)"
+  shows "lower_part S \<sqsubseteq> emind E"
 proof -
-  have "elower e \<in> set (map elower (edims E))" using e by force
+  have "lower_part S \<in> set (map lower_part (esels E))" unfolding set_map by (rule imageI[OF S])
   then show ?thesis unfolding semilawful_mind_lub[OF E] by (rule fold_join_upper)
 qed
 
+lemma lower_below_mind_guard: "semilawful E \<Longrightarrow> e \<in> set (eguards E) \<Longrightarrow> elower e \<sqsubseteq> emind E"
+  by (rule lower_below_mind[OF _ esels_guardI])
+
+lemma lower_below_mind_value: "semilawful E \<Longrightarrow> e \<in> set (evalues E) \<Longrightarrow> elower e \<sqsubseteq> emind E"
+  by (rule lower_below_mind[OF _ esels_valueI])
+
 lemma group_below_kd:
-  "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> sel_at (esel e) (flod F) \<sqsubseteq> kd E F"
+  "semilawful E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> sel_at S (flod F) \<sqsubseteq> kd E F"
   by (rule join_belowI[OF below_trans[OF lower_below_mind lattice_join_ge1]
         below_trans[OF truncate_below lattice_join_ge2]])
 
-text \<open>Contents agree when the groups do.\<close>
+text \<open>Contents agree when the groups, respectively the fibers, do.\<close>
 
-lemma content_group_cong:
+lemma gcontent_group_cong:
   "group data (elower e) (eupper e) F k = group data' (elower e) (eupper e) F' k' \<Longrightarrow>
+    gcontent data e F k = gcontent data' e F' k'"
+  by (simp add: gcontent_def gfiber_def)
+
+lemma content_fiber_cong:
+  "fiber data (elower e) (eupper e) F k = fiber data' (elower e) (eupper e) F' k' \<Longrightarrow>
     content data e F k = content data' e F' k'"
-  by (simp add: content_def cgraph_def efiber_def)
+  by (simp add: content_def cgraph_def vfiber_def)
 
 text \<open>Contents only depend on the point section at a section covering the frame, the key LOD and
-  the sections of the entries' views.\<close>
+  what the entries read.\<close>
 
-definition entry_reads :: "'r semi_factor \<Rightarrow> ('k, 'r) entry \<Rightarrow> bool" where
-  "entry_reads c e \<longleftrightarrow> fst (vsec (eview e)) \<sqsubseteq> c \<and> guard_reads c (eguard e)"
+definition entry_reads :: "'r semi_factor \<Rightarrow> ('k, 'r semi_factor) entry \<Rightarrow> bool" where
+  "entry_reads c e \<longleftrightarrow> fst (vsec (eview e)) \<sqsubseteq> c"
 
 lemma contents_section:
   assumes E: "semilawful E" and F: "frame_reads c F" and K: "csupp (kd E F) \<sqsubseteq> c"
-    and cols: "\<And>e. e \<in> set (edims E) \<Longrightarrow> entry_reads c e"
+    and gr: "\<And>e. e \<in> set (eguards E) \<Longrightarrow> csupp (ekeys e) \<sqsubseteq> c \<and> guard_reads c (eguard e)"
+    and cols: "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_reads c e"
     and sec: "pts_section c data = pts_section c data'"
-  shows "contents data (edims E) F k = contents data' (edims E) F k"
-proof (rule map_cong[OF refl])
-  fix e assume e: "e \<in> set (edims E)"
-  have G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
-    by (rule below_trans[OF csupp_mono[OF group_below_kd[OF E e]] K])
-  have r: "fst (vsec (eview e)) \<sqsubseteq> c" "guard_reads c (eguard e)"
-    using cols[OF e] by (simp_all add: entry_reads_def)
-  show "content data e F k = content data' e F k"
-    unfolding content_section[OF F G r] sec ..
+  shows "gcontents data (eguards E) F k = gcontents data' (eguards E) F k"
+    and "contents data (evalues E) F k = contents data' (evalues E) F k"
+proof -
+  have G: "csupp (sel_at S (flod F)) \<sqsubseteq> c" if "S \<in> set (esels E)" for S
+    by (rule below_trans[OF csupp_mono[OF group_below_kd[OF E that]] K])
+  show "gcontents data (eguards E) F k = gcontents data' (eguards E) F k"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (eguards E)"
+    have kc: "csupp (ekeys e) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)" using gr[OF e] by simp_all
+    show "gcontent data e F k = gcontent data' e F k"
+      unfolding gcontent_section[OF F G[OF esels_guardI[OF e]] kc gc] sec ..
+  qed
+  show "contents data (evalues E) F k = contents data' (evalues E) F k"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (evalues E)"
+    have r: "fst (vsec (eview e)) \<sqsubseteq> c" using cols[OF e] by (simp add: entry_reads_def)
+    show "content data e F k = content data' e F k"
+      unfolding content_section[OF G[OF esels_valueI[OF e]] r] sec ..
+  qed
 qed
 
 text \<open>The \<^emph>\<open>grain\<close> of an expression at a frame joins the group LODs of its entries.  Contents, and
@@ -857,10 +1007,10 @@ text \<open>The \<^emph>\<open>grain\<close> of an expression at a frame joins t
   grain, and its values at finer keys are broadcast.\<close>
 
 definition grain :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
-  "grain E F = fold (\<squnion>) (map (\<lambda>e. sel_at (esel e) (flod F)) (edims E)) \<bottom>"
+  "grain E F = fold (\<squnion>) (map (\<lambda>S. sel_at S (flod F)) (esels E)) \<bottom>"
 
-lemma group_below_grain: "e \<in> set (edims E) \<Longrightarrow> sel_at (esel e) (flod F) \<sqsubseteq> grain E F"
-  unfolding grain_def by (rule fold_join_upper) force
+lemma group_below_grain: assumes "S \<in> set (esels E)" shows "sel_at S (flod F) \<sqsubseteq> grain E F"
+  unfolding grain_def by (rule fold_join_upper) (use assms in force)
 
 lemma grain_below_kd: "semilawful E \<Longrightarrow> grain E F \<sqsubseteq> kd E F"
   unfolding grain_def by (rule fold_join_least) (auto intro: group_below_kd)
@@ -869,15 +1019,22 @@ theorem sem_grain:
   assumes E: "semilawful E" and d: "conforms data" and k: "proj (kd E F)\<cdot>k = k"
   shows "esem E data F k = esem E data F (proj (grain E F)\<cdot>k)"
 proof (rule semilawful_content_law[OF E d d k])
-  show "proj (kd E F)\<cdot>(proj (grain E F)\<cdot>k) = proj (grain E F)\<cdot>k"
+  let ?k = "proj (grain E F)\<cdot>k"
+  have at: "proj (sel_at S (flod F))\<cdot>?k = proj (sel_at S (flod F))\<cdot>k" if "S \<in> set (esels E)" for S
+    by (rule proj_le[OF group_below_grain[OF that]])
+  show "proj (kd E F)\<cdot>?k = ?k"
     by (rule proj_absorb[OF grain_below_kd[OF E]])
-  show "contents data (edims E) F k = contents data (edims E) F (proj (grain E F)\<cdot>k)"
+  show "gcontents data (eguards E) F k = gcontents data (eguards E) F ?k"
   proof (rule map_cong[OF refl])
-    fix e assume e: "e \<in> set (edims E)"
-    have "proj (sel_at (esel e) (flod F))\<cdot>(proj (grain E F)\<cdot>k) = proj (sel_at (esel e) (flod F))\<cdot>k"
-      by (rule proj_le[OF group_below_grain[OF e]])
-    then show "content data e F k = content data e F (proj (grain E F)\<cdot>k)"
-      by (intro content_group_cong) (simp add: group_def)
+    fix e assume e: "e \<in> set (eguards E)"
+    show "gcontent data e F k = gcontent data e F ?k"
+      using at[OF esels_guardI[OF e]] by (intro gcontent_group_cong) (simp add: group_def)
+  qed
+  show "contents data (evalues E) F k = contents data (evalues E) F ?k"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (evalues E)"
+    show "content data e F k = content data e F ?k"
+      using at[OF esels_valueI[OF e]] by (intro content_fiber_cong) (simp add: fiber_def)
   qed
 qed
 
@@ -885,35 +1042,46 @@ text \<open>For lawful expressions the frame LOD inside the minimal LOD does not
   the key LOD.\<close>
 
 lemma group_kd:
-  "lawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> sel_at (esel e) (flod F) = sel_at (esel e) (kd E F)"
+  "lawful E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> sel_at S (flod F) = sel_at S (kd E F)"
   by (rule sat_absorb[symmetric, OF lawful_saturated])
 
 lemma contents_kd:
   assumes E: "lawful E" and F: "amb F = amb F'" "slice F = slice F'" "kd E F = kd E F'"
-  shows "contents data (edims E) F k = contents data (edims E) F' k"
-proof (rule map_cong[OF refl])
-  fix e assume e: "e \<in> set (edims E)"
-  have "group data (elower e) (eupper e) F k = group data (elower e) (eupper e) F' k"
-    by (rule group_cong[OF F(1,2)]) (simp_all only: group_kd[OF E e] F(3))
-  then show "content data e F k = content data e F' k" by (rule content_group_cong)
+  shows "gcontents data (eguards E) F k = gcontents data (eguards E) F' k"
+    and "contents data (evalues E) F k = contents data (evalues E) F' k"
+proof -
+  show "gcontents data (eguards E) F k = gcontents data (eguards E) F' k"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (eguards E)"
+    have "group data (elower e) (eupper e) F k = group data (elower e) (eupper e) F' k"
+      by (rule group_cong[OF F(1,2)]) (simp_all only: group_kd[OF E esels_guardI[OF e]] F(3))
+    then show "gcontent data e F k = gcontent data e F' k" by (rule gcontent_group_cong)
+  qed
+  show "contents data (evalues E) F k = contents data (evalues E) F' k"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (evalues E)"
+    have "fiber data (elower e) (eupper e) F k = fiber data (elower e) (eupper e) F' k"
+      by (rule fiber_cong) (simp_all only: group_kd[OF E esels_valueI[OF e]] F(3))
+    then show "content data e F k = content data e F' k" by (rule content_fiber_cong)
+  qed
 qed
 
 text \<open>Pegging the frame to a key does not change that key's contents: the pin's demand within
-  a mask is part of the group already, by saturation.\<close>
+  a mask is part of the group already, by saturation; fibers do not see the slice at all.\<close>
 
 lemma peg_group:
-  assumes E: "lawful E" and e: "e \<in> set (edims E)" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
-  shows "group data (elower e) (eupper e) (peg K F) K = group data (elower e) (eupper e) F K"
+  assumes E: "lawful E" and S: "S \<in> set (esels E)" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
+  shows "group data (lower_part S) (upper_part S) (peg K F) K = group data (lower_part S) (upper_part S) F K"
 proof -
-  let ?G = "sel_at (esel e) (flod F)" and ?T = "(eupper e \<sqinter> kd E F)"
-  have le: "?T \<sqsubseteq> ?G" unfolding group_kd[OF E e] by (rule lattice_join_ge2)
-  have pin: "holds (coarsen (eupper e) (spin K)) (rkey\<cdot>y)" if y: "rproj ?G y = proj ?G\<cdot>K" for y
+  let ?G = "sel_at S (flod F)" and ?T = "(upper_part S \<sqinter> kd E F)"
+  have le: "?T \<sqsubseteq> ?G" unfolding group_kd[OF E S] by (rule lattice_join_ge2)
+  have pin: "holds (coarsen (upper_part S) (spin K)) (rkey\<cdot>y)" if y: "rproj ?G y = proj ?G\<cdot>K" for y
   proof -
-    have "proj (eupper e)\<cdot>K = proj ?T\<cdot>K" by (simp only: proj_inf K)
+    have "proj (upper_part S)\<cdot>K = proj ?T\<cdot>K" by (simp only: proj_inf K)
     also have "\<dots> = proj ?T\<cdot>(proj ?G\<cdot>K)" by (rule proj_le[OF le, symmetric])
     also have "\<dots> = proj ?T\<cdot>(rproj ?G y)" by (simp only: y)
     also have "\<dots> = rproj ?T y" by (rule proj_le[OF le])
-    finally have "proj (eupper e)\<cdot>K \<sqsubseteq> rkey\<cdot>y" using proj_below[of ?T "rkey\<cdot>y"] by simp
+    finally have "proj (upper_part S)\<cdot>K \<sqsubseteq> rkey\<cdot>y" using proj_below[of ?T "rkey\<cdot>y"] by simp
     then show ?thesis by (rule holds_coarsen_spin[OF cK])
   qed
   show ?thesis unfolding group_def using pin by (auto simp: coarsen_conj)
@@ -921,11 +1089,17 @@ qed
 
 lemma peg_contents:
   assumes E: "lawful E" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
-  shows "contents data (edims E) (peg K F) K = contents data (edims E) F K"
-proof (rule map_cong[OF refl])
-  fix e assume e: "e \<in> set (edims E)"
-  show "content data e (peg K F) K = content data e F K"
-    by (rule content_group_cong[OF peg_group[OF E e cK K]])
+  shows "gcontents data (eguards E) (peg K F) K = gcontents data (eguards E) F K"
+    and "contents data (evalues E) (peg K F) K = contents data (evalues E) F K"
+proof -
+  show "gcontents data (eguards E) (peg K F) K = gcontents data (eguards E) F K"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (eguards E)"
+    show "gcontent data e (peg K F) K = gcontent data e F K"
+      by (rule gcontent_group_cong[OF peg_group[OF E esels_guardI[OF e] cK K]])
+  qed
+  show "contents data (evalues E) (peg K F) K = contents data (evalues E) F K"
+    by (rule map_cong[OF refl]) (simp add: content_def cgraph_def vfiber_def fiber_def)
 qed
 
 lemma key_lives: "lawful E \<Longrightarrow> conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> proj (kd E F)\<cdot>k = k"
@@ -972,19 +1146,20 @@ next
 qed
 
 text \<open>Locality: the semantics at a frame depends on the dataset only through its point section at
-  a section covering the frame, the key LOD and the entries' columns.\<close>
+  a section covering the frame, the key LOD and what the entries read.\<close>
 
 theorem sem_section:
   assumes E: "lawful E" and d: "conforms data" and d': "conforms data'"
     and F: "frame_reads c F" and K: "csupp (kd E F) \<sqsubseteq> c"
-    and cols: "\<And>e. e \<in> set (edims E) \<Longrightarrow> entry_reads c e"
+    and gr: "\<And>e. e \<in> set (eguards E) \<Longrightarrow> csupp (ekeys e) \<sqsubseteq> c \<and> guard_reads c (eguard e)"
+    and cols: "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_reads c e"
     and sec: "pts_section c data = pts_section c data'"
   shows "esem E data F k = esem E data' F k"
 proof (cases "proj (kd E F)\<cdot>k = k")
   case True
   show ?thesis
     by (rule semilawful_content_law[OF lawful_semilawful[OF E] d d' True True
-          contents_section[OF lawful_semilawful[OF E] F K cols sec]])
+          contents_section[OF lawful_semilawful[OF E] F K gr cols sec]])
 next
   case False
   then have "esem E data F k = None" "esem E data' F k = None"
