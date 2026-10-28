@@ -17,10 +17,9 @@ class lattice_complete = bounded_complete +
 definition lattice_top :: "'a::lattice_complete" where
   "lattice_top = lub UNIV"
 
-text \<open>The top element takes over the symbol \<open>\<top>\<close> from HOL's @{class top}, which HOLCF
-  developments do not use (as HOLCF does with the lattice join and meet symbols).\<close>
+text \<open>The top element is written \<open>\<top>\<close>; @{theory Main} leaves the symbol free (HOL's lattice
+  syntax is unbundled there).\<close>
 
-no_notation top (\<open>\<top>\<close>)
 notation lattice_top (\<open>\<top>\<close>)
 
 lemma below_lattice_top [simp]: "x \<sqsubseteq> (\<top> :: 'a::lattice_complete)"
