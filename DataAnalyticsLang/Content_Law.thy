@@ -288,6 +288,9 @@ lemma rigid_dom: "rigid (\<lambda>X :: 'k \<Rightarrow> 'r::cpo option. dom X)"
 lemma rigid_None: "monofun f \<Longrightarrow> rigid (\<lambda>x. f x = (None :: 'v::cpo option))"
   by (rule rigidI) (rule option_below_None, erule monofunE)
 
+lemma rigid_length: "rigid (\<lambda>xs :: 'a::cpo list. P (length xs))"
+  by (rule rigidI) (simp add: below_same_length)
+
 lemma cont_hd: "cont (hd :: 'a::cpo list \<Rightarrow> 'a)"
   by (rule list_contI[where g = "\<lambda>x xs y. x"]) simp_all
 

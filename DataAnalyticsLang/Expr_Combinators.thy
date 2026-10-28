@@ -10,21 +10,9 @@ text \<open>Each combinator transforms the entries of its inner expressions' dim
 
 subsection \<open>Tuples\<close>
 
-text \<open>A collected entry is present where every component is; its value is a tuple that is lazy in
-  the components, so an undefined component does not make the tuple undefined.  No order classes
-  are needed for values; they will be once tuples are key values.\<close>
-
-domain ('a::"domain") ltuple = LNil | LCons (lazy "'a") "'a ltuple"
-
-fun ltuple_of :: "'a::domain list \<Rightarrow> 'a ltuple" where
-  "ltuple_of [] = LNil"
-| "ltuple_of (x # xs) = LCons\<cdot>x\<cdot>(ltuple_of xs)"
-
-lemma cont_ltuple_of: "cont ltuple_of"
-  by (rule list_contI[where g = "\<lambda>x xs y. LCons\<cdot>x\<cdot>y"]) simp_all
-
-lemma ltuple_of_not_bottom: "ltuple_of xs \<noteq> \<bottom>"
-  by (induct xs) simp_all
+text \<open>A collected entry is present where every component is; its value is the list of the
+  components' values.  Absence is the entry's, so the list needs no bottom: tuples are plain lists,
+  ordered componentwise at equal length.\<close>
 
 lemma those_not_None_iff: "those xs \<noteq> None \<longleftrightarrow> (\<forall>x\<in>set xs. x \<noteq> None)"
   by (induct xs) (auto split: option.splits)
@@ -482,31 +470,23 @@ qed simp
 lemma blocks_concat: "blocks (map (\<lambda>x. length (f x)) xs) (concat (map f xs)) = map f xs"
   by (induct xs) simp_all
 
-lemma cont_collect_csem:
-  "cont (\<lambda>Xs. map_option ltuple_of (those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks ns Xs))))"
+lemma cont_collect_csem: "cont (\<lambda>Xs. those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks ns Xs)))"
 proof -
   have "cont (\<lambda>Xs. map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks ns Xs))"
     by (rule cont_compose[OF cont_map2 cont_blocks]) simp
-  then have t: "cont (\<lambda>Xs. those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks ns Xs)))"
-    by (rule cont_compose[OF cont_those])
-  show ?thesis
-  proof (rule cont_compose[OF _ t])
-    show "cont (map_option ltuple_of)"
-      using cont2cont_map_option[where f = "\<lambda>x y. ltuple_of y" and g = "\<lambda>x. x"] cont_compose[OF cont_ltuple_of cont_snd]
-      by (simp add: split_def cont_id)
-  qed
+  then show ?thesis by (rule cont_compose[OF cont_those])
 qed
 
-definition collect :: "('k, 'f, 'r, 'a::domain) expr list \<Rightarrow> ('k, 'f, 'r, 'a ltuple) expr" where
+definition collect :: "('k, 'f, 'r, 'a::cpo) expr list \<Rightarrow> ('k, 'f, 'r, 'a list) expr" where
   "collect Es = \<lparr>emind = fold (\<squnion>) (map emind Es) \<bottom>, edims = concat (map edims Es),
-     esem = \<lambda>data F k. map_option ltuple_of (those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)),
-     csem = \<Lambda> Xs. map_option ltuple_of (those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks (map (\<lambda>E. length (edims E)) Es) Xs)))\<rparr>"
+     esem = \<lambda>data F k. those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es),
+     csem = \<Lambda> Xs. those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks (map (\<lambda>E. length (edims E)) Es) Xs))\<rparr>"
 
 lemma collect_simps [simp]:
   "emind (collect Es) = fold (\<squnion>) (map emind Es) \<bottom>"
   "edims (collect Es) = concat (map edims Es)"
-  "esem (collect Es) data F k = map_option ltuple_of (those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es))"
-  "csem (collect Es)\<cdot>Xs = map_option ltuple_of (those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks (map (\<lambda>E. length (edims E)) Es) Xs)))"
+  "esem (collect Es) data F k = those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)"
+  "csem (collect Es)\<cdot>Xs = those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks (map (\<lambda>E. length (edims E)) Es) Xs))"
   by (simp_all add: collect_def cont_collect_csem)
 
 text \<open>The contents of a semilawful expression only see the key at its own key LOD.\<close>
@@ -549,9 +529,9 @@ proof (rule semilawfulI, simp_all only: collect_simps)
         unfolding a by (rule below_trans[OF lower_below_mind[OF law[OF E] e] fold_join_upper]) (simp add: E)
     qed simp
   qed
-  show "map_option ltuple_of (those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es))
-      = map_option ltuple_of (those (map (\<lambda>(E, Ys). csem E\<cdot>Ys)
-          (zip Es (blocks (map (\<lambda>E. length (edims E)) Es) (contents data (concat (map edims Es)) F k)))))"
+  show "those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)
+      = those (map (\<lambda>(E, Ys). csem E\<cdot>Ys)
+          (zip Es (blocks (map (\<lambda>E. length (edims E)) Es) (contents data (concat (map edims Es)) F k))))"
     if d: "conforms data" for data F k
   proof -
     have c: "contents data (concat (map edims Es)) F k = concat (map (\<lambda>E. contents data (edims E) F k) Es)"

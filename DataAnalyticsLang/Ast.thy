@@ -36,19 +36,43 @@ text \<open>Booleans as data, and the n-ary connectives: strict, so every missin
 definition d_bool :: "tr \<rightarrow> scalar datum" where
   "d_bool = na_emb oo Known oo SBool"
 
-fixrec d_ands :: "scalar datum ltuple \<rightarrow> scalar datum" where
-  "d_ands\<cdot>LNil = d_bool\<cdot>TT"
-| "xs \<noteq> \<bottom> \<Longrightarrow> d_ands\<cdot>(LCons\<cdot>x\<cdot>xs) = dlift2\<cdot>sand\<cdot>x\<cdot>(d_ands\<cdot>xs)"
+text \<open>Calls take the list of their arguments' values.  Continuous functions on lists are given by
+  recursion, and arguments of a fixed arity are matched by length, which is rigid.\<close>
 
-fixrec d_ors :: "scalar datum ltuple \<rightarrow> scalar datum" where
-  "d_ors\<cdot>LNil = d_bool\<cdot>FF"
-| "xs \<noteq> \<bottom> \<Longrightarrow> d_ors\<cdot>(LCons\<cdot>x\<cdot>xs) = dlift2\<cdot>sor\<cdot>x\<cdot>(d_ors\<cdot>xs)"
+primrec ands :: "scalar datum list \<Rightarrow> scalar datum" where
+  "ands [] = d_bool\<cdot>TT"
+| "ands (x # xs) = dlift2\<cdot>sand\<cdot>x\<cdot>(ands xs)"
 
-fixrec arg1 :: "('a::domain \<rightarrow> 'b::domain) \<rightarrow> 'a ltuple \<rightarrow> 'b" where
-  "arg1\<cdot>f\<cdot>(LCons\<cdot>x\<cdot>LNil) = f\<cdot>x"
+primrec ors :: "scalar datum list \<Rightarrow> scalar datum" where
+  "ors [] = d_bool\<cdot>FF"
+| "ors (x # xs) = dlift2\<cdot>sor\<cdot>x\<cdot>(ors xs)"
 
-fixrec arg2 :: "('a::domain \<rightarrow> 'a \<rightarrow> 'b::domain) \<rightarrow> 'a ltuple \<rightarrow> 'b" where
-  "arg2\<cdot>f\<cdot>(LCons\<cdot>x\<cdot>(LCons\<cdot>y\<cdot>LNil)) = f\<cdot>x\<cdot>y"
+lemma cont_ands: "cont ands" and cont_ors: "cont ors"
+  by (rule list_contI[where g = "\<lambda>x xs y. dlift2\<cdot>sand\<cdot>x\<cdot>y"], simp_all)
+    (rule list_contI[where g = "\<lambda>x xs y. dlift2\<cdot>sor\<cdot>x\<cdot>y"], simp_all)
+
+definition d_ands :: "scalar datum list \<rightarrow> scalar datum" where
+  "d_ands = (\<Lambda> xs. ands xs)"
+
+definition d_ors :: "scalar datum list \<rightarrow> scalar datum" where
+  "d_ors = (\<Lambda> xs. ors xs)"
+
+lemma d_ands_simps [simp]: "d_ands\<cdot>[] = d_bool\<cdot>TT" "d_ands\<cdot>(x # xs) = dlift2\<cdot>sand\<cdot>x\<cdot>(d_ands\<cdot>xs)"
+  and d_ors_simps [simp]: "d_ors\<cdot>[] = d_bool\<cdot>FF" "d_ors\<cdot>(x # xs) = dlift2\<cdot>sor\<cdot>x\<cdot>(d_ors\<cdot>xs)"
+  by (simp_all add: d_ands_def d_ors_def cont_ands cont_ors)
+
+definition arg1 :: "('a::cpo \<rightarrow> 'b::pcpo) \<Rightarrow> 'a list \<rightarrow> 'b" where
+  "arg1 f = (\<Lambda> xs. if length xs = 1 then f\<cdot>(hd xs) else \<bottom>)"
+
+definition arg2 :: "('a::cpo \<rightarrow> 'a \<rightarrow> 'b::pcpo) \<Rightarrow> 'a list \<rightarrow> 'b" where
+  "arg2 f = (\<Lambda> xs. if length xs = 2 then f\<cdot>(hd xs)\<cdot>(hd (tl xs)) else \<bottom>)"
+
+lemma arg1_beta [simp]: "arg1 f\<cdot>xs = (if length xs = 1 then f\<cdot>(hd xs) else \<bottom>)"
+  unfolding arg1_def by (rule beta_cfun) (rule cont_if_rigid[OF rigid_length]; simp)
+
+lemma arg2_beta [simp]: "arg2 f\<cdot>xs = (if length xs = 2 then f\<cdot>(hd xs)\<cdot>(hd (tl xs)) else \<bottom>)"
+  unfolding arg2_def by (rule beta_cfun) (rule cont_if_rigid[OF rigid_length]; simp)
+
 
 definition d_eq :: "scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum" where
   "d_eq = dlift2\<cdot>(\<Lambda> x y. SBool\<cdot>(scalar_eq\<cdot>x\<cdot>y))"
@@ -56,12 +80,12 @@ definition d_eq :: "scalar datum \<rightarrow> scalar datum \<rightarrow> scalar
 definition d_is_na :: "scalar datum \<rightarrow> scalar datum" where
   "d_is_na = (\<Lambda> x. d_bool\<cdot>(is_na\<cdot>x))"
 
-primrec fsym_sem :: "('fn \<Rightarrow> scalar datum ltuple \<rightarrow> scalar datum) \<Rightarrow> 'fn fsym \<Rightarrow> scalar datum ltuple \<rightarrow> scalar datum" where
+primrec fsym_sem :: "('fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum) \<Rightarrow> 'fn fsym \<Rightarrow> scalar datum list \<rightarrow> scalar datum" where
   "fsym_sem other FAnd = d_ands"
 | "fsym_sem other FOr = d_ors"
-| "fsym_sem other FNot = arg1\<cdot>(dlift1\<cdot>snot)"
-| "fsym_sem other FEq = arg2\<cdot>d_eq"
-| "fsym_sem other FIsNA = arg1\<cdot>d_is_na"
+| "fsym_sem other FNot = arg1 (dlift1\<cdot>snot)"
+| "fsym_sem other FEq = arg2 d_eq"
+| "fsym_sem other FIsNA = arg1 d_is_na"
 | "fsym_sem other (FOther fn) = other fn"
 
 primrec fsym_arity :: "('fn \<Rightarrow> nat \<Rightarrow> bool) \<Rightarrow> 'fn fsym \<Rightarrow> nat \<Rightarrow> bool" where
@@ -91,14 +115,14 @@ lemma tr_or_bot_iff: "tr_or\<cdot>x\<cdot>y = \<bottom> \<longleftrightarrow> x 
   by (cases x rule: trE; cases y rule: trE) (simp_all add: TT_def FF_def)
 
 lemma truth_d_ands:
-  "truth_d\<cdot>(d_ands\<cdot>(ltuple_of xs)) = TT \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x = TT)"
-  "truth_d\<cdot>(d_ands\<cdot>(ltuple_of xs)) \<noteq> \<bottom> \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>)"
-  by (induct xs) (simp_all add: ltuple_of_not_bottom truth_d_and[simplified] tr_and_TT_iff tr_and_bot_iff)
+  "truth_d\<cdot>(d_ands\<cdot>xs) = TT \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x = TT)"
+  "truth_d\<cdot>(d_ands\<cdot>xs) \<noteq> \<bottom> \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>)"
+  by (induct xs) (simp_all add: truth_d_and[simplified] tr_and_TT_iff tr_and_bot_iff)
 
 lemma truth_d_ors:
-  "truth_d\<cdot>(d_ors\<cdot>(ltuple_of xs)) = TT \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>) \<and> (\<exists>x\<in>set xs. truth_d\<cdot>x = TT)"
-  "truth_d\<cdot>(d_ors\<cdot>(ltuple_of xs)) \<noteq> \<bottom> \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>)"
-  by (induct xs) (auto simp: ltuple_of_not_bottom truth_d_or[simplified] tr_or_TT_iff tr_or_bot_iff)
+  "truth_d\<cdot>(d_ors\<cdot>xs) = TT \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>) \<and> (\<exists>x\<in>set xs. truth_d\<cdot>x = TT)"
+  "truth_d\<cdot>(d_ors\<cdot>xs) \<noteq> \<bottom> \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>)"
+  by (induct xs) (auto simp: truth_d_or[simplified] tr_or_TT_iff tr_or_bot_iff)
 
 section \<open>Dimensions and the key reading\<close>
 
@@ -109,11 +133,11 @@ text \<open>Dimensions name LODs of the keys, each with a value read off the key
   year key may list the day).  Expressions on dimensions alone, with the known and the tabled
   function symbols, read keys directly.\<close>
 
-primrec tuple_cfun :: "('r::cpo \<rightarrow> 'v::domain) list \<Rightarrow> 'r \<rightarrow> 'v ltuple" where
-  "tuple_cfun [] = (\<Lambda> y. LNil)"
-| "tuple_cfun (g # gs) = (\<Lambda> y. LCons\<cdot>(g\<cdot>y)\<cdot>(tuple_cfun gs\<cdot>y))"
+primrec tuple_cfun :: "('r::cpo \<rightarrow> 'v::cpo) list \<Rightarrow> 'r \<rightarrow> 'v list" where
+  "tuple_cfun [] = (\<Lambda> y. [])"
+| "tuple_cfun (g # gs) = (\<Lambda> y. g\<cdot>y # tuple_cfun gs\<cdot>y)"
 
-lemma tuple_cfun_apply: "tuple_cfun gs\<cdot>y = ltuple_of (map (\<lambda>g. g\<cdot>y) gs)"
+lemma tuple_cfun_apply: "tuple_cfun gs\<cdot>y = map (\<lambda>g. g\<cdot>y) gs"
   by (induct gs) simp_all
 
 definition key_datum :: "scalar with_na \<rightarrow> scalar datum" where
@@ -127,7 +151,7 @@ locale key_language =
   fixes dim_lod :: "'d \<Rightarrow> 'k::lod_domain semi_factor"
     and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar with_na"
     and key_dims :: "'k \<Rightarrow> 'd list"
-    and fn_other :: "'fn \<Rightarrow> scalar datum ltuple \<rightarrow> scalar datum"
+    and fn_other :: "'fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum"
   assumes dim_compact: "compact (dim_lod d)"
     and dim_reads: "dim_val d\<cdot>(proj (dim_lod d)\<cdot>k) = dim_val d\<cdot>k"
     and dim_reflects: "dim_val d\<cdot>k \<sqsubseteq> dim_val d\<cdot>k' \<Longrightarrow> proj (dim_lod d)\<cdot>k \<sqsubseteq> proj (dim_lod d)\<cdot>k'"
@@ -319,7 +343,7 @@ next
   qed
 qed (auto simp: reads_in_meet)
 
-lemma kval_call [simp]: "kval (Call fn es)\<cdot>k = fsym_sem fn_other fn\<cdot>(ltuple_of (map (\<lambda>e. kval e\<cdot>k) es))"
+lemma kval_call [simp]: "kval (Call fn es)\<cdot>k = fsym_sem fn_other fn\<cdot>(map (\<lambda>e. kval e\<cdot>k) es)"
   by (simp add: tuple_cfun_apply comp_def)
 
 text \<open>Coarsening weakens: true stays true, defined stays defined.\<close>

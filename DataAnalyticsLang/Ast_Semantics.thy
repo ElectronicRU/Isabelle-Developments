@@ -71,7 +71,7 @@ text \<open>The symbol tables: dimensions and tabled function symbols as in the 
 locale ast_space = key_language dim_lod dim_val key_dims fn_other + keyed_schema rules keying
   for dim_lod :: "'d \<Rightarrow> 'k::{domain, lod_domain} semi_factor"
     and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar with_na" and key_dims :: "'k \<Rightarrow> 'd list"
-    and fn_other :: "'fn \<Rightarrow> scalar datum ltuple \<rightarrow> scalar datum"
+    and fn_other :: "'fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum"
     and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying" +
   fixes col_sec :: "'c \<Rightarrow> 'r semi_factor" and col_dim :: "'c \<Rightarrow> 'd" and col_val :: "'c \<Rightarrow> 'r \<rightarrow> scalar datum"
     and fn_arity :: "'fn \<Rightarrow> nat \<Rightarrow> bool"
