@@ -31,18 +31,7 @@ jobs:
           ISABELLE=/home/isabelle/Isabelle/bin/isabelle
           "$ISABELLE" build -b -v -o browser_info -o document=pdf -o "threads=$(nproc)" \
             -d HOLCF-extra -d DataAnalyticsLang HOLCF-extra DataAnalyticsLang
-          INFO=$("$ISABELLE" getenv -b ISABELLE_BROWSER_INFO)
-          mkdir -p site/Unsorted
-          cp -r "$INFO/fonts" site/
-          cp -r "$INFO/Unsorted/DataAnalyticsLang" "$INFO/Unsorted/HOLCF-extra" site/Unsorted/
-          cat > site/index.html <<'EOF'
-          <!doctype html><html><head><meta charset="utf-8">
-          <meta http-equiv="refresh" content="0; url=Unsorted/DataAnalyticsLang/index.html">
-          <title>Isabelle Developments</title></head>
-          <body><p><a href="Unsorted/DataAnalyticsLang/index.html">DataAnalyticsLang</a> &middot;
-          <a href="Unsorted/HOLCF-extra/index.html">HOLCF-extra</a></p></body></html>
-          EOF
-          touch site/.nojekyll
+          .github/site.sh "$("$ISABELLE" getenv -b ISABELLE_BROWSER_INFO)" site
 
       - uses: actions/upload-pages-artifact@v3
         with:

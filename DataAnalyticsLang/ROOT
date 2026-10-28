@@ -1,6 +1,8 @@
-session DataAnalyticsLang = "HOLCF" +
+chapter Developments
+
+session DataAnalyticsLang = "HOLCF-extra" +
   options [document_output = "output"]
-  sessions "HOLCF-extra" "HOLCF-Library"
+  sessions "HOL-Library" "HOLCF-Library"
   theories
     Typing
     Domain

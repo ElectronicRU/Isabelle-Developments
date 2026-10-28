@@ -1,3 +1,5 @@
+chapter Developments
+
 session "HOLCF-extra" = HOLCF +
   options [document_output = "output"]
   sessions "HOL-Eisbach" "HOL-Library"
