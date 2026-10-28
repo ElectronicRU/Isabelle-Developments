@@ -1695,14 +1695,14 @@ text \<open>The bottom semi-factor projects to \<open>\<bottom>\<close>, the top
 lemma semi_factor_bot_bottom: "(bot :: 'a semi_factor) = \<bottom>"
   by (rule bottomI) (simp add: below_semi_factor_iff_le)
 
-lemma semi_factor_top_lattice_top: "(top :: 'a semi_factor) = lattice_top"
+lemma semi_factor_top_lattice_top: "(top :: 'a semi_factor) = \<top>"
   by (rule below_antisym) (rule below_lattice_top, simp add: below_semi_factor_iff_le)
 
 lemma semi_factor_p_bot: "semi_factor_p \<bottom> = \<bottom>"
   by (rule cfun_eqI) (simp add: semi_factor_bot_bottom[symmetric] semi_factor_p.rep_eq
       bot_semi_factor.rep_eq p_bot_stable_subdom)
 
-lemma semi_factor_p_top: "semi_factor_p lattice_top = ID"
+lemma semi_factor_p_top: "semi_factor_p \<top> = ID"
   by (simp add: semi_factor_top_lattice_top[symmetric] semi_factor_p.rep_eq top_semi_factor.rep_eq
       p_top_stable_subdom)
 

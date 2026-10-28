@@ -343,10 +343,10 @@ lemma content_ffor:
 
 lemma content_const_top:
   assumes "proj (c \<squnion> flod F)\<cdot>k = k"
-  shows "content data (mk_entry (sel c lattice_top) gtrue \<bottom>) F k
+  shows "content data (mk_entry (sel c \<top>) gtrue \<bottom>) F k
        = (if keyimg data F (c \<squnion> flod F) k then [\<bottom> \<mapsto> \<bottom>] else Map.empty)"
 proof -
-  have "cgraph data (mk_entry (sel c lattice_top) gtrue \<bottom>) F k = (\<lambda>_. (\<bottom>, \<bottom>)) ` group data c lattice_top F k"
+  have "cgraph data (mk_entry (sel c \<top>) gtrue \<bottom>) F k = (\<lambda>_. (\<bottom>, \<bottom>)) ` group data c \<top> F k"
     unfolding cgraph_def efiber_def cpair_def by (simp add: proj_bot semi_factor_p_bot)
   moreover have "gmap {\<bottom> :: 'k \<times> 'r} = [\<bottom> \<mapsto> \<bottom>]" using gmap_singleton[of "\<bottom>::'k" "\<bottom>::'r"] by simp
   ultimately show ?thesis unfolding content_def by (simp add: image_constant_conv keyimg_group_top[OF assms])
@@ -412,14 +412,14 @@ text \<open>The gate at \<open>M\<close> turns a semilawful expression into a la
 
 definition gate_presence :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "gate_presence M E = \<lparr>emind = emind E \<squnion> M,
-     edims = mk_entry (sel (emind E \<squnion> M) lattice_top) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E),
+     edims = mk_entry (sel (emind E \<squnion> M) \<top>) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E),
      esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
        then esem E data (finclude (emind E \<squnion> M) F) k else None,
      csem = \<Lambda> Xs. if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs)\<rparr>"
 
 lemma gate_presence_simps [simp]:
   "emind (gate_presence M E) = emind E \<squnion> M"
-  "edims (gate_presence M E) = mk_entry (sel (emind E \<squnion> M) lattice_top) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E)"
+  "edims (gate_presence M E) = mk_entry (sel (emind E \<squnion> M) \<top>) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E)"
   "esem (gate_presence M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
        then esem E data (finclude (emind E \<squnion> M) F) k else None)"
   "csem (gate_presence M E)\<cdot>Xs = (if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs))"
@@ -441,7 +441,7 @@ theorem lawful_gate_presence: assumes "semilawful E" shows "lawful (gate_presenc
 proof -
   have ES: "semilawful E" by (fact assms)
   let ?m = "emind E \<squnion> M"
-  let ?h = "mk_entry (sel ?m lattice_top) gtrue \<bottom> :: ('k, 'r) entry"
+  let ?h = "mk_entry (sel ?m \<top>) gtrue \<bottom> :: ('k, 'r) entry"
   have kdE: "emind E \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
   proof -
     have "emind E \<sqsubseteq> flod F \<squnion> ?m" by (rule below_trans[OF lattice_join_ge1 lattice_join_ge2])
@@ -488,15 +488,15 @@ text \<open>An expression \<^emph>\<open>covers\<close> the key space when one o
   presence entry: it only raises the entries.\<close>
 
 definition covering :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "covering E \<longleftrightarrow> (\<exists>e\<in>set (edims E). eupper e = lattice_top)"
+  "covering E \<longleftrightarrow> (\<exists>e\<in>set (edims E). eupper e = \<top>)"
 
 lemma content_include_top:
-  assumes e: "eupper e = lattice_top" and am: "elower e \<sqsubseteq> m" and k: "proj (m \<squnion> flod F)\<cdot>k = k"
+  assumes e: "eupper e = \<top>" and am: "elower e \<sqsubseteq> m" and k: "proj (m \<squnion> flod F)\<cdot>k = k"
     and nk: "\<not> keyimg data F (m \<squnion> flod F) k"
   shows "content data (include_entry m e) F k = Map.empty"
 proof -
   have lo: "elower (include_entry m e) = m" using am by (simp add: e truncate_top lattice_join_absorb2)
-  have g: "group data m lattice_top F k = {}" using keyimg_group_top[OF k] nk by simp
+  have g: "group data m \<top> F k = {}" using keyimg_group_top[OF k] nk by simp
   have "group data (elower (include_entry m e)) (eupper (include_entry m e)) F k = {}"
     by (simp only: lo include_entry_simps(2) e g)
   then show ?thesis by (simp add: content_def cgraph_def efiber_def)
@@ -522,7 +522,7 @@ theorem lawful_gate_raise:
   shows "lawful (gate_raise M E)"
 proof -
   let ?m = "emind E \<squnion> M"
-  obtain t where t: "t \<in> set (edims E)" "eupper t = lattice_top" using cov by (auto simp: covering_def)
+  obtain t where t: "t \<in> set (edims E)" "eupper t = \<top>" using cov by (auto simp: covering_def)
   have tm: "elower t \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
   have kdE: "emind E \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
   proof -
@@ -602,7 +602,7 @@ lemma include_entry_idem: "include_entry m (include_entry m e) = include_entry m
 lemma covering_gate: "covering (gate M E)"
 proof (cases "covering E")
   case True
-  then obtain t where "t \<in> set (edims E)" "eupper t = lattice_top" by (auto simp: covering_def)
+  then obtain t where "t \<in> set (edims E)" "eupper t = \<top>" by (auto simp: covering_def)
   then show ?thesis using True by (force simp: gate_def covering_def)
 qed (simp add: gate_def covering_def)
 
@@ -625,7 +625,7 @@ proof -
     also have "\<dots> = ?m \<squnion> flod F" by (rule lattice_join_absorb1[OF lattice_join_ge1])
     finally show ?thesis by (simp only: flod_finclude)
   qed
-  have head: "include_entry ?m (mk_entry (sel ?m lattice_top) gtrue \<bottom>) = mk_entry (sel ?m lattice_top) gtrue \<bottom>"
+  have head: "include_entry ?m (mk_entry (sel ?m \<top>) gtrue \<bottom>) = mk_entry (sel ?m \<top>) gtrue \<bottom>"
     by (rule include_entry_saturated) (simp add: truncate_top)
   have es: "esem (gate_raise M (gate M E)) = esem (gate M E)"
     by (simp add: fun_eq_iff mM kd keyimg_finclude finclude_finclude_same)

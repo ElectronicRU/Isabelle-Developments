@@ -313,7 +313,7 @@ proof -
   then show ?thesis using holds_coarsen[OF assms(2)] by simp
 qed
 
-lemma coarsen_top [simp]: "coarsen lattice_top f = f"
+lemma coarsen_top [simp]: "coarsen \<top> f = f"
   by (rule coarsen_inside) simp
 
 subsection \<open>Pins\<close>

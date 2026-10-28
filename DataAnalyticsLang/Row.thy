@@ -567,7 +567,7 @@ lemma semi_factor_of_family_sup:
   "semi_factor_of_family (F \<squnion> G) = semi_factor_of_family F \<squnion> semi_factor_of_family G"
   unfolding join_def using semi_factor_of_family_lub[of "{F, G}"] by simp
 
-lemma semi_factor_of_family_top: "semi_factor_of_family lattice_top = lattice_top"
+lemma semi_factor_of_family_top: "semi_factor_of_family \<top> = \<top>"
   by (rule below_antisym) (simp_all add: family_of_semi_factor_below_iff[symmetric])
 
 lemma semi_factor_of_family_bot: "semi_factor_of_family \<bottom> = \<bottom>"
@@ -581,7 +581,7 @@ subsection \<open>Dimension sets as semi-factors of the tuple domain\<close>
 text \<open>The coordinate cut is the family that is the top on the dimensions and \<open>\<bottom>\<close> elsewhere.\<close>
 
 definition dcut :: "'a::countable set \<Rightarrow> ('a, 'b::scott_domain) tuple semi_factor" where
-  "dcut A = semi_factor_of_family (\<lambda>d. if d \<in> A then lattice_top else \<bottom>)"
+  "dcut A = semi_factor_of_family (\<lambda>d. if d \<in> A then \<top> else \<bottom>)"
 
 lemma semi_factor_p_dcut:
   "semi_factor_p (dcut A) = (tcut A :: ('a::countable, 'b::scott_domain) tuple \<rightarrow> ('a,'b) tuple)"
@@ -625,7 +625,7 @@ lemma dcut_sup: "dcut (A \<union> B) = dcut A \<squnion> dcut B"
 lemma dcut_bot: "dcut {} = \<bottom>"
   by (simp add: dcut_def semi_factor_of_family_bot lambda_strict)
 
-lemma dcut_top: "dcut UNIV = lattice_top"
+lemma dcut_top: "dcut UNIV = \<top>"
   by (simp add: dcut_def semi_factor_of_family_top[unfolded lattice_top_fun])
 
 lemma tcut_below: "tcut A\<cdot>t \<sqsubseteq> t"

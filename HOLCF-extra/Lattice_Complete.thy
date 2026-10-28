@@ -17,7 +17,13 @@ class lattice_complete = bounded_complete +
 definition lattice_top :: "'a::lattice_complete" where
   "lattice_top = lub UNIV"
 
-lemma below_lattice_top [simp]: "x \<sqsubseteq> (lattice_top :: 'a::lattice_complete)"
+text \<open>The top element takes over the symbol \<open>\<top>\<close> from HOL's @{class top}, which HOLCF
+  developments do not use (as HOLCF does with the lattice join and meet symbols).\<close>
+
+no_notation top (\<open>\<top>\<close>)
+notation lattice_top (\<open>\<top>\<close>)
+
+lemma below_lattice_top [simp]: "x \<sqsubseteq> (\<top> :: 'a::lattice_complete)"
 proof -
   obtain t :: 'a where "\<forall>x. x \<sqsubseteq> t" using ex_top by blast
   then have "UNIV <| t" by (simp add: is_ub_def)
@@ -25,7 +31,7 @@ proof -
   then show ?thesis unfolding lattice_top_def by (blast dest: is_lubD1 is_ubD)
 qed
 
-lemma is_ub_lattice_top [simp]: "S <| (lattice_top :: 'a::lattice_complete)"
+lemma is_ub_lattice_top [simp]: "S <| (\<top> :: 'a::lattice_complete)"
   by (simp add: is_ub_def)
 
 lemma lattice_is_lub: "S <<| lub (S :: 'a::lattice_complete set)"
@@ -52,12 +58,12 @@ lemma lattice_glb_greatest: "(\<And>y. y \<in> S \<Longrightarrow> b \<sqsubsete
   unfolding lattice_glb_eq_lub by (rule lattice_lub_upper) simp
 
 theorem complete_lattice_below:
-  "class.complete_lattice glb lub (\<sqinter>) (\<sqsubseteq>) (\<sqsubset>) (\<squnion>) \<bottom> (lattice_top :: 'a::lattice_complete)"
+  "class.complete_lattice glb lub (\<sqinter>) (\<sqsubseteq>) (\<sqsubset>) (\<squnion>) \<bottom> (\<top> :: 'a::lattice_complete)"
 proof (rule class.complete_lattice.intro[OF class.lattice.intro[OF semilattice_meet]])
   show "class.semilattice_sup (\<squnion>) (\<sqsubseteq>) ((\<sqsubset>) :: 'a \<Rightarrow> _)"
     by (rule class.semilattice_sup.intro[OF below_order])
       (unfold_locales, simp_all add: joinableD join_belowI)
-  show "class.complete_lattice_axioms glb lub (\<sqsubseteq>) \<bottom> (lattice_top :: 'a)"
+  show "class.complete_lattice_axioms glb lub (\<sqsubseteq>) \<bottom> (\<top> :: 'a)"
   proof
     show "lub {} = (\<bottom> :: 'a)" by (rule lub_eqI) simp
   qed (simp_all add: glb_below lattice_glb_greatest lattice_lub_upper lattice_lub_least is_ub_def,
@@ -75,7 +81,7 @@ text \<open>The lattice laws needed elsewhere, re-exported from local interpreta
 context
 begin
 
-interpretation lc: complete_lattice "glb :: 'a::lattice_complete set \<Rightarrow> 'a" lub "(\<sqinter>)" "(\<sqsubseteq>)" "(\<sqsubset>)" "(\<squnion>)" \<bottom> lattice_top
+interpretation lc: complete_lattice "glb :: 'a::lattice_complete set \<Rightarrow> 'a" lub "(\<sqinter>)" "(\<sqsubseteq>)" "(\<sqsubset>)" "(\<squnion>)" \<bottom> \<top>
   by (fact complete_lattice_below)
 
 lemmas lattice_join_assoc = lc.sup_assoc
@@ -130,12 +136,12 @@ instance top :: (bounded_complete) lattice_complete
   by intro_classes (rule exI[of _ Top], simp)
 
 instance "fun" :: (type, lattice_complete) lattice_complete
-  by intro_classes (rule exI[of _ "\<lambda>_. lattice_top"], simp add: fun_below_iff)
+  by intro_classes (rule exI[of _ "\<lambda>_. \<top>"], simp add: fun_below_iff)
 
 instance prod :: (lattice_complete, lattice_complete) lattice_complete
-  by intro_classes (rule exI[of _ "(lattice_top, lattice_top)"], simp add: below_prod_def)
+  by intro_classes (rule exI[of _ "(\<top>, \<top>)"], simp add: below_prod_def)
 
-lemma lattice_top_prod: "lattice_top = (lattice_top :: 'a::lattice_complete, lattice_top :: 'b::lattice_complete)"
+lemma lattice_top_prod: "\<top> = (\<top> :: 'a::lattice_complete, \<top> :: 'b::lattice_complete)"
   by (rule below_antisym) (simp add: below_prod_def, rule below_lattice_top)
 
 lemma lattice_join_prod: "x \<squnion> y = (fst x \<squnion> fst y, snd x \<squnion> snd y)"
@@ -148,7 +154,7 @@ lemma lattice_join_Pair [simp]: "(a, b) \<squnion> (c, d) = (a \<squnion> c, b \
 
 declare lattice_join_bot_left [simp] lattice_join_bot_right [simp]
 
-lemma lattice_top_fun: "lattice_top = (\<lambda>_. lattice_top :: 'b::lattice_complete)"
+lemma lattice_top_fun: "\<top> = (\<lambda>_. \<top> :: 'b::lattice_complete)"
   by (rule below_antisym) (simp add: fun_below_iff, rule below_lattice_top)
 
 lemma fold_join_ge_init: "b \<sqsubseteq> fold (\<squnion>) xs (b::'a::lattice_complete)"

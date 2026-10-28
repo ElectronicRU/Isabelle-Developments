@@ -952,12 +952,12 @@ text \<open>The group of the full mask on top of an LOD is the key's own group.\
 
 lemma group_top:
   assumes "proj (c \<squnion> flod F)\<cdot>k = k"
-  shows "group data c lattice_top F k = {y \<in> lower_maximal data. frows F y \<and> rproj (c \<squnion> flod F) y = k}"
+  shows "group data c \<top> F k = {y \<in> lower_maximal data. frows F y \<and> rproj (c \<squnion> flod F) y = k}"
   using assms by (auto simp: group_def truncate_top frows_def)
 
 lemma keyimg_group_top:
   assumes "proj (c \<squnion> flod F)\<cdot>k = k"
-  shows "keyimg data F (c \<squnion> flod F) k \<longleftrightarrow> group data c lattice_top F k \<noteq> {}"
+  shows "keyimg data F (c \<squnion> flod F) k \<longleftrightarrow> group data c \<top> F k \<noteq> {}"
   by (auto simp: group_top[OF assms] keyimg_def)
 
 end

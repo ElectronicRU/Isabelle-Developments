@@ -201,8 +201,8 @@ definition vsec :: "('r, 'k) view \<Rightarrow> ('r, 'k) view" where
 definition vdet :: "('r, 'k) view \<Rightarrow> ('r, 'k) view \<Rightarrow> bool" (infix \<open>\<preceq>\<close> 50) where
   "v \<preceq> w \<longleftrightarrow> vfd UNIV w v"
 
-lemma vkey_meet: "vkey v = v \<sqinter> (\<bottom>, lattice_top)"
-  by (simp add: vkey_def prod_meet lattice_meet_commute[of _ lattice_top] lattice_meet_top_left)
+lemma vkey_meet: "vkey v = v \<sqinter> (\<bottom>, \<top>)"
+  by (simp add: vkey_def prod_meet lattice_meet_commute[of _ \<top>] lattice_meet_top_left)
 
 lemma vkey_below: "vkey v \<sqsubseteq> v"
   by (simp add: vkey_def below_prod_def)

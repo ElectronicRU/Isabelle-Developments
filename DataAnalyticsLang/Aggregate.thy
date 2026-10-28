@@ -264,13 +264,13 @@ lemma map2_map: "map2 g xs (map h xs) = map (\<lambda>x. g x (h x)) xs"
 
 definition aggregate :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "aggregate f E = \<lparr>emind = \<bottom>,
-     edims = mk_entry (sel \<bottom> lattice_top) gtrue (\<bottom>, emind E) # map release (edims E),
+     edims = mk_entry (sel \<bottom> \<top>) gtrue (\<bottom>, emind E) # map release (edims E),
      esem = \<lambda>data F k. agg_fold f (esem E data F) (inner_keys E data F k),
      csem = \<Lambda> Xs. agg_csem f E Xs\<rparr>"
 
 lemma aggregate_simps [simp]:
   "emind (aggregate f E) = \<bottom>"
-  "edims (aggregate f E) = mk_entry (sel \<bottom> lattice_top) gtrue (\<bottom>, emind E) # map release (edims E)"
+  "edims (aggregate f E) = mk_entry (sel \<bottom> \<top>) gtrue (\<bottom>, emind E) # map release (edims E)"
   "esem (aggregate f E) data F k = agg_fold f (esem E data F) (inner_keys E data F k)"
   "csem (aggregate f E) = (\<Lambda> Xs. agg_csem f E Xs)"
   by (simp_all add: aggregate_def)
@@ -282,7 +282,7 @@ subsection \<open>Lawfulness\<close>
 
 text \<open>The fold entry reads the fiber.\<close>
 
-lemma agg_fiber: "proj (flod F)\<cdot>k = k \<Longrightarrow> group data \<bottom> lattice_top F k = afiber data F (flod F) k"
+lemma agg_fiber: "proj (flod F)\<cdot>k = k \<Longrightarrow> group data \<bottom> \<top> F k = afiber data F (flod F) k"
   by (simp add: group_top[of \<bottom>, simplified] afiber_def)
 
 text \<open>An inner group is the outer group through the same upper part, cut down by the inner key's
@@ -446,7 +446,7 @@ theorem lawful_aggregate:
 proof -
   have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
   let ?m = "emind E"
-  let ?h = "mk_entry (sel \<bottom> lattice_top) gtrue (\<bottom>, ?m) :: ('k, 'r) entry"
+  let ?h = "mk_entry (sel \<bottom> \<top>) gtrue (\<bottom>, ?m) :: ('k, 'r) entry"
   note bij = agg_keys_bij[of ?m]
   show ?thesis
   proof (rule lawfulI, simp_all only: aggregate_simps)

@@ -1031,7 +1031,7 @@ end
 lemma truncate_inf_comp: "(\<rho> \<sqinter> \<tau>) \<sqinter> x = \<rho> \<sqinter> (\<tau> \<sqinter> x)" for x :: "'l::lattice_complete"
   by (rule lattice_meet_assoc)
 
-lemma truncate_top: "lattice_top \<sqinter> x = x" for x :: "'l::lattice_complete"
+lemma truncate_top: "\<top> \<sqinter> x = x" for x :: "'l::lattice_complete"
   by (rule lattice_meet_top_left)
 
 lemma truncate_bot_trunc: "\<bottom> \<sqinter> x = \<bottom>" for x :: "'l::lattice_complete"
