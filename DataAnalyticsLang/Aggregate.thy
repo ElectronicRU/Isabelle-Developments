@@ -137,7 +137,7 @@ text \<open>For a lawful inner expression at a conforming dataset, its keys belo
   among the inner keys of the fiber of \<open>k\<close>.\<close>
 
 lemma inner_keys_fiber:
-  assumes EL: "lawful E" and d: "conforms data"
+  assumes EL: "lawful E" and d: "fconf (edims E) data F"
   shows "inner_keys E data F k = {\<kappa> \<in> rproj (kd E F) ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
 proof -
   let ?X = "kd E F"
@@ -148,7 +148,7 @@ proof -
     then have kfix: "proj ?X\<cdot>\<kappa> = \<kappa>" and below: "proj (flod F)\<cdot>\<kappa> = k" and kdef: "esem E data F \<kappa> \<noteq> None"
       by (simp_all add: inner_keys_def)
     obtain x where x: "x \<in> lower_maximal data" "frows F x" and kx: "\<kappa> = rproj ?X x"
-      using lawful_key_law[OF EL d kdef] by (auto simp: keyimg_def)
+      using lawful_key_law_conf[OF EL d kdef] by (auto simp: keyimg_def)
     have "rproj (flod F) x = k" using below unfolding kx by (simp only: proj_le[OF le])
     then show "\<kappa> \<in> {\<kappa> \<in> rproj ?X ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
       using x kx kdef by (auto simp: afiber_def)
@@ -332,7 +332,7 @@ qed
 text \<open>The content of an inner entry at an inner key is read off the released entry's content.\<close>
 
 lemma agg_content_inner:
-  assumes ES: "semilawful E" and e: "e \<in> set (edims E)" and d: "conforms data"
+  assumes ES: "semilawful E" and e: "e \<in> set (edims E)" and d: "fconf (edims E) data G"
     and yZ: "y \<in> afiber data G (flod G) kG"
     and \<kappa>: "\<kappa> = rproj (emind E \<squnion> flod G) y" and py: "proj (emind E)\<cdot>\<kappa> = p"
   shows "content data e G \<kappa> = agg_pick e p (content data (release e) G kG)"
@@ -356,8 +356,10 @@ proof
   have pa: "proj ?a\<cdot>(rproj (?s \<squnion> ?a) y') = rproj ?a y'" for y' by (rule proj_le[OF lattice_join_ge2])
   have ps: "proj ?s\<cdot>(rproj (?s \<squnion> ?a) y') = rproj ?s y'" for y' by (rule proj_le[OF lattice_join_ge1])
   have wf: "entry_wf e" by (rule semilawful_wf[OF ES e])
-  have svR: "single_valued (cgraph data (release e) G kG)" by (rule cgraph_single_valued[OF entry_wf_release[OF wf] d])
-  have svE: "single_valued (cgraph data e G \<kappa>)" by (rule cgraph_single_valued[OF wf d])
+  have ce: "entry_conf e data G" using d e by (simp add: fconf_def)
+  then have ce': "entry_conf (release e) data G" by (simp add: entry_conf_def lattice_join_ac)
+  have svR: "single_valued (cgraph data (release e) G kG)" by (rule cgraph_single_valued_conf[OF ce'])
+  have svE: "single_valued (cgraph data e G \<kappa>)" by (rule cgraph_single_valued_conf[OF ce])
   show "content data e G \<kappa> q = agg_pick e p ?X q"
   proof (cases "\<exists>y'\<in>efiber data e G \<kappa>. rproj ?s y' = q")
     case True
@@ -440,6 +442,9 @@ proof (rule cstrictI)
   ultimately show "Map.empty \<notin> set Xs" by (simp add: Xs)
 qed
 
+lemma fconf_release: "fconf (mk_entry (sel \<bottom> \<top>) gtrue (\<bottom>, m) # map release es) data F \<longleftrightarrow> fconf es data F"
+  by (simp add: fconf_def entry_conf_def lattice_join_ac vfd_refl below_prod_def)
+
 theorem lawful_aggregate:
   assumes EL: "lawful E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
   shows "lawful (aggregate f E)"
@@ -462,16 +467,18 @@ proof -
       show ?thesis by (simp only: l fold_join_bots)
     qed
     show "keyimg data F (\<bottom> \<squnion> flod F) k"
-      if d: "conforms data" and "agg_fold f (esem E data F) (inner_keys E data F k) \<noteq> None" for data F k
+      if d0: "fconf (?h # map release (edims E)) data F" and "agg_fold f (esem E data F) (inner_keys E data F k) \<noteq> None" for data F k
     proof -
+      have d: "fconf (edims E) data F" using d0 by (simp add: fconf_release)
       have "inner_keys E data F k \<noteq> {}" using agg_fold_nonempty[OF f that(2)] by auto
       then have "afiber data F (flod F) k \<noteq> {}" by (auto simp: inner_keys_fiber[OF EL d])
       then show ?thesis by (auto simp: afiber_def keyimg_def)
     qed
     show "agg_fold f (esem E data F) (inner_keys E data F k)
         = (\<Lambda> Xs. agg_csem f E Xs)\<cdot>(contents data (?h # map release (edims E)) F k)"
-      if d: "conforms data" and k: "proj (\<bottom> \<squnion> flod F)\<cdot>k = k" for data F k
+      if d0: "fconf (?h # map release (edims E)) data F" and k: "proj (\<bottom> \<squnion> flod F)\<cdot>k = k" for data F k
     proof -
+      have d: "fconf (edims E) data F" using d0 by (simp add: fconf_release)
       have k1: "proj (flod F)\<cdot>k = k" using k by simp
       let ?Z = "afiber data F (flod F) k"
       let ?K = "rproj (?m \<squnion> flod F) ` ?Z"
@@ -497,7 +504,7 @@ proof -
           by (rule map_cong[OF refl], rule agg_content_inner[OF ES _ d y(1) y(2) py, symmetric])
         finally have c: "agg_inner (edims E) ?X p = contents data (edims E) F (\<psi> p)" .
         have "proj (kd E F)\<cdot>(\<psi> p) = \<psi> p" by (simp only: y(2) proj_idem)
-        then show ?thesis by (simp only: c semilawful_csem[OF ES d])
+        then show ?thesis by (simp only: c semilawful_csem_conf[OF ES d])
       qed
       let ?Q = "{p \<in> ?P. ?v (\<psi> p) \<noteq> None}"
       have D: "inner_keys E data F k = \<psi> ` ?Q"

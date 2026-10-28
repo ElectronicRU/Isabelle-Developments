@@ -117,16 +117,15 @@ lemma column_simps [simp]:
 text \<open>The rows of a column's group carry one section.\<close>
 
 lemma column_group_section:
-  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))"
-    and d: "conforms data" and x: "x \<in> group data a a F k" and y: "y \<in> group data a a F k"
+  assumes cf: "entry_conf (mk_entry (sel a a) gtrue (c, a)) data F"
+    and x: "x \<in> group data a a F k" and y: "y \<in> group data a a F k"
   shows "y \<downharpoonright> c = x \<downharpoonright> c"
 proof -
-  have "y \<downharpoonright> fst (c, a) = x \<downharpoonright> fst (c, a)"
-  proof (rule view_agree[OF keyed_view_columns[OF fd] d])
-    show "x \<in> lower_maximal data" "y \<in> lower_maximal data" using x y by (simp_all add: group_def)
-    show "rproj a y = rproj a x" using x y by (simp add: group_own)
-  qed simp
-  then show ?thesis by simp
+  have G: "sel_at (sel a a) (flod F) \<squnion> a = a" by (simp add: join_meet_self lattice_join_absorb1[OF below_refl])
+  have m: "x \<in> lower_maximal data" "y \<in> lower_maximal data" using x y by (simp_all add: group_def)
+  have cf': "vfd (lower_maximal data) (\<bottom>, a) (c, \<bottom>)" using cf G by (simp add: entry_conf_def)
+  have "vpart (\<bottom>, a) y = vpart (\<bottom>, a) x" using x y by (simp add: group_own semi_factor_p_bot)
+  from vfdD[OF cf' m(2) m(1) this] show ?thesis by simp
 qed
 
 lemma cstrict_column: "cstrict (column c a v)"
@@ -145,15 +144,15 @@ proof (rule semilawfulI, simp_all only: column_simps)
       = (if hd (contents data [mk_entry (sel a a) gtrue (c, a)] F k) = Map.empty then None
          else Some (v\<cdot>(the (hd (contents data [mk_entry (sel a a) gtrue (c, a)] F k)
            (the_elem (dom (hd (contents data [mk_entry (sel a a) gtrue (c, a)] F k))))))))"
-    if d: "conforms data" for data F k
+    if d: "fconf [mk_entry (sel a a) gtrue (c, a)] data F" for data F k
   proof (cases "group data a a F k = {}")
     case False
     then obtain x where x: "x \<in> group data a a F k" by blast
     have sec: "(\<lambda>y. y \<downharpoonright> c) ` group data a a F k = {x \<downharpoonright> c}"
-      using column_group_section[OF fd d x] x by blast
+      using column_group_section[OF d[unfolded fconf_def, simplified] x] x by blast
     have "cgraph data (mk_entry (sel a a) gtrue (c, a)) F k = (\<lambda>_. (proj a\<cdot>k, x \<downharpoonright> c)) ` group data a a F k"
       unfolding cgraph_def efiber_def cpair_def
-      by (rule image_cong) (simp_all add: group_own column_group_section[OF fd d x])
+      by (rule image_cong) (simp_all add: group_own column_group_section[OF d[unfolded fconf_def, simplified] x])
     then have C: "content data (mk_entry (sel a a) gtrue (c, a)) F k = [proj a\<cdot>k \<mapsto> x \<downharpoonright> c]"
       unfolding content_def using False by (simp add: image_constant_conv)
     have V: "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` group data a a F k = {v\<cdot>(x \<downharpoonright> c)}"
@@ -190,8 +189,8 @@ proof -
     show "entry_wf e" if "e \<in> set (edims E)" for e by (rule semilawful_wf[OF ES that])
     show "emind E = fold (\<squnion>) (map elower (edims E)) \<bottom>" by (rule semilawful_mind_lub[OF ES])
     show "map_option (Rep_cfun g) (esem E data F k) = map_option (Rep_cfun g) (csem E\<cdot>(contents data (edims E) F k))"
-      if "conforms data" "proj (emind E \<squnion> flod F)\<cdot>k = k" for data F k
-      by (simp only: semilawful_csem[OF ES that])
+      if "fconf (edims E) data F" "proj (emind E \<squnion> flod F)\<cdot>k = k" for data F k
+      by (simp only: semilawful_csem_conf[OF ES that])
   qed
 qed
 
@@ -202,8 +201,8 @@ proof -
   proof (rule lawful_semiI[OF semilawful_smap[OF lawful_semilawful[OF assms]]], simp_all only: smap_simps)
     show "(eupper e \<sqinter> emind E) \<sqsubseteq> elower e" if "e \<in> set (edims E)" for e
       by (rule lawful_saturated[OF EL that])
-    show "keyimg data F (emind E \<squnion> flod F) k" if d: "conforms data" and "map_option (Rep_cfun g) (esem E data F k) \<noteq> None" for data F k
-      using that(2) by (intro lawful_key_law[OF EL d]) simp
+    show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (edims E) data F" and "map_option (Rep_cfun g) (esem E data F k) \<noteq> None" for data F k
+      using that(2) by (intro lawful_key_law_conf[OF EL d]) simp
   qed
 qed
 
@@ -256,6 +255,9 @@ lemma content_frestrict:
 lemma cstrict_restrict: "cstrict E \<Longrightarrow> cstrict (restrict \<gamma> E)"
   unfolding cstrict_def by simp
 
+lemma fconf_restrict: "fconf (map (restrict_entry \<gamma>) es) data F \<longleftrightarrow> fconf es data (frestrict \<phi> F)"
+  by (simp add: fconf_def entry_conf_def)
+
 theorem semilawful_restrict:
   assumes ES: "semilawful E"
   shows "semilawful (restrict \<gamma> E)"
@@ -266,10 +268,11 @@ proof (rule semilawfulI, simp_all only: restrict_simps)
   show "emind E = fold (\<squnion>) (map elower (map (restrict_entry \<gamma>) (edims E))) \<bottom>"
     by (simp add: comp_def semilawful_mind_lub[OF ES])
   show "esem E data (frestrict (gsel \<gamma>) F) k = csem E\<cdot>(contents data (map (restrict_entry \<gamma>) (edims E)) F k)"
-    if d: "conforms data" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k" for data F k
+    if d: "fconf (map (restrict_entry \<gamma>) (edims E)) data F" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k" for data F k
   proof -
     have "proj (emind E \<squnion> flod (frestrict (gsel \<gamma>) F))\<cdot>k = k" using k by simp
-    then show ?thesis by (simp add: semilawful_csem[OF ES d] content_frestrict comp_def)
+    then show ?thesis
+      by (simp add: semilawful_csem_conf[OF ES d[unfolded fconf_restrict[of _ _ _ _ "gsel \<gamma>"]]] content_frestrict comp_def)
   qed
 qed
 
@@ -279,10 +282,11 @@ theorem lawful_restrict:
 proof (rule lawful_semiI[OF semilawful_restrict[OF lawful_semilawful[OF EL]]], simp_all only: restrict_simps)
   show "(eupper e \<sqinter> emind E) \<sqsubseteq> elower e" if "e \<in> set (map (restrict_entry \<gamma>) (edims E))" for e
     using that by (auto intro: lawful_saturated[OF EL])
-  show "keyimg data F (emind E \<squnion> flod F) k" if d: "conforms data" and "esem E data (frestrict (gsel \<gamma>) F) k \<noteq> None" for data F k
+  show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (map (restrict_entry \<gamma>) (edims E)) data F"
+    and "esem E data (frestrict (gsel \<gamma>) F) k \<noteq> None" for data F k
   proof -
     have "keyimg data (frestrict (gsel \<gamma>) F) (emind E \<squnion> flod F) k"
-      using lawful_key_law[OF EL that] by simp
+      using lawful_key_law_conf[OF EL d[unfolded fconf_restrict[of _ _ _ _ "gsel \<gamma>"]] that(2)] by simp
     then show ?thesis by (rule keyimg_mono[rotated]) (simp add: frows_frestrict)
   qed
 qed
@@ -355,6 +359,9 @@ qed
 lemma cstrict_filtfor: "cstrict E \<Longrightarrow> cstrict (filtfor \<tau> G E)"
   unfolding cstrict_def by simp
 
+lemma fconf_filtfor: "fconf (map (for_entry \<tau> G) es) data F \<longleftrightarrow> fconf es data (ffor \<tau> G F)"
+  by (simp add: fconf_def entry_conf_def lattice_meet_assoc)
+
 theorem semilawful_filtfor: assumes "semilawful E" shows "semilawful (filtfor \<tau> G E)"
 proof -
   have ES: "semilawful E" by (fact assms)
@@ -372,8 +379,8 @@ proof -
       by (simp add: comp_def semilawful_mind_lub[OF ES])
     show "esem E data (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
         = csem E\<cdot>(contents data (map (for_entry \<tau> G) (edims E)) F k)"
-      if d: "conforms data" for data F k
-      by (simp only: semilawful_csem[OF ES d proj_idem] inner)
+      if d: "fconf (map (for_entry \<tau> G) (edims E)) data F" for data F k
+      by (simp only: semilawful_csem_conf[OF ES d[unfolded fconf_filtfor] proj_idem] inner)
   qed
 qed
 
@@ -398,6 +405,12 @@ proof -
     by (rule group_cong) (simp_all only: amb_finclude slice_finclude lod)
   then show ?thesis unfolding content_def cgraph_def efiber_def cpair_def by simp
 qed
+
+lemma fconf_include: "fconf (map (include_entry m) es) data F \<longleftrightarrow> fconf es data (finclude m F)"
+  by (simp add: fconf_def entry_conf_def flod_finclude truncate_sup lattice_join_ac)
+
+lemma entry_conf_view_bot: "entry_conf (mk_entry S \<gamma> \<bottom>) data F"
+  by (rule entry_conf_key_pure) simp
 
 lemma entry_wf_include_entry: "entry_wf e \<Longrightarrow> entry_wf (include_entry M e)"
   unfolding entry_wf_def include_entry_simps .
@@ -462,14 +475,16 @@ proof -
       then show ?thesis by simp
     qed
     show "keyimg data F (?m \<squnion> flod F) k"
-      if "conforms data" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
+      if "fconf (?h # map (include_entry ?m) (edims E)) data F" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
       for data F k
       using that by (simp split: if_splits)
     show "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None)
         = (if hd (contents data (?h # map (include_entry ?m) (edims E)) F k) = Map.empty then None
            else csem E\<cdot>(tl (contents data (?h # map (include_entry ?m) (edims E)) F k)))"
-      if d: "conforms data" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
+      if d: "fconf (?h # map (include_entry ?m) (edims E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
     proof -
+      have "fconf (map (include_entry ?m) (edims E)) data F" using d by (simp add: fconf_def)
+      then have d': "fconf (edims E) data (finclude ?m F)" by (simp only: fconf_include)
       have h: "hd (contents data (?h # map (include_entry ?m) (edims E)) F k) = Map.empty
           \<longleftrightarrow> \<not> keyimg data F (?m \<squnion> flod F) k"
         by (simp only: list.map list.sel content_const_top[OF k]) simp
@@ -477,7 +492,7 @@ proof -
           = contents data (edims E) (finclude ?m F) k"
         by (simp add: comp_def content_include_entry)
       have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kdE k)
-      then show ?thesis by (simp only: h t semilawful_csem[OF ES d]) simp
+      then show ?thesis by (simp only: h t semilawful_csem_conf[OF ES d']) simp
     qed
   qed
 qed
@@ -549,18 +564,19 @@ proof -
           (auto intro: lattice_join_least[OF below_trans[OF lower_below_mind[OF ES] lattice_join_ge1] truncate_below])
     qed
     show "keyimg data F (?m \<squnion> flod F) k"
-      if "conforms data" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
+      if "fconf (map (include_entry ?m) (edims E)) data F" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
       for data F k
       using that by (simp split: if_splits)
     show "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None)
         = csem E\<cdot>(contents data (map (include_entry ?m) (edims E)) F k)"
-      if d: "conforms data" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
+      if d: "fconf (map (include_entry ?m) (edims E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
     proof -
+      have d': "fconf (edims E) data (finclude ?m F)" using d by (simp only: fconf_include)
       have c: "contents data (map (include_entry ?m) (edims E)) F k = contents data (edims E) (finclude ?m F) k"
         by (simp add: comp_def content_include_entry)
       have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kdE k)
       then have v: "esem E data (finclude ?m F) k = csem E\<cdot>(contents data (map (include_entry ?m) (edims E)) F k)"
-        by (simp only: c semilawful_csem[OF ES d])
+        by (simp only: c semilawful_csem_conf[OF ES d'])
       show ?thesis
       proof (cases "keyimg data F (?m \<squnion> flod F) k")
         case False
@@ -833,7 +849,7 @@ proof (rule semilawfulI, simp_all only: collect_simps)
   show "those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)
       = those (map (\<lambda>(E, Ys). csem E\<cdot>Ys)
           (zip Es (blocks (map (\<lambda>E. length (edims E)) Es) (contents data (concat (map edims Es)) F k))))"
-    if d: "conforms data" for data F k
+    if d: "fconf (concat (map edims Es)) data F" for data F k
   proof -
     have c: "contents data (concat (map edims Es)) F k = concat (map (\<lambda>E. contents data (edims E) F k) Es)"
       by (simp add: map_concat comp_def)
@@ -844,7 +860,10 @@ proof (rule semilawfulI, simp_all only: collect_simps)
         = map (\<lambda>E. csem E\<cdot>(contents data (edims E) F k)) Es"
       by (induct Es) simp_all
     have "esem E data F (proj (kd E F)\<cdot>k) = csem E\<cdot>(contents data (edims E) F k)" if E: "E \<in> set Es" for E
-      by (simp only: semilawful_csem[OF law[OF E] d proj_idem] contents_own_key[OF law[OF E]])
+    proof -
+      have dE: "fconf (edims E) data F" using d E by (auto simp: fconf_def)
+      show ?thesis by (simp only: semilawful_csem_conf[OF law[OF E] dE proj_idem] contents_own_key[OF law[OF E]])
+    qed
     then show ?thesis by (simp only: b z cong: map_cong)
   qed
 qed

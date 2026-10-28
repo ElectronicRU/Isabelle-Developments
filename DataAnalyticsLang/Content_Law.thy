@@ -522,6 +522,70 @@ qed
 lemma graph_content: "entry_wf e \<Longrightarrow> conforms data \<Longrightarrow> graph (content data e F k) = cgraph data e F k"
   unfolding content_def by (rule graph_gmap[OF cgraph_single_valued])
 
+subsection \<open>Conformance relative to an expression\<close>
+
+text \<open>Graph-ness only compares rows within a fiber, which agree at the group LOD.  So what a dataset
+  must satisfy for an entry, under a frame, is that within the rows the key at the group LOD joined
+  with the view's key part determines the view's section.  Raising the frame weakens this; a
+  conforming dataset satisfies it under every frame, by the keyedness of the view.\<close>
+
+definition entry_conf :: "('k, 'r) entry \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
+  "entry_conf e data F \<longleftrightarrow> vfd (lower_maximal data) (\<bottom>, sel_at (esel e) (flod F) \<squnion> ekeys e) (ecols e, \<bottom>)"
+
+definition fconf :: "('k, 'r) entry list \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
+  "fconf es data F \<longleftrightarrow> (\<forall>e\<in>set es. entry_conf e data F)"
+
+lemma vfd_trans: "vfd P u v \<Longrightarrow> vfd P v w \<Longrightarrow> vfd P u w"
+  by (rule determines_trans)
+
+lemma entry_conf_conforms:
+  assumes e: "entry_wf e" and d: "conforms data"
+  shows "entry_conf e data F"
+  unfolding entry_conf_def
+proof (rule vfd_trans[OF vfd_refl vfd_trans[OF _ vfd_refl]])
+  have "keyed_view (eview e)" using e by (simp add: entry_wf_def)
+  then have "vfd (lower_maximal data) (vkey (eview e)) (eview e)"
+    unfolding keyed_view_def by (rule universallyD[OF _ d])
+  then show "vfd (lower_maximal data) (\<bottom>, ekeys e) (ecols e, ekeys e)" by (simp add: vkey_def)
+  show "(\<bottom>, ekeys e) \<sqsubseteq> (\<bottom>, sel_at (esel e) (flod F) \<squnion> ekeys e)" by (simp add: below_prod_def lattice_join_ge2)
+  show "(ecols e, \<bottom>) \<sqsubseteq> (ecols e, ekeys e)" by (simp add: below_prod_def)
+qed
+
+lemma fconf_conforms: "(\<And>e. e \<in> set es \<Longrightarrow> entry_wf e) \<Longrightarrow> conforms data \<Longrightarrow> fconf es data F"
+  unfolding fconf_def by (blast intro: entry_conf_conforms)
+
+text \<open>An entry reading no columns is conforming everywhere.\<close>
+
+lemma entry_conf_key_pure: "ecols e = \<bottom> \<Longrightarrow> entry_conf e data F"
+  unfolding entry_conf_def by (rule vfd_refl) (simp add: below_prod_def)
+
+text \<open>So the laws of an expression whose entries read no columns hold on every dataset and under
+  every frame: such an expression may be evaluated anywhere.\<close>
+
+lemma fconf_key_pure: "(\<And>e. e \<in> set es \<Longrightarrow> ecols e = \<bottom>) \<Longrightarrow> fconf es data F"
+  unfolding fconf_def by (blast intro: entry_conf_key_pure)
+
+lemma cgraph_single_valued_conf:
+  assumes c: "entry_conf e data F"
+  shows "single_valued (cgraph data e F k)"
+proof (rule single_valuedI)
+  fix q u u' assume u: "(q, u) \<in> cgraph data e F k" and u': "(q, u') \<in> cgraph data e F k"
+  let ?G = "sel_at (esel e) (flod F)"
+  obtain y where y: "y \<in> efiber data e F k" "q = rproj (ekeys e) y" "u = y \<downharpoonright> ecols e"
+    using u unfolding cgraph_def cpair_def by blast
+  obtain y' where y': "y' \<in> efiber data e F k" "q = rproj (ekeys e) y'" "u' = y' \<downharpoonright> ecols e"
+    using u' unfolding cgraph_def cpair_def by blast
+  have m: "y \<in> lower_maximal data" "y' \<in> lower_maximal data" and g: "rproj ?G y' = rproj ?G y"
+    using y(1) y'(1) by (auto simp: efiber_def group_def)
+  have "rproj (?G \<squnion> ekeys e) y' = rproj (?G \<squnion> ekeys e) y"
+    using g y(2) y'(2) by (simp only: rproj_sup_eq)
+  then have "vpart (\<bottom>, ?G \<squnion> ekeys e) y' = vpart (\<bottom>, ?G \<squnion> ekeys e) y" by (simp add: semi_factor_p_bot)
+  from vfdD[OF c[unfolded entry_conf_def] m(2) m(1) this] show "u = u'" using y(3) y'(3) by simp
+qed
+
+lemma graph_content_conf: "entry_conf e data F \<Longrightarrow> graph (content data e F k) = cgraph data e F k"
+  unfolding content_def by (rule graph_gmap[OF cgraph_single_valued_conf])
+
 subsection \<open>Column supports of frames and sections of datasets\<close>
 
 text \<open>A selection \<^emph>\<open>reads\<close> a section of the row when it is decided there.  A frame reads a
@@ -661,16 +725,16 @@ lemma cstrictD: "cstrict E \<Longrightarrow> length Xs = length (edims E) \<Long
 
 definition semilawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
   "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map elower (edims E)) \<bottom> \<and> (\<forall>e\<in>set (edims E). entry_wf e) \<and> cstrict E \<and>
-     (\<forall>data F k. conforms data \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k))"
+     (\<forall>data F k. fconf (edims E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k))"
 
 definition lawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
   "lawful E \<longleftrightarrow> semilawful E \<and> (\<forall>e\<in>set (edims E). (eupper e \<sqinter> emind E) \<sqsubseteq> elower e) \<and>
-     (\<forall>data F k. conforms data \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow> keyimg data F (kd E F) k)"
+     (\<forall>data F k. fconf (edims E) data F \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow> keyimg data F (kd E F) k)"
 
 lemma semilawfulI:
   assumes "emind E = fold (\<squnion>) (map elower (edims E)) \<bottom>"
     and "\<And>e. e \<in> set (edims E) \<Longrightarrow> entry_wf e"
-    and "\<And>data F k. \<lbrakk>conforms data; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
+    and "\<And>data F k. \<lbrakk>fconf (edims E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
            esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
     and "cstrict E"
   shows "semilawful E"
@@ -688,9 +752,16 @@ lemma semilawful_cstrict: "semilawful E \<Longrightarrow> cstrict E"
 lemma semilawful_keyed: "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> keyed_view (eview e)"
   using semilawful_wf unfolding entry_wf_def by blast
 
+lemma semilawful_csem_conf:
+  "\<lbrakk>semilawful E; fconf (edims E) data F; proj (kd E F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
+  unfolding semilawful_def by blast
+
+lemma semilawful_fconf: "semilawful E \<Longrightarrow> conforms data \<Longrightarrow> fconf (edims E) data F"
+  by (rule fconf_conforms[OF semilawful_wf])
+
 lemma semilawful_csem:
   "\<lbrakk>semilawful E; conforms data; proj (kd E F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
-  unfolding semilawful_def by blast
+  by (rule semilawful_csem_conf[OF _ semilawful_fconf])
 
 text \<open>Equal contents give equal values, across datasets and frames.\<close>
 
@@ -710,7 +781,7 @@ lemma semilawful_mono:
 lemma lawful_semiI:
   assumes "semilawful E"
     and "\<And>e. e \<in> set (edims E) \<Longrightarrow> (eupper e \<sqinter> emind E) \<sqsubseteq> elower e"
-    and "\<And>data F k. conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
+    and "\<And>data F k. fconf (edims E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
   shows "lawful E"
   unfolding lawful_def using assms by blast
 
@@ -718,9 +789,9 @@ lemma lawfulI:
   assumes "\<And>e. e \<in> set (edims E) \<Longrightarrow> (eupper e \<sqinter> emind E) \<sqsubseteq> elower e"
     and "emind E = fold (\<squnion>) (map elower (edims E)) \<bottom>"
     and "\<And>e. e \<in> set (edims E) \<Longrightarrow> entry_wf e"
-    and "\<And>data F k. \<lbrakk>conforms data; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
+    and "\<And>data F k. \<lbrakk>fconf (edims E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
            esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
-    and "\<And>data F k. conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
+    and "\<And>data F k. fconf (edims E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
     and "cstrict E"
   shows "lawful E"
   by (rule lawful_semiI[OF semilawfulI[OF assms(2-4,6)] assms(1,5)])
@@ -731,8 +802,11 @@ lemma lawful_semilawful: "lawful E \<Longrightarrow> semilawful E"
 lemma lawful_saturated: "lawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> (eupper e \<sqinter> emind E) \<sqsubseteq> elower e"
   unfolding lawful_def by blast
 
-lemma lawful_key_law: "lawful E \<Longrightarrow> conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
+lemma lawful_key_law_conf: "lawful E \<Longrightarrow> fconf (edims E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
   unfolding lawful_def by blast
+
+lemma lawful_key_law: "lawful E \<Longrightarrow> conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
+  by (rule lawful_key_law_conf[OF _ semilawful_fconf[OF lawful_semilawful]])
 
 lemma lawful_keyed: "lawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> keyed_view (eview e)"
   by (rule semilawful_keyed[OF lawful_semilawful])
