@@ -392,7 +392,7 @@ proof -
   moreover have "(csupp (snd v), \<bottom>) \<preceq> v"
     using assms unfolding exact_key_def
     by (rule vdet_trans) (rule below_vdet, simp add: below_prod_def)
-  ultimately show ?thesis by (simp add: vdet_join)
+  ultimately show ?thesis by (simp only: vdet_join)
 qed
 
 lemma vdet_sections: "(c, \<bottom>) \<preceq> (c', \<bottom>) \<longleftrightarrow> c \<sqsubseteq> c'"

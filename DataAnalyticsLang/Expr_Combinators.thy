@@ -375,18 +375,18 @@ text \<open>Evaluating under the frame raised by \<open>M\<close> is the same as
   its masked part of \<open>M\<close>: the entry-level form of \<open>finclude\<close>.\<close>
 
 definition include_entry :: "'k semi_factor \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('k, 'r) entry" where
-  "include_entry M e = e\<lparr>esel := sel (elower e \<squnion> (eupper e \<sqinter> M)) (eupper e)\<rparr>"
+  "include_entry M e = e\<lparr>esel := sel (sel_at (esel e) M) (eupper e)\<rparr>"
 
 lemma include_entry_simps [simp]:
-  "elower (include_entry M e) = elower e \<squnion> (eupper e \<sqinter> M)" "eupper (include_entry M e) = eupper e"
+  "elower (include_entry M e) = sel_at (esel e) M" "eupper (include_entry M e) = eupper e"
   "eguard (include_entry M e) = eguard e" "eview (include_entry M e) = eview e"
   by (simp_all add: include_entry_def)
 
 lemma content_include_entry: "content data (include_entry M e) F k = content data e (finclude M F) k"
 proof -
-  have lod: "(elower e \<squnion> (eupper e \<sqinter> M)) \<squnion> (eupper e \<sqinter> flod F) = elower e \<squnion> (eupper e \<sqinter> flod (finclude M F))"
+  have lod: "(sel_at (esel e) M) \<squnion> (eupper e \<sqinter> flod F) = sel_at (esel e) (flod (finclude M F))"
     by (simp add: flod_finclude truncate_sup lattice_join_ac)
-  have "group data (elower e \<squnion> (eupper e \<sqinter> M)) (eupper e) F k = group data (elower e) (eupper e) (finclude M F) k"
+  have "group data (sel_at (esel e) M) (eupper e) F k = group data (elower e) (eupper e) (finclude M F) k"
     by (rule group_cong) (simp_all only: amb_finclude slice_finclude lod)
   then show ?thesis unfolding content_def cgraph_def efiber_def cpair_def by simp
 qed
@@ -396,33 +396,37 @@ lemma entry_wf_include_entry: "entry_wf e \<Longrightarrow> entry_wf (include_en
 
 subsection \<open>The gate\<close>
 
-text \<open>The gate turns a semilawful expression into a lawful one: it evaluates under the frame
-  including the minimal LOD, which saturates the entries (their lower parts take in the masked
-  minimal LOD), and it is present exactly at the frame's data keys, which a presence entry at the
-  full key records.\<close>
+text \<open>The gate at \<open>M\<close> turns a semilawful expression into a lawful one: it evaluates under the
+  frame including the minimal LOD and \<open>M\<close>, which saturates the entries (their lower parts take in
+  the masked minimal LOD and \<open>M\<close>), and it is present exactly at the frame's data keys at that LOD,
+  which a presence entry at the full key records.  \<open>gate \<bottom>\<close> is the plain gate; a larger \<open>M\<close>
+  refines the expression's groups by further dimensions (requested ones, inside an aggregation).\<close>
 
-definition gate :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate E = \<lparr>emind = emind E,
-     edims = mk_entry (sel (emind E) lattice_top) gtrue \<bottom> # map (include_entry (emind E)) (edims E),
-     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> flod F) k
-       then esem E data (finclude (emind E) F) k else None,
+definition gate :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "gate M E = \<lparr>emind = emind E \<squnion> M,
+     edims = mk_entry (sel (emind E \<squnion> M) lattice_top) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E),
+     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None,
      csem = \<Lambda> Xs. if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs)\<rparr>"
 
 lemma gate_simps [simp]:
-  "emind (gate E) = emind E"
-  "edims (gate E) = mk_entry (sel (emind E) lattice_top) gtrue \<bottom> # map (include_entry (emind E)) (edims E)"
-  "esem (gate E) data F k = (if keyimg data F (emind E \<squnion> flod F) k
-       then esem E data (finclude (emind E) F) k else None)"
-  "csem (gate E)\<cdot>Xs = (if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs))"
+  "emind (gate M E) = emind E \<squnion> M"
+  "edims (gate M E) = mk_entry (sel (emind E \<squnion> M) lattice_top) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E)"
+  "esem (gate M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
+  "csem (gate M E)\<cdot>Xs = (if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs))"
   by (simp_all add: gate_def cont_if_rigid[OF rigid_hd_empty])
 
-theorem lawful_gate: assumes "semilawful E" shows "lawful (gate E)"
+theorem lawful_gate: assumes "semilawful E" shows "lawful (gate M E)"
 proof -
   have ES: "semilawful E" by (fact assms)
-  let ?m = "emind E"
+  let ?m = "emind E \<squnion> M"
   let ?h = "mk_entry (sel ?m lattice_top) gtrue \<bottom> :: ('k, 'r) entry"
-  have kd: "?m \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
-    by (simp add: flod_finclude lattice_join_ac)
+  have kdE: "emind E \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
+  proof -
+    have "emind E \<sqsubseteq> flod F \<squnion> ?m" by (rule below_trans[OF lattice_join_ge1 lattice_join_ge2])
+    then show ?thesis unfolding flod_finclude by (simp only: lattice_join_absorb2 lattice_join_commute)
+  qed
   show ?thesis
   proof (rule lawfulI, simp_all only: gate_simps)
     show "entry_wf e" if "e \<in> set (?h # map (include_entry ?m) (edims E))" for e
@@ -433,8 +437,8 @@ proof -
     proof -
       have "fold (\<squnion>) (map elower (map (include_entry ?m) (edims E))) ?m = ?m"
         by (rule fold_join_absorb)
-          (auto intro: lattice_join_least[OF lower_below_mind[OF ES] truncate_below])
-      then show ?thesis by (simp add: lattice_join_bot_right)
+          (auto intro: lattice_join_least[OF below_trans[OF lower_below_mind[OF ES] lattice_join_ge1] truncate_below])
+      then show ?thesis by simp
     qed
     show "keyimg data F (?m \<squnion> flod F) k"
       if "conforms data" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
@@ -451,7 +455,7 @@ proof -
       have t: "tl (contents data (?h # map (include_entry ?m) (edims E)) F k)
           = contents data (edims E) (finclude ?m F) k"
         by (simp add: comp_def content_include_entry)
-      have "proj (?m \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd k)
+      have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kdE k)
       then show ?thesis by (simp only: h t semilawful_csem[OF ES d]) simp
     qed
   qed
@@ -512,7 +516,7 @@ lemma contents_own_key:
   shows "contents data (edims E) F (proj (kd E F)\<cdot>k) = contents data (edims E) F k"
 proof (rule map_cong[OF refl])
   fix e assume e: "e \<in> set (edims E)"
-  have "proj (elower e \<squnion> (eupper e \<sqinter> flod F))\<cdot>(proj (kd E F)\<cdot>k) = proj (elower e \<squnion> (eupper e \<sqinter> flod F))\<cdot>k"
+  have "proj (sel_at (esel e) (flod F))\<cdot>(proj (kd E F)\<cdot>k) = proj (sel_at (esel e) (flod F))\<cdot>k"
     by (rule proj_le[OF group_below_kd[OF E e]])
   then show "content data e F (proj (kd E F)\<cdot>k) = content data e F k"
     by (intro content_group_cong) (simp add: group_def)

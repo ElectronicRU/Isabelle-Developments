@@ -16,7 +16,7 @@ begin
 
 definition reducible :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
   "reducible M E F \<longleftrightarrow> (\<forall>e\<in>set (edims E).
-     row_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, elower e \<squnion> (eupper e \<sqinter> flod F)) (\<bottom>, (eupper e \<sqinter> M))))"
+     row_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, sel_at (esel e) (flod F)) (\<bottom>, (eupper e \<sqinter> M))))"
 
 end
 
@@ -25,7 +25,7 @@ begin
 
 lemma content_reduce:
   assumes ES: "semilawful E" and d: "conforms data" and M: "emind E \<sqsubseteq> M" and e: "e \<in> set (edims E)"
-    and red: "row_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, elower e \<squnion> (eupper e \<sqinter> flod F)) (\<bottom>, (eupper e \<sqinter> M)))"
+    and red: "row_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, sel_at (esel e) (flod F)) (\<bottom>, (eupper e \<sqinter> M)))"
     and ki: "keyimg data F (M \<squnion> flod F) k"
   shows "content data e (finclude M F) k = content data e F (proj (kd E F)\<cdot>k)"
 proof -
@@ -103,7 +103,7 @@ proof (rule semilawful_content_law[OF ES d d])
   show "contents data (edims E) (finclude M F) k = contents data (edims E) F (proj (kd E F)\<cdot>k)"
   proof (rule map_cong[OF refl])
     fix e assume e: "e \<in> set (edims E)"
-    have r: "row_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, elower e \<squnion> (eupper e \<sqinter> flod F)) (\<bottom>, (eupper e \<sqinter> M)))"
+    have r: "row_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, sel_at (esel e) (flod F)) (\<bottom>, (eupper e \<sqinter> M)))"
       using red e by (auto simp: reducible_def)
     show "content data e (finclude M F) k = content data e F (proj (kd E F)\<cdot>k)"
       by (rule content_reduce[OF ES d M e r ki])
@@ -120,7 +120,7 @@ begin
 
 theorem gate_reduce:
   assumes E: "semilawful E" and d: "conforms data" and red: "reducible (emind E) E F"
-  shows "esem (gate E) data F k = (if keyimg data F (emind E \<squnion> flod F) k
+  shows "esem (gate \<bottom> E) data F k = (if keyimg data F (emind E \<squnion> flod F) k
       then esem E data F (proj (emind E \<squnion> flod F)\<cdot>k) else None)"
 proof -
   have ES: "semilawful E" by (fact E)

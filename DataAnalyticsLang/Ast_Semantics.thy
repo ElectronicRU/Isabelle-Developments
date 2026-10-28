@@ -34,7 +34,7 @@ lemma row_level_smap: "row_level (smap g E) \<longleftrightarrow> row_level E"
 lemma row_level_collect: "(\<And>E. E \<in> set Es \<Longrightarrow> row_level E) \<Longrightarrow> row_level (collect Es)"
   unfolding row_level_def collect_simps by fastforce
 
-lemma total_level_aggregate: "total_level (aggregate M f E)"
+lemma total_level_aggregate: "total_level (aggregate f E)"
   by (simp add: total_level_def)
 
 text \<open>The content graphs of a semilawful row-level expression have at most one element: the rows
@@ -45,7 +45,7 @@ lemma row_level_content_single:
     and u: "u \<in> cgraph data e F k" and u': "u' \<in> cgraph data e F k"
   shows "u = u'"
 proof -
-  let ?G = "elower e \<squnion> (eupper e \<sqinter> flod F)"
+  let ?G = "sel_at (esel e) (flod F)"
   obtain x where x: "x \<in> group data (elower e) (eupper e) F k" using u by (auto simp: cgraph_def efiber_def)
   have "cgraph data e F k = (if ofun (eguard e)\<cdot>x = TT then {cpair e x} else {})"
     unfolding cgraph_def efiber_def
@@ -154,7 +154,7 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
 | "asem (Col c) = column (col_sec c) (dim_lod (col_dim c)) (col_val c)"
 | "asem (Lit v) = value_at \<bottom> (\<Lambda> _. v)"
 | "asem (Call fn es) = smap (fsym_sem fn_other fn) (collect (map asem es))"
-| "asem (Aggr g e) = aggregate (requested e) (ag_sem g) (gate (asem e))"
+| "asem (Aggr g e) = aggregate (ag_sem g) (gate (requested e) (asem e))"
 | "asem (GroupBy ds e) = asem e"
 | "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
 | "asem (Where C e) = restrict (row_guard C) (asem e)"
@@ -185,7 +185,7 @@ next
   then show ?case by (simp add: semilawful_restrict supported_row_guard)
 qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd] semilawful_filtfor)
 
-corollary lawful_gate_asem: "wf e \<Longrightarrow> lawful (gate (asem e))"
+corollary lawful_gate_asem: "wf e \<Longrightarrow> lawful (gate \<bottom> (asem e))"
   by (rule lawful_gate[OF semilawful_asem])
 
 text \<open>References to dimensions and columns and literals are row level, literals and aggregations
@@ -198,6 +198,98 @@ lemma row_level_Dim: "row_level (asem (Dim d))" and row_level_Col: "row_level (a
 
 lemma row_level_Call: "(\<And>e. e \<in> set es \<Longrightarrow> row_level (asem e)) \<Longrightarrow> row_level (asem (Call fn es))"
   unfolding asem.simps row_level_smap by (rule row_level_collect) auto
+
+section \<open>Row-level values from the content semantics\<close>
+
+text \<open>On the point family of a row and a key, the content semantics of a row-level expression is
+  its reading on the parts of that pair: the structural row reading is the content semantics at one
+  row.  Key-level expressions, which read no columns, are read off the key alone.\<close>
+
+lemma those_map_Some: "those (map Some xs) = Some xs"
+  by (induct xs) simp_all
+
+theorem csem_point: "row_ast e \<Longrightarrow> csem (asem e)\<cdot>(point (edims (asem e)) p) = Some (pval e\<cdot>p)"
+proof (induct e rule: row_ast.induct)
+  case (1 d)
+  show ?case by (cases p) (simp add: dim_reads)
+next
+  case (2 c)
+  show ?case by (cases p) (simp add: col_reads)
+next
+  case (4 fn es)
+  let ?Es = "map asem es" and ?P = "\<lambda>E. point (edims E) p"
+  have IH: "csem (asem e)\<cdot>(?P (asem e)) = Some (pval e\<cdot>p)" if "e \<in> set es" for e
+    using 4 that by simp
+  have b: "blocks (map (\<lambda>E. length (edims E)) ?Es) (point (concat (map edims ?Es)) p) = map ?P ?Es"
+    unfolding point_concat map_map comp_def
+    using blocks_concat[of "\<lambda>E. point (edims E) p" ?Es] by (simp add: comp_def)
+  have m: "map2 (\<lambda>E Ys. csem E\<cdot>Ys) ?Es (map ?P ?Es) = map (\<lambda>e. Some (pval e\<cdot>p)) es"
+    unfolding map2_map_map map_map comp_def using IH by simp
+  show ?case
+    by (simp only: asem.simps smap_simps collect_simps b m) (simp add: those_map_Some[of "map (\<lambda>e. pval e\<cdot>p) es", unfolded map_map comp_def] tuple_cfun_apply map_map comp_def)
+qed simp_all
+
+text \<open>Key-level expressions: dimensions, literals and calls, no columns.\<close>
+
+fun key_ast :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> bool" where
+  "key_ast (Dim d) \<longleftrightarrow> True"
+| "key_ast (Lit v) \<longleftrightarrow> True"
+| "key_ast (Call fn es) \<longleftrightarrow> fsym_arity fn_arity fn (length es) \<and> (\<forall>e\<in>set es. key_ast e)"
+| "key_ast _ \<longleftrightarrow> False"
+
+lemma key_ast_row_ast: "key_ast e \<Longrightarrow> row_ast e"
+  by (induct e rule: key_ast.induct) auto
+
+lemma pval_kval: "key_ast e \<Longrightarrow> pval e\<cdot>(r, k) = kval e\<cdot>k"
+proof (induct e rule: key_ast.induct)
+  case (3 fn es)
+  then have m: "map (\<lambda>e. pval e\<cdot>(r, k)) es = map (\<lambda>e. kval e\<cdot>k) es" by simp
+  show ?case by (simp only: pval.simps kval.simps cfcomp2 tuple_cfun_apply map_map comp_def m)
+qed simp_all
+
+text \<open>On data: at a key realised by a row of the frame, a row-level expression has the row
+  reading of that row.  Its entries are row entries with no guard, so each content is the point
+  content of the row.\<close>
+
+lemma row_ast_wf: "row_ast e \<Longrightarrow> wf e"
+  by (induct e rule: row_ast.induct) auto
+
+lemma row_ast_row_level: "row_ast e \<Longrightarrow> row_level (asem e)"
+  by (induct e rule: row_ast.induct) (auto simp: row_level_value_at row_level_column row_level_smap intro!: row_level_collect)
+
+lemma row_ast_gtrue: "row_ast e \<Longrightarrow> e' \<in> set (edims (asem e)) \<Longrightarrow> eguard e' = gtrue"
+  by (induct e arbitrary: e' rule: row_ast.induct) auto
+
+theorem esem_row_ast:
+  assumes e: "row_ast e" and d: "conforms data" and xm: "x \<in> lower_maximal data" and xF: "frows F x"
+    and kx: "k = rproj (kd (asem e) F) x"
+  shows "esem (asem e) data F k = Some (pval e\<cdot>(x, rkey\<cdot>x))"
+proof -
+  have ES: "semilawful (asem e)" by (rule semilawful_asem[OF row_ast_wf[OF e]])
+  have k: "proj (kd (asem e) F)\<cdot>k = k" by (simp add: kx)
+  have "contents data (edims (asem e)) F k = point (edims (asem e)) (x, rkey\<cdot>x)"
+    unfolding point_def
+  proof (rule map_cong[OF refl])
+    fix e' assume e': "e' \<in> set (edims (asem e))"
+    let ?G = "sel_at (esel e') (flod F)" and ?Y = "group data (elower e') (eupper e') F k"
+    have Gk: "proj ?G\<cdot>k = rproj ?G x" unfolding kx by (rule proj_le[OF group_below_kd[OF ES e']])
+    have xY: "x \<in> ?Y" using xm xF Gk by (simp add: group_def frows_def holds_coarsen)
+    have r: "row_entry e'" using row_ast_row_level[OF e] e' by (simp add: row_level_def)
+    have "cpair e' ` {y \<in> ?Y. ofun (eguard e')\<cdot>y = TT} = {cpair e' x}"
+    proof -
+      have "cpair e' ` {y \<in> ?Y. ofun (eguard e')\<cdot>y = TT} = (if ofun (eguard e')\<cdot>x = TT then {cpair e' x} else {})"
+        by (rule row_entry_image[OF semilawful_wf[OF ES e'] r d _ xY lattice_join_ge1])
+          (auto simp: group_def Gk)
+      then show ?thesis by (simp add: row_ast_gtrue[OF e e'])
+    qed
+    then show "content data e' F k = [proj (ekeys e')\<cdot>(snd (x, rkey\<cdot>x)) \<mapsto> fst (x, rkey\<cdot>x) \<downharpoonright> ecols e']"
+      by (simp add: content_def cgraph_def efiber_def cpair_def)
+  qed
+  then show ?thesis by (simp only: semilawful_csem[OF ES d k] csem_point[OF e])
+qed
+
+corollary csem_point_key: "key_ast e \<Longrightarrow> csem (asem e)\<cdot>(point (edims (asem e)) (r, k)) = Some (kval e\<cdot>k)"
+  by (simp only: csem_point[OF key_ast_row_ast] pval_kval)
 
 end
 

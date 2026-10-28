@@ -123,6 +123,11 @@ hide_const (open) selector.truncate
 abbreviation sel :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> 'k selector" where
   "sel a \<rho> \<equiv> \<lparr>lower_part = a, upper_part = \<rho>\<rparr>"
 
+text \<open>A selector is the affine LOD map \<open>L \<mapsto> a \<squnion> \<rho> \<sqinter> L\<close>: at the frame LOD it gives the group LOD.\<close>
+
+abbreviation sel_at :: "('k::{bifinite, distributive_cpo}) selector \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor" where
+  "sel_at S L \<equiv> lower_part S \<squnion> (upper_part S \<sqinter> L)"
+
 record ('k::"{domain, distributive_cpo}", 'r::"{domain, distributive_cpo}") entry =
   esel :: "'k selector"
   eguard :: "('r, 'k) guard"
@@ -483,6 +488,23 @@ definition content :: "'r lower_pd \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('
 abbreviation contents :: "'r lower_pd \<Rightarrow> ('k, 'r) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
   "contents data es F k \<equiv> map (\<lambda>e. content data e F k) es"
 
+text \<open>The \<^emph>\<open>point family\<close> at a row and a key: each entry's content as if its fiber were that one
+  row with that key.  A fiber of one row gives the point content.\<close>
+
+definition point :: "('k, 'r) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
+  "point es p = map (\<lambda>e. [proj (ekeys e)\<cdot>(snd p) \<mapsto> fst p \<downharpoonright> ecols e]) es"
+
+lemma point_simps [simp]:
+  "point [] p = []" "point (e # es) p = [proj (ekeys e)\<cdot>(snd p) \<mapsto> fst p \<downharpoonright> ecols e] # point es p"
+  "point (es @ es') p = point es p @ point es' p" "length (point es p) = length es"
+  by (simp_all add: point_def)
+
+lemma point_concat: "point (concat ess) p = concat (map (\<lambda>es. point es p) ess)"
+  by (induct ess) simp_all
+
+lemma content_single_fiber: "efiber data e F k = {y} \<Longrightarrow> content data e F k = hd (point [e] (y, rkey\<cdot>y))"
+  by (simp add: content_def cgraph_def cpair_def)
+
 text \<open>A \<^emph>\<open>row entry\<close> keys its view and guard within its lower part: rows of a fiber, which agree
   there, agree on the whole content pair, so its content has at most one key.\<close>
 
@@ -594,14 +616,14 @@ text \<open>The content of an entry is computed from the point section at any se
   group LOD's support, the frame, and the views of the guard and the entry.\<close>
 
 lemma content_section:
-  assumes F: "frame_reads c F" and G: "csupp (elower e \<squnion> (eupper e \<sqinter> flod F)) \<sqsubseteq> c"
+  assumes F: "frame_reads c F" and G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
     and fc: "fst (vsec (eview e)) \<sqsubseteq> c" and gc: "fst (vsec (oview (eguard e))) \<sqsubseteq> c"
   shows "content data e F k = gmap (cpair e ` {z \<in> pts_section c data.
     selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and>
-    rproj (elower e \<squnion> (eupper e \<sqinter> flod F)) z = proj (elower e \<squnion> (eupper e \<sqinter> flod F))\<cdot>k \<and>
+    rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k \<and>
     ofun (eguard e)\<cdot>z = TT})"
 proof -
-  let ?G = "elower e \<squnion> (eupper e \<sqinter> flod F)"
+  let ?G = "sel_at (esel e) (flod F)"
   let ?P = "\<lambda>z. selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and> rproj ?G z = proj ?G\<cdot>k \<and>
     ofun (eguard e)\<cdot>z = TT"
   let ?h = "cpair e"
@@ -765,7 +787,7 @@ proof -
 qed
 
 lemma group_below_kd:
-  "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> elower e \<squnion> (eupper e \<sqinter> flod F) \<sqsubseteq> kd E F"
+  "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> sel_at (esel e) (flod F) \<sqsubseteq> kd E F"
   by (rule join_belowI[OF below_trans[OF lower_below_mind lattice_join_ge1]
         below_trans[OF truncate_below lattice_join_ge2]])
 
@@ -789,7 +811,7 @@ lemma contents_section:
   shows "contents data (edims E) F k = contents data' (edims E) F k"
 proof (rule map_cong[OF refl])
   fix e assume e: "e \<in> set (edims E)"
-  have G: "csupp (elower e \<squnion> (eupper e \<sqinter> flod F)) \<sqsubseteq> c"
+  have G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
     by (rule below_trans[OF csupp_mono[OF group_below_kd[OF E e]] K])
   have r: "fst (vsec (eview e)) \<sqsubseteq> c" "fst (vsec (oview (eguard e))) \<sqsubseteq> c"
     using cols[OF e] by (simp_all add: entry_reads_def)
@@ -802,9 +824,9 @@ text \<open>The \<^emph>\<open>grain\<close> of an expression at a frame joins t
   grain, and its values at finer keys are broadcast.\<close>
 
 definition grain :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
-  "grain E F = fold (\<squnion>) (map (\<lambda>e. elower e \<squnion> (eupper e \<sqinter> flod F)) (edims E)) \<bottom>"
+  "grain E F = fold (\<squnion>) (map (\<lambda>e. sel_at (esel e) (flod F)) (edims E)) \<bottom>"
 
-lemma group_below_grain: "e \<in> set (edims E) \<Longrightarrow> elower e \<squnion> (eupper e \<sqinter> flod F) \<sqsubseteq> grain E F"
+lemma group_below_grain: "e \<in> set (edims E) \<Longrightarrow> sel_at (esel e) (flod F) \<sqsubseteq> grain E F"
   unfolding grain_def by (rule fold_join_upper) force
 
 lemma grain_below_kd: "semilawful E \<Longrightarrow> grain E F \<sqsubseteq> kd E F"
@@ -819,7 +841,7 @@ proof (rule semilawful_content_law[OF E d d k])
   show "contents data (edims E) F k = contents data (edims E) F (proj (grain E F)\<cdot>k)"
   proof (rule map_cong[OF refl])
     fix e assume e: "e \<in> set (edims E)"
-    have "proj (elower e \<squnion> (eupper e \<sqinter> flod F))\<cdot>(proj (grain E F)\<cdot>k) = proj (elower e \<squnion> (eupper e \<sqinter> flod F))\<cdot>k"
+    have "proj (sel_at (esel e) (flod F))\<cdot>(proj (grain E F)\<cdot>k) = proj (sel_at (esel e) (flod F))\<cdot>k"
       by (rule proj_le[OF group_below_grain[OF e]])
     then show "content data e F k = content data e F (proj (grain E F)\<cdot>k)"
       by (intro content_group_cong) (simp add: group_def)
@@ -830,7 +852,7 @@ text \<open>For lawful expressions the frame LOD inside the minimal LOD does not
   the key LOD.\<close>
 
 lemma group_kd:
-  "lawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> elower e \<squnion> (eupper e \<sqinter> flod F) = elower e \<squnion> (eupper e \<sqinter> kd E F)"
+  "lawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> sel_at (esel e) (flod F) = sel_at (esel e) (kd E F)"
   by (rule sat_absorb[symmetric, OF lawful_saturated])
 
 lemma contents_kd:
@@ -850,7 +872,7 @@ lemma peg_group:
   assumes E: "lawful E" and e: "e \<in> set (edims E)" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
   shows "group data (elower e) (eupper e) (peg K F) K = group data (elower e) (eupper e) F K"
 proof -
-  let ?G = "elower e \<squnion> (eupper e \<sqinter> flod F)" and ?T = "(eupper e \<sqinter> kd E F)"
+  let ?G = "sel_at (esel e) (flod F)" and ?T = "(eupper e \<sqinter> kd E F)"
   have le: "?T \<sqsubseteq> ?G" unfolding group_kd[OF E e] by (rule lattice_join_ge2)
   have pin: "holds (coarsen (eupper e) (spin K)) (rkey\<cdot>y)" if y: "rproj ?G y = proj ?G\<cdot>K" for y
   proof -

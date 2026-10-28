@@ -142,6 +142,12 @@ lemma lattice_join_prod: "x \<squnion> y = (fst x \<squnion> fst y, snd x \<squn
   for x y :: "'a::lattice_complete \<times> 'b::lattice_complete"
   by (rule prod_join[OF joinable_lattice])
 
+lemma lattice_join_Pair [simp]: "(a, b) \<squnion> (c, d) = (a \<squnion> c, b \<squnion> d)"
+  for a c :: "'a::lattice_complete" and b d :: "'b::lattice_complete"
+  by (simp add: lattice_join_prod)
+
+declare lattice_join_bot_left [simp] lattice_join_bot_right [simp]
+
 lemma lattice_top_fun: "lattice_top = (\<lambda>_. lattice_top :: 'b::lattice_complete)"
   by (rule below_antisym) (simp add: fun_below_iff, rule below_lattice_top)
 
