@@ -4,74 +4,6 @@ begin
 
 default_sort type
 
-section \<open>Levels of detail as syntactic dimension sets\<close>
-
-text \<open>
-  Dimensions are drawn from a (countable, nominal) label set \<^typ>\<open>'d\<close>; each label is
-  evaluated on rows by a continuous row-level expression into a value domain.  Two labels may
-  share an expression: they are then functionally dependent, but distinct.  The key of a row is
-  the tuple of all its dimensions' values; a level of detail then cuts it.
-
-  The image of a row under the cut key need \<^emph>\<open>not\<close> be a stable subdomain of the tuple domain
-  (with an expression dimension \<open>c \<approx> a + b\<close> the allowable sub-rows are not closed under existing
-  joins), and we never require it to be: the domain stays the source rows, and functional
-  dependence is stated relationally via kernel orders.
-\<close>
-
-locale dim_eval =
-  fixes deval :: "'d \<Rightarrow> ('r::pcpo \<rightarrow> 'v::pcpo)" (\<open>\<lbrakk>_\<rbrakk>\<close>)
-begin
-
-definition keyof :: "'r \<rightarrow> ('d, 'v) tuple" where
-  "keyof = (\<Lambda> r. Abs_tuple (\<lambda>d. \<lbrakk>d\<rbrakk>\<cdot>r))"
-
-lemma keyof_beta: "keyof\<cdot>r = Abs_tuple (\<lambda>d. \<lbrakk>d\<rbrakk>\<cdot>r)"
-  unfolding keyof_def by (simp add: cont_Abs_tuple)
-
-lemma keyof_tget [simp]: "(keyof\<cdot>r)\<langle>d\<rangle> = \<lbrakk>d\<rbrakk>\<cdot>r"
-  by (simp add: keyof_beta Abs_tuple_inverse')
-
-subsection \<open>Kernel orders and functional dependence\<close>
-
-text \<open>The kernel order of a projection \<open>p\<close> on keys (in practice a deflation, such as an LOD's):
-  rows compared by what \<open>p\<close> keeps of their keys.\<close>
-
-definition kern :: "(('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> 'r \<Rightarrow> 'r \<Rightarrow> bool" where
-  "kern p x y \<longleftrightarrow> p\<cdot>(keyof\<cdot>x) \<sqsubseteq> p\<cdot>(keyof\<cdot>y)"
-
-lemma kern_bot: "kern \<bottom> x y"
-  by (simp add: kern_def)
-
-lemma kern_below:
-  assumes "deflation p" "deflation q" "p \<sqsubseteq> q" and "kern q x y"
-  shows "kern p x y"
-proof -
-  have "p\<cdot>(q\<cdot>(keyof\<cdot>x)) \<sqsubseteq> p\<cdot>(q\<cdot>(keyof\<cdot>y))" using assms(4) unfolding kern_def by (rule monofun_cfun_arg)
-  then show ?thesis unfolding kern_def by (simp add: deflation_below_comp1[OF assms(1-3)])
-qed
-
-text \<open>Functional dependence of \<open>p\<close> on \<open>q\<close>, relative to a support predicate \<^term>\<open>S\<close> on source
-  rows: rows that \<open>q\<close> cannot tell apart (in the kernel order), \<open>p\<close> cannot either.  Taking
-  \<^term>\<open>S\<close> true everywhere gives schema-level dependence; taking \<^term>\<open>S\<close> to be what a filter
-  selects gives the data-level one.\<close>
-
-definition fdep :: "('r \<Rightarrow> bool) \<Rightarrow> (('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> (('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> bool" where
-  "fdep S p q \<longleftrightarrow> (\<forall>x y. S x \<longrightarrow> S y \<longrightarrow> kern q x y \<longrightarrow> kern p x y)"
-
-lemma fdep_refl: "fdep S p p"
-  by (simp add: fdep_def)
-
-lemma fdep_trans: "fdep S p q \<Longrightarrow> fdep S q r \<Longrightarrow> fdep S p r"
-  unfolding fdep_def by blast
-
-lemma fdep_below: "deflation p \<Longrightarrow> deflation q \<Longrightarrow> p \<sqsubseteq> q \<Longrightarrow> fdep S p q"
-  unfolding fdep_def by (blast intro: kern_below)
-
-lemma fdep_support_mono: "(\<And>x. S' x \<Longrightarrow> S x) \<Longrightarrow> fdep S p q \<Longrightarrow> fdep S' p q"
-  unfolding fdep_def by blast
-
-end
-
 section \<open>Filters\<close>
 
 text \<open>A filter is a continuous predicate into \<^typ>\<open>one\<close> (Sierpinski space): a row \<^emph>\<open>passes\<close> it
@@ -416,53 +348,6 @@ lemma holds_pinned:
 proof -
   have "holds (spin K) k" using assms(2,3) by (rule holds_mono)
   then show ?thesis by (simp only: holds_spin[OF assms(1)])
-qed
-
-end
-
-subsection \<open>Rows versus keys\<close>
-
-text \<open>A row predicate reading only what a projection \<open>p\<close> keeps of the key is the same thing as a
-  key predicate: its up-image is open (when the projected keys are compact), and its preimage
-  gives back the row predicate.
-  Preimages of open key predicates are open for any \<open>p\<close>.\<close>
-
-context dim_eval
-begin
-
-definition keyup :: "(('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> ('r \<Rightarrow> bool) \<Rightarrow> ('d, 'v) tuple \<Rightarrow> bool" where
-  "keyup p V t \<longleftrightarrow> (\<exists>r. V r \<and> p\<cdot>(keyof\<cdot>r) \<sqsubseteq> t)"
-
-definition rowpre :: "(('d, 'v) tuple \<rightarrow> ('d, 'v) tuple) \<Rightarrow> (('d, 'v) tuple \<Rightarrow> bool) \<Rightarrow> 'r \<Rightarrow> bool" where
-  "rowpre p U r \<longleftrightarrow> U (p\<cdot>(keyof\<cdot>r))"
-
-lemma keyup_up: "keyup p V t \<Longrightarrow> t \<sqsubseteq> t' \<Longrightarrow> keyup p V t'"
-  unfolding keyup_def by (blast intro: below_trans)
-
-lemma rowpre_keyup:
-  assumes "\<And>x y. kern p x y \<Longrightarrow> V x \<Longrightarrow> V y"
-  shows "rowpre p (keyup p V) = V"
-  using assms unfolding fun_eq_iff rowpre_def keyup_def kern_def by blast
-
-lemma rowpre_up: "(\<And>t t'. U t \<Longrightarrow> t \<sqsubseteq> t' \<Longrightarrow> U t') \<Longrightarrow> rowpre p U r \<Longrightarrow> r \<sqsubseteq> r' \<Longrightarrow> rowpre p U r'"
-  unfolding rowpre_def by (blast intro: monofun_cfun_arg)
-
-lemma rowpre_open: "adm (\<lambda>t. \<not> U t) \<Longrightarrow> adm (\<lambda>r. \<not> rowpre p U r)"
-  unfolding rowpre_def using adm_subst[of "\<lambda>r. p\<cdot>(keyof\<cdot>r)" "\<lambda>t. \<not> U t"] by simp
-
-lemma keyup_open:
-  assumes "\<And>r. compact (p\<cdot>(keyof\<cdot>r))"
-  shows "adm (\<lambda>t. \<not> keyup p V t)"
-proof (rule admI)
-  fix Y :: "nat \<Rightarrow> ('d, 'v) tuple"
-  assume Y: "chain Y" "\<forall>i. \<not> keyup p V (Y i)"
-  show "\<not> keyup p V (\<Squnion>i. Y i)"
-  proof
-    assume "keyup p V (\<Squnion>i. Y i)"
-    then obtain r where "V r" "p\<cdot>(keyof\<cdot>r) \<sqsubseteq> (\<Squnion>i. Y i)" by (auto simp: keyup_def)
-    then obtain i where "p\<cdot>(keyof\<cdot>r) \<sqsubseteq> Y i" using Y(1) assms compact_below_lub_iff by blast
-    with \<open>V r\<close> Y(2) show False by (auto simp: keyup_def)
-  qed
 qed
 
 end
