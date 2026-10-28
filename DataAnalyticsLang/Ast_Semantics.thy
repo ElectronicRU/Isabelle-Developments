@@ -20,10 +20,10 @@ definition total_level :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
   "total_level E \<longleftrightarrow> emind E = \<bottom>"
 
 lemma row_level_value_at: "row_level (value_at c g)"
-  by (simp add: row_level_def row_entry_def)
+  by (simp add: row_level_def row_entry_def guard_keyed_gtrue)
 
 lemma row_level_column: "row_level (column c a v)"
-  by (simp add: row_level_def row_entry_def)
+  by (simp add: row_level_def row_entry_def guard_keyed_gtrue)
 
 lemma total_level_value_at_bot: "total_level (value_at \<bottom> g)"
   by (simp add: total_level_def)
@@ -47,7 +47,7 @@ lemma row_level_content_single:
 proof -
   let ?G = "sel_at (esel e) (flod F)"
   obtain x where x: "x \<in> group data (elower e) (eupper e) F k" using u by (auto simp: cgraph_def efiber_def)
-  have "cgraph data e F k = (if gtest (eguard e)\<cdot>x = TT then {cpair e x} else {})"
+  have "cgraph data e F k = (if eguard e\<cdot>x = TT then {cpair e x} else {})"
     unfolding cgraph_def efiber_def
   proof (rule row_entry_image[OF semilawful_wf[OF E e] _ d _ x lattice_join_ge1[of "elower e" "eupper e \<sqinter> flod F"]])
     show "row_entry e" using r e by (simp add: row_level_def)
@@ -125,11 +125,8 @@ fun row_ast :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> bool" where
 
 text \<open>A row-level condition is a guard through its truth value.\<close>
 
-definition row_guard :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('r, 'k) guard" where
-  "row_guard C = \<lparr>gfun = truth_d oo pval C, gview = rview C\<rparr>"
-
-lemma row_guard_view [simp]: "gview (row_guard C) = rview C"
-  by (simp add: row_guard_def)
+definition row_guard :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> 'r guard" where
+  "row_guard C = truth_d oo pval C oo vproj (rview C)"
 
 text \<open>The views of row-level expressions are keyed.\<close>
 
@@ -146,8 +143,6 @@ proof (induct e rule: row_ast.induct)
   then show ?case unfolding rview.simps by (intro keyed_view_fold keyed_view_bot) auto
 qed (simp_all add: keyed_view_key keyed_view_columns[OF col_fd] keyed_view_bot)
 
-lemma supported_row_guard: "row_ast C \<Longrightarrow> supported (row_guard C)"
-  by (simp add: supported_def keyed_view_rview)
 
 fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice, 'r, scalar datum) expr" where
   "asem (Dim d) = value_at (dim_lod d) (key_datum oo dim_val d)"
@@ -182,7 +177,7 @@ next
   then show ?case by (simp add: lawful_semilawful lawful_aggregate[OF lawful_gate ag_abel])
 next
   case (8 C e)
-  then show ?case by (simp add: semilawful_restrict supported_row_guard)
+  then show ?case by (simp add: semilawful_restrict)
 qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd] semilawful_filtfor)
 
 corollary lawful_gate_asem: "wf e \<Longrightarrow> lawful (gate \<bottom> (asem e))"
@@ -275,9 +270,9 @@ proof -
     have Gk: "proj ?G\<cdot>k = rproj ?G x" unfolding kx by (rule proj_le[OF group_below_kd[OF ES e']])
     have xY: "x \<in> ?Y" using xm xF Gk by (simp add: group_def frows_def holds_coarsen)
     have r: "row_entry e'" using row_ast_row_level[OF e] e' by (simp add: row_level_def)
-    have "cpair e' ` {y \<in> ?Y. gtest (eguard e')\<cdot>y = TT} = {cpair e' x}"
+    have "cpair e' ` {y \<in> ?Y. eguard e'\<cdot>y = TT} = {cpair e' x}"
     proof -
-      have "cpair e' ` {y \<in> ?Y. gtest (eguard e')\<cdot>y = TT} = (if gtest (eguard e')\<cdot>x = TT then {cpair e' x} else {})"
+      have "cpair e' ` {y \<in> ?Y. eguard e'\<cdot>y = TT} = (if eguard e'\<cdot>x = TT then {cpair e' x} else {})"
         by (rule row_entry_image[OF semilawful_wf[OF ES e'] r d _ xY lattice_join_ge1])
           (auto simp: group_def Gk)
       then show ?thesis by (simp add: row_ast_gtrue[OF e e'])

@@ -73,7 +73,7 @@ qed
 theorem semilawful_key_at: "semilawful (key_at c)"
 proof (rule semilawfulI, simp_all only: key_at_simps)
   show "entry_wf e" if "e \<in> set [mk_entry (sel c c) gtrue (\<bottom>, c)]" for e
-    using that by (simp add: entry_wf_view keyed_view_key supported_gtrue)
+    using that by (simp add: entry_wf_view keyed_view_key)
   show "c = fold (\<squnion>) (map elower [mk_entry (sel c c) gtrue (\<bottom>, c)]) \<bottom>" by (simp add: lattice_join_bot_right)
   show "(if group data c c F k = {} then None else Some (proj c\<cdot>k))
       = (if hd (contents data [mk_entry (sel c c) gtrue (\<bottom>, c)] F k) = Map.empty then None
@@ -130,7 +130,7 @@ theorem semilawful_column:
   shows "semilawful (column c a v)"
 proof (rule semilawfulI, simp_all only: column_simps)
   show "entry_wf e" if "e \<in> set [mk_entry (sel a a) gtrue (c, a)]" for e
-    using that by (simp add: entry_wf_view keyed_view_columns[OF fd] supported_gtrue)
+    using that by (simp add: entry_wf_view keyed_view_columns[OF fd])
   show "a = fold (\<squnion>) (map elower [mk_entry (sel a a) gtrue (c, a)]) \<bottom>"
     by (simp add: lattice_join_bot_right)
   show "(if group data a a F k = {} then None else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` group data a a F k))
@@ -214,7 +214,7 @@ subsection \<open>\<open>RESTRICT\<close>\<close>
 text \<open>Restricting conjoins the rows a test passes to the ambient filter: inner fibers are the
   outer fibers' rows passing it, so the test is conjoined to each entry's guard.\<close>
 
-definition restrict_entry :: "('r, 'k) guard \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('k, 'r) entry" where
+definition restrict_entry :: "'r guard \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('k, 'r) entry" where
   "restrict_entry \<gamma> e = e\<lparr>eguard := gand \<gamma> (eguard e)\<rparr>"
 
 lemma restrict_entry_simps [simp]:
@@ -222,7 +222,7 @@ lemma restrict_entry_simps [simp]:
   "eguard (restrict_entry \<gamma> e) = gand \<gamma> (eguard e)" "eview (restrict_entry \<gamma> e) = eview e"
   by (simp_all add: restrict_entry_def)
 
-definition restrict :: "('r, 'k) guard \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition restrict :: "'r guard \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "restrict \<gamma> E = \<lparr>emind = emind E, edims = map (restrict_entry \<gamma>) (edims E),
      esem = \<lambda>data F. esem E data (frestrict (gsel \<gamma>) F), csem = csem E\<rparr>"
 
@@ -242,11 +242,11 @@ lemma content_frestrict:
   unfolding content_def cgraph_def efiber_def cpair_def by (auto simp: group_frestrict)
 
 theorem semilawful_restrict:
-  assumes g: "supported \<gamma>" and ES: "semilawful E"
+  assumes ES: "semilawful E"
   shows "semilawful (restrict \<gamma> E)"
 proof (rule semilawfulI, simp_all only: restrict_simps)
   show "entry_wf e" if "e \<in> set (map (restrict_entry \<gamma>) (edims E))" for e
-    using that semilawful_wf[OF ES] entry_wf_guard[OF _ g] by (auto simp: restrict_entry_def)
+    using that semilawful_wf[OF ES] by (auto simp: restrict_entry_def entry_wf_def)
   show "emind E = fold (\<squnion>) (map elower (map (restrict_entry \<gamma>) (edims E))) \<bottom>"
     by (simp add: comp_def semilawful_mind_lub[OF ES])
   show "esem E data (frestrict (gsel \<gamma>) F) k = csem E\<cdot>(contents data (map (restrict_entry \<gamma>) (edims E)) F k)"
@@ -258,9 +258,9 @@ proof (rule semilawfulI, simp_all only: restrict_simps)
 qed
 
 theorem lawful_restrict:
-  assumes g: "supported \<gamma>" and EL: "lawful E"
+  assumes EL: "lawful E"
   shows "lawful (restrict \<gamma> E)"
-proof (rule lawful_semiI[OF semilawful_restrict[OF g lawful_semilawful[OF EL]]], simp_all only: restrict_simps)
+proof (rule lawful_semiI[OF semilawful_restrict[OF lawful_semilawful[OF EL]]], simp_all only: restrict_simps)
   show "(eupper e \<sqinter> emind E) \<sqsubseteq> elower e" if "e \<in> set (map (restrict_entry \<gamma>) (edims E))" for e
     using that by (auto intro: lawful_saturated[OF EL])
   show "keyimg data F (emind E \<squnion> flod F) k" if d: "conforms data" and "esem E data (frestrict (gsel \<gamma>) F) k \<noteq> None" for data F k
@@ -347,7 +347,7 @@ proof -
   proof (rule semilawfulI, simp_all only: filtfor_simps)
     show "entry_wf e" if "e \<in> set (map (for_entry \<tau> G) (edims E))" for e
       using that semilawful_wf[OF ES]
-      by (auto simp: entry_wf_def supported_gand supported_guard_holds)
+      by (auto simp: entry_wf_def)
     show "?m = fold (\<squnion>) (map elower (map (for_entry \<tau> G) (edims E))) \<bottom>"
       by (simp add: comp_def semilawful_mind_lub[OF ES])
     show "esem E data (ffor \<tau> G F) (proj (?m \<squnion> flod (ffor \<tau> G F))\<cdot>k)
@@ -418,7 +418,7 @@ proof -
   show ?thesis
   proof (rule lawfulI, simp_all only: gate_simps)
     show "entry_wf e" if "e \<in> set (?h # map (include_entry ?m) (edims E))" for e
-      using that by (auto intro: entry_wf_view keyed_view_bot_view supported_gtrue entry_wf_include_entry semilawful_wf[OF ES])
+      using that by (auto intro: entry_wf_view keyed_view_bot_view entry_wf_include_entry semilawful_wf[OF ES])
     show "(eupper e \<sqinter> ?m) \<sqsubseteq> elower e" if "e \<in> set (?h # map (include_entry ?m) (edims E))" for e
       using that by (auto simp: truncate_top intro: lattice_join_ge2)
     show "?m = fold (\<squnion>) (map elower (?h # map (include_entry ?m) (edims E))) \<bottom>"

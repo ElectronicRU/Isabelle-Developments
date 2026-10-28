@@ -408,7 +408,7 @@ proof -
   show ?thesis
   proof (rule lawfulI, simp_all only: aggregate_simps)
     show "entry_wf e" if "e \<in> set (?h # map release (edims E))" for e
-      using that by (auto intro: entry_wf_view keyed_view_key supported_gtrue entry_wf_release semilawful_wf[OF ES])
+      using that by (auto intro: entry_wf_view keyed_view_key entry_wf_release semilawful_wf[OF ES])
     show "(eupper e \<sqinter> \<bottom>) \<sqsubseteq> elower e" if "e \<in> set (?h # map release (edims E))" for e
       using that by (auto simp: lattice_meet_bot_right)
     show "(\<bottom>::'k semi_factor) = fold (\<squnion>) (map elower (?h # map release (edims E))) \<bottom>"
