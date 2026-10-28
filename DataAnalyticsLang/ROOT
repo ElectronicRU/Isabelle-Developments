@@ -22,7 +22,6 @@ session DataAnalyticsLang = "HOLCF-extra" +
     Aggregate
     Ast
     Ast_Semantics
-    Bag_Join
   document_files
     "root.tex"
     "root.bib"
