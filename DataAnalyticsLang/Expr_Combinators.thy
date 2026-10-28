@@ -70,8 +70,12 @@ proof -
   then show ?thesis unfolding content_def by (simp add: image_constant_conv)
 qed
 
+lemma cstrict_key_at: "cstrict (key_at c)"
+  by (rule cstrictI) (auto simp: length_Suc_conv)
+
 theorem semilawful_key_at: "semilawful (key_at c)"
 proof (rule semilawfulI, simp_all only: key_at_simps)
+  show "cstrict (key_at c)" by (rule cstrict_key_at)
   show "entry_wf e" if "e \<in> set [mk_entry (sel c c) gtrue (\<bottom>, c)]" for e
     using that by (simp add: entry_wf_view keyed_view_key)
   show "c = fold (\<squnion>) (map elower [mk_entry (sel c c) gtrue (\<bottom>, c)]) \<bottom>" by (simp add: lattice_join_bot_right)
@@ -125,10 +129,14 @@ proof -
   then show ?thesis by simp
 qed
 
+lemma cstrict_column: "cstrict (column c a v)"
+  by (rule cstrictI) (auto simp: length_Suc_conv)
+
 theorem semilawful_column:
   assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))"
   shows "semilawful (column c a v)"
 proof (rule semilawfulI, simp_all only: column_simps)
+  show "cstrict (column c a v)" by (rule cstrict_column)
   show "entry_wf e" if "e \<in> set [mk_entry (sel a a) gtrue (c, a)]" for e
     using that by (simp add: entry_wf_view keyed_view_columns[OF fd])
   show "a = fold (\<squnion>) (map elower [mk_entry (sel a a) gtrue (c, a)]) \<bottom>"
@@ -170,11 +178,15 @@ lemma smap_simps [simp]:
   "csem (smap g E)\<cdot>Xs = map_option (Rep_cfun g) (csem E\<cdot>Xs)"
   by (simp_all add: smap_def)
 
+lemma cstrict_smap: "cstrict E \<Longrightarrow> cstrict (smap g E)"
+  unfolding cstrict_def by simp
+
 theorem semilawful_smap: assumes "semilawful E" shows "semilawful (smap g E)"
 proof -
   have ES: "semilawful E" by (fact assms)
   show ?thesis
   proof (rule semilawfulI, simp_all only: smap_simps)
+    show "cstrict (smap g E)" by (rule cstrict_smap[OF semilawful_cstrict[OF ES]])
     show "entry_wf e" if "e \<in> set (edims E)" for e by (rule semilawful_wf[OF ES that])
     show "emind E = fold (\<squnion>) (map elower (edims E)) \<bottom>" by (rule semilawful_mind_lub[OF ES])
     show "map_option (Rep_cfun g) (esem E data F k) = map_option (Rep_cfun g) (csem E\<cdot>(contents data (edims E) F k))"
@@ -241,10 +253,14 @@ lemma content_frestrict:
   "content data e (frestrict (gsel \<gamma>) F) k = content data (restrict_entry \<gamma> e) F k"
   unfolding content_def cgraph_def efiber_def cpair_def by (auto simp: group_frestrict)
 
+lemma cstrict_restrict: "cstrict E \<Longrightarrow> cstrict (restrict \<gamma> E)"
+  unfolding cstrict_def by simp
+
 theorem semilawful_restrict:
   assumes ES: "semilawful E"
   shows "semilawful (restrict \<gamma> E)"
 proof (rule semilawfulI, simp_all only: restrict_simps)
+  show "cstrict (restrict \<gamma> E)" by (rule cstrict_restrict[OF semilawful_cstrict[OF ES]])
   show "entry_wf e" if "e \<in> set (map (restrict_entry \<gamma>) (edims E))" for e
     using that semilawful_wf[OF ES] by (auto simp: restrict_entry_def entry_wf_def)
   show "emind E = fold (\<squnion>) (map elower (map (restrict_entry \<gamma>) (edims E))) \<bottom>"
@@ -336,6 +352,9 @@ proof -
   ultimately show ?thesis unfolding content_def by (simp add: image_constant_conv keyimg_group_top[OF assms])
 qed
 
+lemma cstrict_filtfor: "cstrict E \<Longrightarrow> cstrict (filtfor \<tau> G E)"
+  unfolding cstrict_def by simp
+
 theorem semilawful_filtfor: assumes "semilawful E" shows "semilawful (filtfor \<tau> G E)"
 proof -
   have ES: "semilawful E" by (fact assms)
@@ -345,6 +364,7 @@ proof -
     unfolding map_map comp_def by (rule map_cong[OF refl], rule content_ffor[OF lower_below_mind[OF ES]])
   show ?thesis
   proof (rule semilawfulI, simp_all only: filtfor_simps)
+    show "cstrict (filtfor \<tau> G E)" by (rule cstrict_filtfor[OF semilawful_cstrict[OF ES]])
     show "entry_wf e" if "e \<in> set (map (for_entry \<tau> G) (edims E))" for e
       using that semilawful_wf[OF ES]
       by (auto simp: entry_wf_def)
@@ -390,22 +410,34 @@ text \<open>The gate at \<open>M\<close> turns a semilawful expression into a la
   which a presence entry at the full key records.  \<open>gate \<bottom>\<close> is the plain gate; a larger \<open>M\<close>
   refines the expression's groups by further dimensions (requested ones, inside an aggregation).\<close>
 
-definition gate :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate M E = \<lparr>emind = emind E \<squnion> M,
+definition gate_presence :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "gate_presence M E = \<lparr>emind = emind E \<squnion> M,
      edims = mk_entry (sel (emind E \<squnion> M) lattice_top) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E),
      esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
        then esem E data (finclude (emind E \<squnion> M) F) k else None,
      csem = \<Lambda> Xs. if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs)\<rparr>"
 
-lemma gate_simps [simp]:
-  "emind (gate M E) = emind E \<squnion> M"
-  "edims (gate M E) = mk_entry (sel (emind E \<squnion> M) lattice_top) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E)"
-  "esem (gate M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+lemma gate_presence_simps [simp]:
+  "emind (gate_presence M E) = emind E \<squnion> M"
+  "edims (gate_presence M E) = mk_entry (sel (emind E \<squnion> M) lattice_top) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (edims E)"
+  "esem (gate_presence M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
        then esem E data (finclude (emind E \<squnion> M) F) k else None)"
-  "csem (gate M E)\<cdot>Xs = (if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs))"
-  by (simp_all add: gate_def cont_if_rigid[OF rigid_hd_empty])
+  "csem (gate_presence M E)\<cdot>Xs = (if hd Xs = Map.empty then None else csem E\<cdot>(tl Xs))"
+  by (simp_all add: gate_presence_def cont_if_rigid[OF rigid_hd_empty])
 
-theorem lawful_gate: assumes "semilawful E" shows "lawful (gate M E)"
+lemma cstrict_gate_presence:
+  assumes E: "cstrict E"
+  shows "cstrict (gate_presence M E)"
+proof (rule cstrictI)
+  fix Xs :: "('k \<Rightarrow> 'r option) list"
+  assume l: "length Xs = length (edims (gate_presence M E))" and c: "csem (gate_presence M E)\<cdot>Xs \<noteq> None"
+  then obtain X Xs' where Xs: "Xs = X # Xs'" and l': "length Xs' = length (edims E)"
+    by (auto simp: length_Suc_conv)
+  have "X \<noteq> Map.empty" and "csem E\<cdot>Xs' \<noteq> None" using c by (simp_all add: Xs split: if_splits)
+  then show "Map.empty \<notin> set Xs" using cstrictD[OF E l'] by (auto simp: Xs)
+qed
+
+theorem lawful_gate_presence: assumes "semilawful E" shows "lawful (gate_presence M E)"
 proof -
   have ES: "semilawful E" by (fact assms)
   let ?m = "emind E \<squnion> M"
@@ -416,7 +448,8 @@ proof -
     then show ?thesis unfolding flod_finclude by (simp only: lattice_join_absorb2 lattice_join_commute)
   qed
   show ?thesis
-  proof (rule lawfulI, simp_all only: gate_simps)
+  proof (rule lawfulI, simp_all only: gate_presence_simps)
+    show "cstrict (gate_presence M E)" by (rule cstrict_gate_presence[OF semilawful_cstrict[OF ES]])
     show "entry_wf e" if "e \<in> set (?h # map (include_entry ?m) (edims E))" for e
       using that by (auto intro: entry_wf_view keyed_view_bot_view entry_wf_include_entry semilawful_wf[OF ES])
     show "(eupper e \<sqinter> ?m) \<sqsubseteq> elower e" if "e \<in> set (?h # map (include_entry ?m) (edims E))" for e
@@ -448,6 +481,112 @@ proof -
     qed
   qed
 qed
+
+text \<open>An expression \<^emph>\<open>covers\<close> the key space when one of its entries has upper part \<open>\<top>\<close>: raised
+  by the minimal LOD, that entry's group is all rows at the key, so by strictness its expression is
+  absent wherever the key is not realised, whatever the entry's guard.  Then the gate needs no
+  presence entry: it only raises the entries.\<close>
+
+definition covering :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+  "covering E \<longleftrightarrow> (\<exists>e\<in>set (edims E). eupper e = lattice_top)"
+
+lemma content_include_top:
+  assumes e: "eupper e = lattice_top" and am: "elower e \<sqsubseteq> m" and k: "proj (m \<squnion> flod F)\<cdot>k = k"
+    and nk: "\<not> keyimg data F (m \<squnion> flod F) k"
+  shows "content data (include_entry m e) F k = Map.empty"
+proof -
+  have lo: "elower (include_entry m e) = m" using am by (simp add: e truncate_top lattice_join_absorb2)
+  have g: "group data m lattice_top F k = {}" using keyimg_group_top[OF k] nk by simp
+  have "group data (elower (include_entry m e)) (eupper (include_entry m e)) F k = {}"
+    by (simp only: lo include_entry_simps(2) e g)
+  then show ?thesis by (simp add: content_def cgraph_def efiber_def)
+qed
+
+definition gate_raise :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "gate_raise M E = \<lparr>emind = emind E \<squnion> M,
+     edims = map (include_entry (emind E \<squnion> M)) (edims E),
+     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None,
+     csem = csem E\<rparr>"
+
+lemma gate_raise_simps [simp]:
+  "emind (gate_raise M E) = emind E \<squnion> M"
+  "edims (gate_raise M E) = map (include_entry (emind E \<squnion> M)) (edims E)"
+  "esem (gate_raise M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
+  "csem (gate_raise M E) = csem E"
+  by (simp_all add: gate_raise_def)
+
+theorem lawful_gate_raise:
+  assumes ES: "semilawful E" and cov: "covering E"
+  shows "lawful (gate_raise M E)"
+proof -
+  let ?m = "emind E \<squnion> M"
+  obtain t where t: "t \<in> set (edims E)" "eupper t = lattice_top" using cov by (auto simp: covering_def)
+  have tm: "elower t \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
+  have kdE: "emind E \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
+  proof -
+    have "emind E \<sqsubseteq> flod F \<squnion> ?m" by (rule below_trans[OF lattice_join_ge1 lattice_join_ge2])
+    then show ?thesis unfolding flod_finclude by (simp only: lattice_join_absorb2 lattice_join_commute)
+  qed
+  show ?thesis
+  proof (rule lawfulI, simp_all only: gate_raise_simps)
+    show "cstrict (gate_raise M E)"
+      using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
+    show "entry_wf e" if "e \<in> set (map (include_entry ?m) (edims E))" for e
+      using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
+    show "(eupper e \<sqinter> ?m) \<sqsubseteq> elower e" if "e \<in> set (map (include_entry ?m) (edims E))" for e
+      using that by (auto intro: lattice_join_ge2)
+    show "?m = fold (\<squnion>) (map elower (map (include_entry ?m) (edims E))) \<bottom>"
+    proof (rule below_antisym)
+      have lo: "elower (include_entry ?m t) = ?m" using tm by (simp add: t(2) truncate_top lattice_join_absorb2)
+      have "elower (include_entry ?m t) \<in> set (map elower (map (include_entry ?m) (edims E)))"
+        using t(1) by simp
+      then show "?m \<sqsubseteq> fold (\<squnion>) (map elower (map (include_entry ?m) (edims E))) \<bottom>"
+        unfolding lo by (rule fold_join_upper)
+      show "fold (\<squnion>) (map elower (map (include_entry ?m) (edims E))) \<bottom> \<sqsubseteq> ?m"
+        by (rule fold_join_least)
+          (auto intro: lattice_join_least[OF below_trans[OF lower_below_mind[OF ES] lattice_join_ge1] truncate_below])
+    qed
+    show "keyimg data F (?m \<squnion> flod F) k"
+      if "conforms data" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
+      for data F k
+      using that by (simp split: if_splits)
+    show "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None)
+        = csem E\<cdot>(contents data (map (include_entry ?m) (edims E)) F k)"
+      if d: "conforms data" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
+    proof -
+      have c: "contents data (map (include_entry ?m) (edims E)) F k = contents data (edims E) (finclude ?m F) k"
+        by (simp add: comp_def content_include_entry)
+      have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kdE k)
+      then have v: "esem E data (finclude ?m F) k = csem E\<cdot>(contents data (map (include_entry ?m) (edims E)) F k)"
+        by (simp only: c semilawful_csem[OF ES d])
+      show ?thesis
+      proof (cases "keyimg data F (?m \<squnion> flod F) k")
+        case False
+        have "Map.empty \<in> set (contents data (map (include_entry ?m) (edims E)) F k)"
+          using content_include_top[OF t(2) tm k False] t(1) by force
+        then have "csem E\<cdot>(contents data (map (include_entry ?m) (edims E)) F k) = None"
+          by (rule cstrictD[OF semilawful_cstrict[OF ES], rotated]) simp
+        then show ?thesis using False by simp
+      qed (simp add: v)
+    qed
+  qed
+qed
+
+text \<open>The gate at \<open>M\<close>: raising alone for covering expressions, else with a presence entry.\<close>
+
+definition gate :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "gate M E = (if covering E then gate_raise M E else gate_presence M E)"
+
+lemma gate_simps [simp]:
+  "emind (gate M E) = emind E \<squnion> M"
+  "esem (gate M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
+  by (simp_all add: gate_def)
+
+theorem lawful_gate: "semilawful E \<Longrightarrow> lawful (gate M E)"
+  unfolding gate_def by (simp add: lawful_gate_raise lawful_gate_presence)
 
 subsection \<open>Collect\<close>
 
@@ -502,10 +641,32 @@ proof (rule map_cong[OF refl])
     by (intro content_group_cong) (simp add: group_def)
 qed
 
+lemma collect_blocks_strict:
+  assumes "\<And>E. E \<in> set Es \<Longrightarrow> cstrict E" and "length Xs = sum_list (map (\<lambda>E. length (edims E)) Es)"
+    and "those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks (map (\<lambda>E. length (edims E)) Es) Xs)) \<noteq> None"
+  shows "Map.empty \<notin> set Xs"
+  using assms
+proof (induct Es arbitrary: Xs)
+  case (Cons E Es)
+  let ?n = "length (edims E)"
+  have t: "csem E\<cdot>(take ?n Xs) \<noteq> None"
+    and r: "those (map2 (\<lambda>E Ys. csem E\<cdot>Ys) Es (blocks (map (\<lambda>E. length (edims E)) Es) (drop ?n Xs))) \<noteq> None"
+    using Cons.prems(3) by (auto split: option.splits)
+  have "Map.empty \<notin> set (take ?n Xs)"
+    using cstrictD[OF Cons.prems(1)[of E] _] t Cons.prems(2) by force
+  moreover have "Map.empty \<notin> set (drop ?n Xs)"
+    by (rule Cons.hyps) (use Cons.prems(1,2) r in auto)
+  ultimately show ?case using set_append[of "take ?n Xs" "drop ?n Xs"] by auto
+qed simp
+
+lemma cstrict_collect: "(\<And>E. E \<in> set Es \<Longrightarrow> cstrict E) \<Longrightarrow> cstrict (collect Es)"
+  by (rule cstrictI) (auto intro: collect_blocks_strict[THEN notE] simp: length_concat comp_def)
+
 theorem semilawful_collect:
   assumes law: "\<And>E. E \<in> set Es \<Longrightarrow> semilawful E"
   shows "semilawful (collect Es)"
 proof (rule semilawfulI, simp_all only: collect_simps)
+  show "cstrict (collect Es)" by (rule cstrict_collect[OF semilawful_cstrict[OF law]])
   show "entry_wf e" if "e \<in> set (concat (map edims Es))" for e
     using that by (auto intro: semilawful_wf[OF law])
   show "fold (\<squnion>) (map emind Es) \<bottom> = fold (\<squnion>) (map elower (concat (map edims Es))) \<bottom>"

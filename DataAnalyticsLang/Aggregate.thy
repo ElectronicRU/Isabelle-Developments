@@ -397,6 +397,49 @@ proof
   qed
 qed
 
+text \<open>The aggregate is strict: an empty fold entry leaves nothing to fold, and an empty inner
+  entry makes every inner content semantics absent.\<close>
+
+lemma agg_pick_empty: "agg_pick e p Map.empty = Map.empty"
+  by (simp add: fun_eq_iff agg_pick_def agg_src_def)
+
+lemma agg_inner_empty:
+  "length Xs = length es \<Longrightarrow> Map.empty \<in> set Xs \<Longrightarrow> Map.empty \<in> set (agg_inner es Xs p)"
+  unfolding agg_inner_def
+proof (induct Xs es rule: list_induct2)
+  case (Cons X Xs e es)
+  then show ?case by (cases "X = Map.empty") (auto simp: agg_pick_empty)
+qed simp
+
+lemma cstrict_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and E: "cstrict E"
+  shows "cstrict (aggregate f E)"
+proof (rule cstrictI)
+  fix Xs :: "('k \<Rightarrow> 'r option) list"
+  assume l: "length Xs = length (edims (aggregate f E))" and c: "csem (aggregate f E)\<cdot>Xs \<noteq> None"
+  then obtain X Xs' where Xs: "Xs = X # Xs'" and l': "length Xs' = length (edims E)"
+    by (auto simp: length_Suc_conv)
+  let ?S = "{p \<in> dom X. csem E\<cdot>(agg_inner (edims E) Xs' p) \<noteq> None}"
+  have ne: "?S \<noteq> {}"
+  proof
+    assume S: "?S = {}"
+    have "agg_csem f E Xs = None" unfolding agg_csem_def Xs list.sel by (simp only: S agg_fold_empty[OF f])
+    then show False using c[unfolded aggregate_csem[OF f]] by simp
+  qed
+  then have "X \<noteq> Map.empty" by auto
+  moreover have "Map.empty \<notin> set Xs'"
+  proof
+    assume em: "Map.empty \<in> set Xs'"
+    have "csem E\<cdot>(agg_inner (edims E) Xs' p) = None" for p
+    proof (rule cstrictD[OF E])
+      show "length (agg_inner (edims E) Xs' p) = length (edims E)" by (simp add: agg_inner_def l')
+      show "Map.empty \<in> set (agg_inner (edims E) Xs' p)" by (rule agg_inner_empty[OF l' em])
+    qed
+    then show False using ne by simp
+  qed
+  ultimately show "Map.empty \<notin> set Xs" by (simp add: Xs)
+qed
+
 theorem lawful_aggregate:
   assumes EL: "lawful E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
   shows "lawful (aggregate f E)"
@@ -407,6 +450,7 @@ proof -
   note bij = agg_keys_bij[of ?m]
   show ?thesis
   proof (rule lawfulI, simp_all only: aggregate_simps)
+    show "cstrict (aggregate f E)" by (rule cstrict_aggregate[OF f semilawful_cstrict[OF ES]])
     show "entry_wf e" if "e \<in> set (?h # map release (edims E))" for e
       using that by (auto intro: entry_wf_view keyed_view_key entry_wf_release semilawful_wf[OF ES])
     show "(eupper e \<sqinter> \<bottom>) \<sqsubseteq> elower e" if "e \<in> set (?h # map release (edims E))" for e

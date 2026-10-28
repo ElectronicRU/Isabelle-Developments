@@ -636,8 +636,9 @@ qed simp
 subsection \<open>The laws\<close>
 
 text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed entries, its minimal LOD is the join of their lower
-  parts, and its presence and values are its content semantics of its contents, at every key of
-  its key LOD and every conforming dataset (the content law).  A \<^emph>\<open>lawful\<close> one is moreover
+  parts, its content semantics is \<^emph>\<open>strict\<close> (absent as soon as one of its contents is empty: an
+  empty fiber gives no value), and its presence and values are its content semantics of its
+  contents, at every key of its key LOD and every conforming dataset (the content law).  A \<^emph>\<open>lawful\<close> one is moreover
   \<^emph>\<open>saturated\<close> (each lower part covers the part of the minimal LOD its upper part keeps, so groups
   depend on the frame LOD only through the key LOD) and has entries only at the frame's data keys
   (the key law).\<close>
@@ -648,8 +649,18 @@ begin
 abbreviation kd :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
   "kd E F \<equiv> emind E \<squnion> flod F"
 
+definition cstrict :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+  "cstrict E \<longleftrightarrow> (\<forall>Xs. length Xs = length (edims E) \<longrightarrow> csem E\<cdot>Xs \<noteq> None \<longrightarrow> Map.empty \<notin> set Xs)"
+
+lemma cstrictI:
+  "(\<And>Xs. length Xs = length (edims E) \<Longrightarrow> csem E\<cdot>Xs \<noteq> None \<Longrightarrow> Map.empty \<notin> set Xs) \<Longrightarrow> cstrict E"
+  unfolding cstrict_def by blast
+
+lemma cstrictD: "cstrict E \<Longrightarrow> length Xs = length (edims E) \<Longrightarrow> Map.empty \<in> set Xs \<Longrightarrow> csem E\<cdot>Xs = None"
+  unfolding cstrict_def by blast
+
 definition semilawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map elower (edims E)) \<bottom> \<and> (\<forall>e\<in>set (edims E). entry_wf e) \<and>
+  "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map elower (edims E)) \<bottom> \<and> (\<forall>e\<in>set (edims E). entry_wf e) \<and> cstrict E \<and>
      (\<forall>data F k. conforms data \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem E\<cdot>(contents data (edims E) F k))"
 
 definition lawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
@@ -661,6 +672,7 @@ lemma semilawfulI:
     and "\<And>e. e \<in> set (edims E) \<Longrightarrow> entry_wf e"
     and "\<And>data F k. \<lbrakk>conforms data; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
            esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
+    and "cstrict E"
   shows "semilawful E"
   unfolding semilawful_def using assms by blast
 
@@ -668,6 +680,9 @@ lemma semilawful_mind_lub: "semilawful E \<Longrightarrow> emind E = fold (\<squ
   unfolding semilawful_def by blast
 
 lemma semilawful_wf: "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> entry_wf e"
+  unfolding semilawful_def by blast
+
+lemma semilawful_cstrict: "semilawful E \<Longrightarrow> cstrict E"
   unfolding semilawful_def by blast
 
 lemma semilawful_keyed: "semilawful E \<Longrightarrow> e \<in> set (edims E) \<Longrightarrow> keyed_view (eview e)"
@@ -706,8 +721,9 @@ lemma lawfulI:
     and "\<And>data F k. \<lbrakk>conforms data; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow>
            esem E data F k = csem E\<cdot>(contents data (edims E) F k)"
     and "\<And>data F k. conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
+    and "cstrict E"
   shows "lawful E"
-  by (rule lawful_semiI[OF semilawfulI[OF assms(2-4)] assms(1,5)])
+  by (rule lawful_semiI[OF semilawfulI[OF assms(2-4,6)] assms(1,5)])
 
 lemma lawful_semilawful: "lawful E \<Longrightarrow> semilawful E"
   unfolding lawful_def by blast
