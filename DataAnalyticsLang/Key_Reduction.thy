@@ -59,7 +59,7 @@ proof -
     using red
   proof
     assume row: "row_entry e"
-    let ?g = "\<lambda>y. ofun (eguard e)\<cdot>y"
+    let ?g = "\<lambda>y. gtest (eguard e)\<cdot>y"
     have img: "cpair e ` {y \<in> Y. ?g y = TT} = (if ?g x = TT then {cpair e x} else {})"
       if Y: "Y \<subseteq> {y. ?P y \<and> rproj ?Gc y = rproj ?Gc x}" and xY: "x \<in> Y" for Y
       by (rule row_entry_image[OF semilawful_wf[OF ES e] row d _ xY lattice_join_ge1]) (use Y in blast)+

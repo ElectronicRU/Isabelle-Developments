@@ -47,7 +47,7 @@ lemma row_level_content_single:
 proof -
   let ?G = "sel_at (esel e) (flod F)"
   obtain x where x: "x \<in> group data (elower e) (eupper e) F k" using u by (auto simp: cgraph_def efiber_def)
-  have "cgraph data e F k = (if ofun (eguard e)\<cdot>x = TT then {cpair e x} else {})"
+  have "cgraph data e F k = (if gtest (eguard e)\<cdot>x = TT then {cpair e x} else {})"
     unfolding cgraph_def efiber_def
   proof (rule row_entry_image[OF semilawful_wf[OF E e] _ d _ x lattice_join_ge1[of "elower e" "eupper e \<sqinter> flod F"]])
     show "row_entry e" using r e by (simp add: row_level_def)
@@ -126,9 +126,9 @@ fun row_ast :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> bool" where
 text \<open>A row-level condition is a guard through its truth value.\<close>
 
 definition row_guard :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('r, 'k) guard" where
-  "row_guard C = \<lparr>vfun = truth_d oo pval C, oview = rview C\<rparr>"
+  "row_guard C = \<lparr>gfun = truth_d oo pval C, gview = rview C\<rparr>"
 
-lemma row_guard_view [simp]: "oview (row_guard C) = rview C"
+lemma row_guard_view [simp]: "gview (row_guard C) = rview C"
   by (simp add: row_guard_def)
 
 text \<open>The views of row-level expressions are keyed.\<close>
@@ -275,9 +275,9 @@ proof -
     have Gk: "proj ?G\<cdot>k = rproj ?G x" unfolding kx by (rule proj_le[OF group_below_kd[OF ES e']])
     have xY: "x \<in> ?Y" using xm xF Gk by (simp add: group_def frows_def holds_coarsen)
     have r: "row_entry e'" using row_ast_row_level[OF e] e' by (simp add: row_level_def)
-    have "cpair e' ` {y \<in> ?Y. ofun (eguard e')\<cdot>y = TT} = {cpair e' x}"
+    have "cpair e' ` {y \<in> ?Y. gtest (eguard e')\<cdot>y = TT} = {cpair e' x}"
     proof -
-      have "cpair e' ` {y \<in> ?Y. ofun (eguard e')\<cdot>y = TT} = (if ofun (eguard e')\<cdot>x = TT then {cpair e' x} else {})"
+      have "cpair e' ` {y \<in> ?Y. gtest (eguard e')\<cdot>y = TT} = (if gtest (eguard e')\<cdot>x = TT then {cpair e' x} else {})"
         by (rule row_entry_image[OF semilawful_wf[OF ES e'] r d _ xY lattice_join_ge1])
           (auto simp: group_def Gk)
       then show ?thesis by (simp add: row_ast_gtrue[OF e e'])

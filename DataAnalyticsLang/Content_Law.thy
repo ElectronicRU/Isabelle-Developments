@@ -74,41 +74,31 @@ text \<open>Guards are continuous truth-valued functions of the parts of a decla
   of the row and the part of its key that they read.  On rows they are read through their view, so
   they read nothing else.\<close>
 
-record ('r::"{domain, distributive_cpo}", 'k::"{domain, distributive_cpo}", 'b::cpo) vfn =
-  vfun :: "'r \<times> 'k \<rightarrow> 'b"
-  oview :: "('r, 'k) view"
+record ('r::"{domain, distributive_cpo}", 'k::"{domain, distributive_cpo}") guard =
+  gfun :: "'r \<times> 'k \<rightarrow> tr"
+  gview :: "('r, 'k) view"
 
-hide_const (open) vfn.truncate
+hide_const (open) guard.truncate
 
-type_synonym ('r, 'k) guard = "('r, 'k, tr) vfn"
+abbreviation gcols :: "('r::{domain, distributive_cpo}, 'k::{domain, distributive_cpo}) guard \<Rightarrow> 'r semi_factor" where
+  "gcols \<gamma> \<equiv> fst (gview \<gamma>)"
 
-abbreviation ocols :: "('r::{domain, distributive_cpo}, 'k::{domain, distributive_cpo}, 'b::cpo) vfn \<Rightarrow> 'r semi_factor" where
-  "ocols f \<equiv> fst (oview f)"
-
-abbreviation okeys :: "('r::{domain, distributive_cpo}, 'k::{domain, distributive_cpo}, 'b::cpo) vfn \<Rightarrow> 'k semi_factor" where
-  "okeys f \<equiv> snd (oview f)"
-
-text \<open>Reading the section at a view.\<close>
-
-definition vsection :: "('r::{domain, distributive_cpo}, 'k::{domain, distributive_cpo}) view \<Rightarrow> ('r, 'k, 'r) vfn" where
-  "vsection v = \<lparr>vfun = cfst, oview = v\<rparr>"
-
-lemma oview_vsection [simp]: "oview (vsection v) = v"
-  by (simp add: vsection_def)
+abbreviation gkeys :: "('r::{domain, distributive_cpo}, 'k::{domain, distributive_cpo}) guard \<Rightarrow> 'k semi_factor" where
+  "gkeys \<gamma> \<equiv> snd (gview \<gamma>)"
 
 text \<open>The guard every row passes, and the conjunction of guards, on the joined view.\<close>
 
 definition gtrue :: "('r::{domain, distributive_cpo}, 'k::{domain, distributive_cpo}) guard" where
-  "gtrue = \<lparr>vfun = \<Lambda> _. TT, oview = \<bottom>\<rparr>"
+  "gtrue = \<lparr>gfun = \<Lambda> _. TT, gview = \<bottom>\<rparr>"
 
-lemma oview_gtrue [simp]: "oview gtrue = \<bottom>"
+lemma gview_gtrue [simp]: "gview gtrue = \<bottom>"
   by (simp add: gtrue_def)
 
 definition gand :: "('r::{domain, distributive_cpo}, 'k::{domain, distributive_cpo}) guard \<Rightarrow> ('r, 'k) guard \<Rightarrow> ('r, 'k) guard" where
-  "gand \<gamma> \<delta> = \<lparr>vfun = \<Lambda> p. (vfun \<gamma>\<cdot>(pproj (oview \<gamma>)\<cdot>p)) andalso (vfun \<delta>\<cdot>(pproj (oview \<delta>)\<cdot>p)),
-     oview = oview \<gamma> \<squnion> oview \<delta>\<rparr>"
+  "gand \<gamma> \<delta> = \<lparr>gfun = \<Lambda> p. (gfun \<gamma>\<cdot>(pproj (gview \<gamma>)\<cdot>p)) andalso (gfun \<delta>\<cdot>(pproj (gview \<delta>)\<cdot>p)),
+     gview = gview \<gamma> \<squnion> gview \<delta>\<rparr>"
 
-lemma gand_view [simp]: "oview (gand \<gamma> \<delta>) = oview \<gamma> \<squnion> oview \<delta>"
+lemma gand_view [simp]: "gview (gand \<gamma> \<delta>) = gview \<gamma> \<squnion> gview \<delta>"
   by (simp add: gand_def)
 
 text \<open>An entry: a selector, picking the fiber; a guard, cutting it down; and a view, whose key
@@ -338,80 +328,77 @@ subsection \<open>Groups and contents\<close>
 context dataspace
 begin
 
-text \<open>Reading a guard or a section on rows.\<close>
+text \<open>Testing a row with a guard.\<close>
 
-definition ofun :: "('r, 'k, 'b::cpo) vfn \<Rightarrow> 'r \<rightarrow> 'b" where
-  "ofun f = vfun f oo vproj (oview f)"
+definition gtest :: "('r, 'k) guard \<Rightarrow> 'r \<rightarrow> tr" where
+  "gtest \<gamma> = gfun \<gamma> oo vproj (gview \<gamma>)"
 
-lemma ofun_apply: "ofun f\<cdot>y = vfun f\<cdot>(vpart (oview f) y)"
-  by (simp add: ofun_def)
+lemma gtest_apply: "gtest \<gamma>\<cdot>y = gfun \<gamma>\<cdot>(vpart (gview \<gamma>) y)"
+  by (simp add: gtest_def)
 
-lemma ofun_vsection [simp]: "ofun (vsection v)\<cdot>y = y \<downharpoonright> fst v"
-  by (simp add: ofun_apply vsection_def vpart_def)
+lemma gtest_gtrue [simp]: "gtest gtrue\<cdot>y = TT"
+  by (simp add: gtest_apply gtrue_def)
 
-lemma ofun_gtrue [simp]: "ofun gtrue\<cdot>y = TT"
-  by (simp add: ofun_apply gtrue_def)
+lemma gand_apply: "gtest (gand \<gamma> \<delta>)\<cdot>y = (gtest \<gamma>\<cdot>y andalso gtest \<delta>\<cdot>y)"
+  by (simp add: gtest_apply gand_def vpart_pproj lattice_join_ge1 lattice_join_ge2)
 
-lemma gand_apply: "ofun (gand \<gamma> \<delta>)\<cdot>y = (ofun \<gamma>\<cdot>y andalso ofun \<delta>\<cdot>y)"
-  by (simp add: ofun_apply gand_def vpart_pproj lattice_join_ge1 lattice_join_ge2)
-
-lemma gand_TT [simp]: "ofun (gand \<gamma> \<delta>)\<cdot>y = TT \<longleftrightarrow> ofun \<gamma>\<cdot>y = TT \<and> ofun \<delta>\<cdot>y = TT"
-  unfolding gand_apply by (cases "ofun \<gamma>\<cdot>y" rule: trE) simp_all
+lemma gand_TT [simp]: "gtest (gand \<gamma> \<delta>)\<cdot>y = TT \<longleftrightarrow> gtest \<gamma>\<cdot>y = TT \<and> gtest \<delta>\<cdot>y = TT"
+  unfolding gand_apply by (cases "gtest \<gamma>\<cdot>y" rule: trE) simp_all
 
 text \<open>The rows a test passes are a selection.\<close>
 
 definition gsel :: "('r, 'k) guard \<Rightarrow> 'r sel" where
-  "gsel \<gamma> = sel_vimage (ofun \<gamma>) sel_TT"
+  "gsel \<gamma> = sel_vimage (gtest \<gamma>) sel_TT"
 
-lemma selects_gsel [simp]: "selects (gsel \<gamma>) y \<longleftrightarrow> ofun \<gamma>\<cdot>y = TT"
+lemma selects_gsel [simp]: "selects (gsel \<gamma>) y \<longleftrightarrow> gtest \<gamma>\<cdot>y = TT"
   by (simp add: gsel_def)
 
 text \<open>Whether a row passes a slice, as a guard.\<close>
 
 definition guard_holds :: "'f \<Rightarrow> ('r, 'k) guard" where
-  "guard_holds X = \<lparr>vfun = sel_chi (sopen X) oo csnd, oview = (\<bottom>, slod X)\<rparr>"
+  "guard_holds X = \<lparr>gfun = sel_chi (sopen X) oo csnd, gview = (\<bottom>, slod X)\<rparr>"
 
-lemma guard_holds_apply: "ofun (guard_holds X)\<cdot>y = (if holds X (rkey\<cdot>y) then TT else \<bottom>)"
-  by (simp add: ofun_apply guard_holds_def sel_chi_apply holds_def sopen_lod)
+lemma guard_holds_apply: "gtest (guard_holds X)\<cdot>y = (if holds X (rkey\<cdot>y) then TT else \<bottom>)"
+  by (simp add: gtest_apply guard_holds_def sel_chi_apply holds_def sopen_lod)
 
-lemma guard_holds_view [simp]: "oview (guard_holds X) = (\<bottom>, slod X)"
+lemma guard_holds_view [simp]: "gview (guard_holds X) = (\<bottom>, slod X)"
   by (simp add: guard_holds_def)
 
-lemma guard_holds_TT [simp]: "ofun (guard_holds X)\<cdot>y = TT \<longleftrightarrow> holds X (rkey\<cdot>y)"
+lemma guard_holds_TT [simp]: "gtest (guard_holds X)\<cdot>y = TT \<longleftrightarrow> holds X (rkey\<cdot>y)"
   by (simp add: guard_holds_apply)
 
 subsection \<open>Supports of guards\<close>
 
-text \<open>A guard or section is \<^emph>\<open>supported\<close> when its view is keyed: within every
-  conforming dataset its key part determines it on rows.\<close>
+text \<open>A guard is \<^emph>\<open>supported\<close> when its view is keyed: within every conforming dataset its
+  key part determines it on rows.\<close>
 
-definition supported :: "('r, 'k, 'b::cpo) vfn \<Rightarrow> bool" where
-  "supported f \<longleftrightarrow> keyed_view (oview f)"
+definition supported :: "('r, 'k) guard \<Rightarrow> bool" where
+  "supported f \<longleftrightarrow> keyed_view (gview f)"
 
-lemma supported_fun_support: "supported f \<Longrightarrow> fun_support (oview f) (ofun f)"
+lemma supported_fun_support: "supported f \<Longrightarrow> fun_support (gview f) (gtest f)"
 proof -
   assume f: "supported f"
-  have "determines UNIV (oview f) (vfun f oo vproj (oview f))"
+  have "determines UNIV (gview f) (gfun f oo vproj (gview f))"
     by (rule determines_comp) (rule vfd_refl[OF below_refl])
-  moreover have "universally (\<lambda>P. determines P (vkey (oview f)) (vfun f oo vproj (oview f)))"
+  moreover have "universally (\<lambda>P. determines P (vkey (gview f)) (gfun f oo vproj (gview f)))"
     unfolding universally_def using keyed_view_determines f[unfolded supported_def] by blast
-  ultimately show ?thesis unfolding fun_support_def ofun_def by blast
+  ultimately show ?thesis unfolding fun_support_def gtest_def by blast
 qed
 
 lemma supported_determines:
-  "supported f \<Longrightarrow> conforms X \<Longrightarrow> determines (lower_maximal X) (vkey (oview f)) (ofun f)"
-  unfolding supported_def ofun_def by (rule keyed_view_determines)
+  "supported f \<Longrightarrow> conforms X \<Longrightarrow> determines (lower_maximal X) (vkey (gview f)) (gtest f)"
+  unfolding supported_def gtest_def by (rule keyed_view_determines)
 
-text \<open>Rows agreeing on a key part covering a supported function's key part agree on it.\<close>
+text \<open>Rows agreeing on a key part covering a supported guard's key part agree on it.\<close>
 
 lemma supported_agree:
   assumes h: "supported h" and d: "conforms data" and x: "x \<in> lower_maximal data" and y: "y \<in> lower_maximal data"
-    and le: "okeys h \<sqsubseteq> G" and e: "rproj G y = rproj G x"
-  shows "ofun h\<cdot>y = ofun h\<cdot>x"
+    and le: "gkeys h \<sqsubseteq> G" and e: "rproj G y = rproj G x"
+  shows "gtest h\<cdot>y = gtest h\<cdot>x"
 proof (rule determinesD[OF supported_determines[OF h d] y x])
-  have "rproj (okeys h) y = rproj (okeys h) x"
-    using arg_cong[OF e, of "Rep_cfun (proj (okeys h))"] by (simp add: proj_le[OF le])
-  then show "vpart (vkey (oview h)) y = vpart (vkey (oview h)) x" by (simp add: vkey_def proj_bot)
+  have "rproj (gkeys h) y = rproj (gkeys h) x"
+    using arg_cong[OF e, of "Rep_cfun (proj (gkeys h))"] by (simp add: proj_le[OF le])
+  then show "vpart (vkey (gview h)) y = vpart (vkey (gview h)) x" by (simp add: vkey_def proj_bot)
 qed
 
 text \<open>Rows agreeing on a key part covering a keyed view's key part agree on its section.\<close>
@@ -421,8 +408,11 @@ lemma view_agree:
     and le: "snd v \<sqsubseteq> G" and e: "rproj G y = rproj G x"
   shows "y \<downharpoonright> fst v = x \<downharpoonright> fst v"
 proof -
-  have "supported (vsection v)" using v by (simp add: supported_def)
-  from supported_agree[OF this d x y _ e] le show ?thesis by simp
+  have det: "determines (lower_maximal data) (vkey v) (cfst oo vproj v)" by (rule keyed_view_determines[OF v d])
+  have "rproj (snd v) y = rproj (snd v) x"
+    using arg_cong[OF e, of "Rep_cfun (proj (snd v))"] by (simp add: proj_le[OF le])
+  then have "vpart (vkey v) y = vpart (vkey v) x" by (simp add: vkey_def proj_bot)
+  from determinesD[OF det y x this] show ?thesis by (simp add: vpart_def)
 qed
 
 lemma keyed_view_bot_view: "keyed_view (\<bottom> :: ('r, 'k) view)"
@@ -431,11 +421,11 @@ lemma keyed_view_bot_view: "keyed_view (\<bottom> :: ('r, 'k) view)"
 text \<open>A guard is \<^emph>\<open>key-pure\<close> when its view is its key part: then it is determined by its key
   part on all rows, independently of any dataset.  Slice tests are key-pure.\<close>
 
-definition key_pure :: "('r, 'k, 'b::cpo) vfn \<Rightarrow> bool" where
-  "key_pure f \<longleftrightarrow> vkey (oview f) = oview f"
+definition key_pure :: "('r, 'k) guard \<Rightarrow> bool" where
+  "key_pure f \<longleftrightarrow> vkey (gview f) = gview f"
 
-lemma key_pure_determines: "key_pure f \<Longrightarrow> determines UNIV (oview f) (ofun f)"
-  unfolding ofun_def by (rule determines_comp) (rule vfd_refl[OF below_refl])
+lemma key_pure_determines: "key_pure f \<Longrightarrow> determines UNIV (gview f) (gtest f)"
+  unfolding gtest_def by (rule determines_comp) (rule vfd_refl[OF below_refl])
 
 lemma key_pure_guard_holds: "key_pure (guard_holds X)"
   by (simp add: key_pure_def vkey_def)
@@ -444,7 +434,7 @@ lemma supported_guard_holds: "supported (guard_holds X)"
   by (simp add: supported_def keyed_view_key)
 
 lemma supported_gtrue: "supported gtrue"
-  unfolding supported_def oview_gtrue inst_prod_pcpo by (rule keyed_view_key)
+  unfolding supported_def gview_gtrue inst_prod_pcpo by (rule keyed_view_key)
 
 lemma supported_gand: "supported \<gamma> \<Longrightarrow> supported \<delta> \<Longrightarrow> supported (gand \<gamma> \<delta>)"
   by (simp add: supported_def keyed_view_sup)
@@ -456,8 +446,8 @@ text \<open>An entry is \<^emph>\<open>well-formed\<close> when its view is keye
 definition entry_wf :: "('k, 'r) entry \<Rightarrow> bool" where
   "entry_wf e \<longleftrightarrow> keyed_view (eview e) \<and> supported (eguard e)"
 
-lemma okeys_gtrue [simp]: "okeys gtrue = \<bottom>"
-  unfolding oview_gtrue inst_prod_pcpo by (rule snd_conv)
+lemma gkeys_gtrue [simp]: "gkeys gtrue = \<bottom>"
+  unfolding gview_gtrue inst_prod_pcpo by (rule snd_conv)
 
 lemma entry_wf_view: "keyed_view v \<Longrightarrow> supported \<gamma> \<Longrightarrow> entry_wf (mk_entry S \<gamma> v)"
   by (simp add: entry_wf_def)
@@ -474,7 +464,7 @@ text \<open>The fiber of an entry: the rows of its group passing its guard.  Its
   that graph as a map.\<close>
 
 definition efiber :: "'r lower_pd \<Rightarrow> ('k, 'r) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
-  "efiber data e F k = {y \<in> group data (elower e) (eupper e) F k. ofun (eguard e)\<cdot>y = TT}"
+  "efiber data e F k = {y \<in> group data (elower e) (eupper e) F k. gtest (eguard e)\<cdot>y = TT}"
 
 definition cpair :: "('k, 'r) entry \<Rightarrow> 'r \<Rightarrow> 'k \<times> 'r" where
   "cpair e y = (rproj (ekeys e) y, y \<downharpoonright> ecols e)"
@@ -512,7 +502,7 @@ text \<open>A \<^emph>\<open>row entry\<close> keys its view and guard within it
   there, agree on the whole content pair, so its content has at most one key.\<close>
 
 definition row_entry :: "('k, 'r) entry \<Rightarrow> bool" where
-  "row_entry e \<longleftrightarrow> ekeys e \<sqsubseteq> elower e \<and> okeys (eguard e) \<sqsubseteq> elower e"
+  "row_entry e \<longleftrightarrow> ekeys e \<sqsubseteq> elower e \<and> gkeys (eguard e) \<sqsubseteq> elower e"
 
 lemma rproj_agree: "s \<sqsubseteq> G \<Longrightarrow> rproj G y = rproj G x \<Longrightarrow> rproj s y = rproj s x"
   by (metis proj_le)
@@ -520,13 +510,13 @@ lemma rproj_agree: "s \<sqsubseteq> G \<Longrightarrow> rproj G y = rproj G x \<
 lemma row_entry_image:
   assumes e: "entry_wf e" and r: "row_entry e" and d: "conforms data" and Y: "Y \<subseteq> lower_maximal data"
     and x: "x \<in> Y" and aG: "elower e \<sqsubseteq> G" and agree: "\<And>y. y \<in> Y \<Longrightarrow> rproj G y = rproj G x"
-  shows "cpair e ` {y \<in> Y. ofun (eguard e)\<cdot>y = TT} = (if ofun (eguard e)\<cdot>x = TT then {cpair e x} else {})"
+  shows "cpair e ` {y \<in> Y. gtest (eguard e)\<cdot>y = TT} = (if gtest (eguard e)\<cdot>x = TT then {cpair e x} else {})"
 proof -
-  have sG: "ekeys e \<sqsubseteq> G" and gG: "okeys (eguard e) \<sqsubseteq> G"
+  have sG: "ekeys e \<sqsubseteq> G" and gG: "gkeys (eguard e) \<sqsubseteq> G"
     using r aG unfolding row_entry_def by (blast intro: below_trans)+
   have xm: "x \<in> lower_maximal data" using x Y by blast
   have kv: "keyed_view (eview e)" and sup: "supported (eguard e)" using e by (simp_all add: entry_wf_def)
-  let ?g = "\<lambda>y. ofun (eguard e)\<cdot>y"
+  let ?g = "\<lambda>y. gtest (eguard e)\<cdot>y"
   have g: "?g y = ?g x" if y: "y \<in> Y" for y
     using supported_agree[OF sup d xm _ gG agree[OF y]] y Y by blast
   have h: "cpair e y = cpair e x" if y: "y \<in> Y" for y
@@ -612,30 +602,30 @@ lemma vpart_section: "fst (vsec v) \<sqsubseteq> c \<Longrightarrow> vpart v (y 
   by (simp add: vpart_def proj_le[OF below_trans[OF lattice_join_ge1]]
       rproj_section[OF below_trans[OF lattice_join_ge2]])
 
-lemma ofun_section: "fst (vsec (oview f)) \<sqsubseteq> c \<Longrightarrow> ofun f\<cdot>(y \<downharpoonright> c) = ofun f\<cdot>y"
-  by (simp add: ofun_apply vpart_section)
+lemma gtest_section: "fst (vsec (gview f)) \<sqsubseteq> c \<Longrightarrow> gtest f\<cdot>(y \<downharpoonright> c) = gtest f\<cdot>y"
+  by (simp add: gtest_apply vpart_section)
 
 text \<open>The content of an entry is computed from the point section at any section covering the
   group LOD's support, the frame, and the views of the guard and the entry.\<close>
 
 lemma content_section:
   assumes F: "frame_reads c F" and G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
-    and fc: "fst (vsec (eview e)) \<sqsubseteq> c" and gc: "fst (vsec (oview (eguard e))) \<sqsubseteq> c"
+    and fc: "fst (vsec (eview e)) \<sqsubseteq> c" and gc: "fst (vsec (gview (eguard e))) \<sqsubseteq> c"
   shows "content data e F k = gmap (cpair e ` {z \<in> pts_section c data.
     selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and>
     rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k \<and>
-    ofun (eguard e)\<cdot>z = TT})"
+    gtest (eguard e)\<cdot>z = TT})"
 proof -
   let ?G = "sel_at (esel e) (flod F)"
   let ?P = "\<lambda>z. selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and> rproj ?G z = proj ?G\<cdot>k \<and>
-    ofun (eguard e)\<cdot>z = TT"
+    gtest (eguard e)\<cdot>z = TT"
   let ?h = "cpair e"
   have sl: "csupp (slod (coarsen (eupper e) (slice F))) \<sqsubseteq> c"
     using F csupp_mono[OF below_trans[OF slod_coarsen lattice_meet_le1]] unfolding frame_reads_def
     by (blast intro: below_trans)
   have P: "?P (y \<downharpoonright> c) \<longleftrightarrow> ?P y" for y
     using F unfolding frame_reads_def sel_reads_def
-    by (simp add: holds_section[OF sl] rproj_section[OF G] ofun_section[OF gc])
+    by (simp add: holds_section[OF sl] rproj_section[OF G] gtest_section[OF gc])
   have h: "?h (y \<downharpoonright> c) = ?h y" for y by (simp only: cpair_vpart vpart_section[OF fc])
   have "efiber data e F k = {y \<in> lower_maximal data. ?P y}" by (auto simp: efiber_def group_def)
   moreover have "?h ` {y \<in> lower_maximal data. ?P y} = ?h ` {z \<in> pts_section c data. ?P z}"
@@ -805,7 +795,7 @@ text \<open>Contents only depend on the point section at a section covering the 
   the sections of the entries' views.\<close>
 
 definition entry_reads :: "'r semi_factor \<Rightarrow> ('k, 'r) entry \<Rightarrow> bool" where
-  "entry_reads c e \<longleftrightarrow> fst (vsec (eview e)) \<sqsubseteq> c \<and> fst (vsec (oview (eguard e))) \<sqsubseteq> c"
+  "entry_reads c e \<longleftrightarrow> fst (vsec (eview e)) \<sqsubseteq> c \<and> fst (vsec (gview (eguard e))) \<sqsubseteq> c"
 
 lemma contents_section:
   assumes E: "semilawful E" and F: "frame_reads c F" and K: "csupp (kd E F) \<sqsubseteq> c"
@@ -816,7 +806,7 @@ proof (rule map_cong[OF refl])
   fix e assume e: "e \<in> set (edims E)"
   have G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
     by (rule below_trans[OF csupp_mono[OF group_below_kd[OF E e]] K])
-  have r: "fst (vsec (eview e)) \<sqsubseteq> c" "fst (vsec (oview (eguard e))) \<sqsubseteq> c"
+  have r: "fst (vsec (eview e)) \<sqsubseteq> c" "fst (vsec (gview (eguard e))) \<sqsubseteq> c"
     using cols[OF e] by (simp_all add: entry_reads_def)
   show "content data e F k = content data' e F k"
     unfolding content_section[OF F G r] sec ..
