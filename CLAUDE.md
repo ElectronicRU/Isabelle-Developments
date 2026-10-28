@@ -46,8 +46,10 @@ Buneman–Jung–Ohori & Libkin papers indexed below).
 ## Building
 `isabelle build -d DataAnalyticsLang -d HOLCF-extra DataAnalyticsLang` (or per-session; there is
 no top-level `ROOT`, so `-d .` fails). Building alongside a live jEdit/PIDE session can exhaust
-memory; close jEdit first. Both
-produce PDF documents into `output/`. HOLCF must be available as a heap image.
+memory; close jEdit (and stop the ic2 server) first. Add `-o document=pdf` to also build the PDF
+documents into `output/` (the ROOTs no longer turn them on). HOLCF must be available as a heap image.
+CI (`.github/workflows/html.yml`) builds both sessions with HTML and PDF on every push to `main` and
+deploys them to https://electronicru.github.io/Isabelle-Developments/.
 
 ## Housekeeping
 Working tree contains editor cruft — emacs autosave `#Foo.thy#` and backup

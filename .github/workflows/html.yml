@@ -29,7 +29,7 @@ jobs:
           # The image keeps Isabelle and its prebuilt heaps under /home/isabelle.
           export HOME=/home/isabelle
           ISABELLE=/home/isabelle/Isabelle/bin/isabelle
-          "$ISABELLE" build -b -v -o browser_info -o "threads=$(nproc)" \
+          "$ISABELLE" build -b -v -o browser_info -o document=pdf -o "threads=$(nproc)" \
             -d HOLCF-extra -d DataAnalyticsLang HOLCF-extra DataAnalyticsLang
           INFO=$("$ISABELLE" getenv -b ISABELLE_BROWSER_INFO)
           mkdir -p site/Unsorted

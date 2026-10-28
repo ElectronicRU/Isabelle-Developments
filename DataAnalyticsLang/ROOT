@@ -1,5 +1,5 @@
 session DataAnalyticsLang = "HOLCF" +
-  options [document = pdf, document_output = "output"]
+  options [document_output = "output"]
   sessions "HOLCF-extra" "HOLCF-Library"
   theories
     Typing
