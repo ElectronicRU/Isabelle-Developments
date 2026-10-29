@@ -1147,6 +1147,32 @@ proof -
   qed
 qed
 
+text \<open>The presence test on the full group alone gives joint presence: its lower part covers every
+  other, and its upper part is \<open>\<top>\<close>, so its group lies in every group, without raising.  At its
+  keys it is present only where the key is realised.\<close>
+
+lemma jointly_lawful_present_at:
+  assumes ES: "semilawful E"
+  shows "jointly_lawful (present_at a \<top> E)"
+proof (rule jointly_lawfulI[OF semilawful_present_at[OF ES]])
+  fix data F k assume "esem (present_at a \<top> E) data F k \<noteq> None"
+  then obtain y where y: "y \<in> group data (emind E \<squnion> a) \<top> F k" by (auto split: if_splits)
+  show "jointly_present data (present_at a \<top> E) F k" unfolding jointly_present_def
+  proof (intro exI ballI)
+    fix S assume S: "S \<in> set (esels (present_at a \<top> E))"
+    have lb: "lower_part S \<sqsubseteq> emind E \<squnion> a"
+      using S by (auto intro: below_trans[OF lower_below_mind[OF ES] lattice_join_ge1])
+    show "y \<in> group data (lower_part S) (upper_part S) F k"
+      by (rule group_sub_mono[OF lattice_join_mono[OF lb lattice_meet_mono[OF below_lattice_top below_refl]]
+            below_lattice_top y])
+  qed
+qed
+
+lemma present_at_keyimg:
+  assumes k: "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" and p: "esem (present_at a \<top> E) data F k \<noteq> None"
+  shows "keyimg data F (emind E \<squnion> a \<squnion> flod F) k"
+  using p keyimg_group_top[OF k] by (auto split: if_splits)
+
 end
 
 end
