@@ -14,7 +14,7 @@ text \<open>Collecting evaluates every component under the frame raised by all t
 context dataspace
 begin
 
-definition reducible :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
+definition reducible :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
   "reducible M E F \<longleftrightarrow>
      (\<forall>e\<in>set (eguards E). row_guard_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, sel_at (esel e) (flod F)) (\<bottom>, (eupper e \<sqinter> M)))) \<and>
      (\<forall>e\<in>set (evalues E). row_entry e \<or> universally (\<lambda>P. vfd P (\<bottom>, sel_at (esel e) (flod F)) (\<bottom>, (eupper e \<sqinter> M))))"

@@ -9,30 +9,27 @@ text \<open>An aggregate folds the entries of an inner expression over each fibe
   gives no entry; it is not \<open>\<bottom>\<close>: a monotone operation with unit \<open>\<bottom>\<close> would be inflationary
   (\<open>x = x \<oplus> \<bottom> \<sqsubseteq> x \<oplus> y\<close>), which rules out sums on flat values.\<close>
 
-definition agg_fold :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('a \<rightharpoonup> 'v) \<Rightarrow> 'a set \<Rightarrow> 'v option" where
-  "agg_fold f v A = comm_monoid_set.F (opt_op f) None v A"
+definition agg_fold :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('a \<Rightarrow> 'v option_pd) \<Rightarrow> 'a set \<Rightarrow> 'v option_pd" where
+  "agg_fold f v A = comm_monoid_set.F (\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y) Absent v A"
 
 context
-  fixes f :: "'v::pcpo \<rightarrow> 'v \<rightarrow> 'v"
+  fixes f :: "'v::bifinite \<rightarrow> 'v \<rightarrow> 'v"
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
 begin
 
-interpretation agg: comm_monoid_set "opt_op f" None
-  unfolding comm_monoid_set_def by (rule comm_monoid_opt_op[OF f])
+interpretation agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
+  unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd[OF f])
 
-lemma agg_fold_empty: "agg_fold f v {} = None"
+lemma agg_fold_empty: "agg_fold f v {} = Absent"
   by (simp add: agg_fold_def)
 
 lemma agg_fold_singleton: "agg_fold f v {a} = v a"
   by (simp add: agg_fold_def)
 
-lemma agg_fold_nonempty: "agg_fold f v A \<noteq> None \<Longrightarrow> A \<noteq> {}"
+lemma agg_fold_nonempty: "agg_fold f v A \<noteq> Absent \<Longrightarrow> A \<noteq> {}"
   by (auto simp: agg_fold_empty)
 
-lemma agg_fold_present: "finite A \<Longrightarrow> a \<in> A \<Longrightarrow> v a \<noteq> None \<Longrightarrow> agg_fold f v A \<noteq> None"
-  unfolding agg_fold_def by (subst agg.remove) (auto simp: combine_options_def split: option.splits)
-
-lemma agg_fold_absent: "(\<And>a. a \<in> A \<Longrightarrow> v a = None) \<Longrightarrow> agg_fold f v A = None"
+lemma agg_fold_absent: "(\<And>a. a \<in> A \<Longrightarrow> v a = Absent) \<Longrightarrow> agg_fold f v A = Absent"
   unfolding agg_fold_def by (rule agg.neutral) simp
 
 lemma agg_fold_cong: "A = B \<Longrightarrow> (\<And>a. a \<in> B \<Longrightarrow> v a = w a) \<Longrightarrow> agg_fold f v A = agg_fold f w B"
@@ -78,8 +75,10 @@ proof (cases "finite A")
   then show ?thesis
   proof (induct A rule: finite_induct)
     case (insert a A)
-    have "agg.F (v x) (insert a A) = opt_op f (v x a) (agg.F (v x) A)" for x by (rule agg.insert[OF insert(1,2)])
-    then show ?case unfolding agg_fold_def by (simp only:) (rule cont_opt_op[OF v insert(3)[unfolded agg_fold_def]])
+    have "agg.F (v x) (insert a A) = combine_option_pd f\<cdot>(v x a)\<cdot>(agg.F (v x) A)" for x
+      by (rule agg.insert[OF insert(1,2)])
+    then show ?case unfolding agg_fold_def
+      by (simp only:) (rule cont2cont_APP[OF cont2cont_APP[OF cont_const v] insert(3)[unfolded agg_fold_def]])
   qed (simp add: agg_fold_def)
 qed (simp add: agg_fold_def)
 
@@ -89,8 +88,8 @@ lemma agg_fold_bij:
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and h: "bij_betw h A B"
   shows "agg_fold f (v \<circ> h) A = agg_fold f v B"
 proof -
-  interpret agg: comm_monoid_set "opt_op f" None
-    unfolding comm_monoid_set_def by (rule comm_monoid_opt_op[OF f])
+  interpret agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
+    unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd[OF f])
   show ?thesis unfolding agg_fold_def comp_def by (rule agg.reindex_bij_betw[OF h])
 qed
 
@@ -109,7 +108,7 @@ text \<open>\<open>aggregate f E\<close> folds the inner values over the inner k
   it decides no detail: its entries are the inner ones released (their lower parts move into their
   views' key parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
 
-definition inner_keys :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
+definition inner_keys :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
   "inner_keys E data F k = rproj (kd E F) ` afiber data F (flod F) k"
 
 text \<open>An inner entry, seen from outside the aggregate, is \<^emph>\<open>released\<close>: its lower part, which the
@@ -185,7 +184,7 @@ lemma cont_agg_inner: "cont (\<lambda>Xs. agg_inner es Xs p)"
 text \<open>The content semantics folds the inner content semantics over the fold guard's keys, reading
   the inner contents at each off the outer ones.\<close>
 
-definition agg_csem :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> 'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option" where
+definition agg_csem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> 'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option_pd" where
   "agg_csem f E Gs Xs = agg_fold f (\<lambda>p. csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p)) (hd Gs)"
 
 text \<open>It is continuous in the value contents: the fold's index set is the fold guard's keys, and
@@ -200,7 +199,7 @@ lemma cont_agg_csem:
 lemma map2_map: "map2 g xs (map h xs) = map (\<lambda>x. g x (h x)) xs"
   by (induct xs) simp_all
 
-definition aggregate :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition aggregate :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "aggregate f E = \<lparr>emind = \<bottom>,
      eguards = mk_guard (sel \<bottom> \<top>) gtrue (emind E) # map release (eguards E),
      evalues = map release (evalues E),
@@ -385,18 +384,18 @@ lemma cstrict_aggregate:
 proof (rule cstrictI)
   fix Gs :: "'k set list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (aggregate f E))" and lx: "length Xs = length (evalues (aggregate f E))"
-    and c: "csem (aggregate f E) Gs\<cdot>Xs \<noteq> None"
+    and c: "csem (aggregate f E) Gs\<cdot>Xs \<noteq> Absent"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
   have lx': "length Xs = length (evalues E)" using lx by simp
   let ?\<Phi> = "\<lambda>p. csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p)"
-  have "agg_fold f ?\<Phi> G \<noteq> None" using c unfolding aggregate_csem[OF f] agg_csem_def Gs list.sel .
-  then have ne: "\<exists>p\<in>G. ?\<Phi> p \<noteq> None" using agg_fold_absent[OF f, of G ?\<Phi>] by metis
+  have "agg_fold f ?\<Phi> G \<noteq> Absent" using c unfolding aggregate_csem[OF f] agg_csem_def Gs list.sel .
+  then have ne: "\<exists>p\<in>G. ?\<Phi> p \<noteq> Absent" using agg_fold_absent[OF f, of G ?\<Phi>] by metis
   then have "G \<noteq> {}" by auto
   moreover have "{} \<notin> set Gs'"
   proof
     assume em: "{} \<in> set Gs'"
-    have "csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p) = None" for p
+    have "csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p) = Absent" for p
     proof (rule cstrictD[OF E])
       show "length (agg_ginner (eguards E) Gs' p) = length (eguards E)" by (simp add: agg_ginner_def l')
       show "length (agg_inner (evalues E) Xs p) = length (evalues E)" by (simp add: agg_inner_def lx')
@@ -430,7 +429,7 @@ proof -
       show ?thesis by (simp only: l fold_join_bots)
     qed
     show "keyimg data F (\<bottom> \<squnion> flod F) k"
-      if d0: "fconf ?vs data F" and "agg_fold f (esem E data F) (inner_keys E data F k) \<noteq> None" for data F k
+      if d0: "fconf ?vs data F" and "agg_fold f (esem E data F) (inner_keys E data F k) \<noteq> Absent" for data F k
     proof -
       have d: "fconf (evalues E) data F" using d0 by (simp only: fconf_release)
       have "inner_keys E data F k \<noteq> {}" using agg_fold_nonempty[OF f that(2)] by auto

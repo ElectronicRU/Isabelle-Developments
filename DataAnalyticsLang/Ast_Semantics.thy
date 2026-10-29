@@ -13,10 +13,10 @@ text \<open>Two levels are read off the dims.  A \<^emph>\<open>row-level\<close
 context dataspace
 begin
 
-definition row_level :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+definition row_level :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "row_level E \<longleftrightarrow> (\<forall>e\<in>set (eguards E). row_guard_entry e) \<and> (\<forall>e\<in>set (evalues E). row_entry e)"
 
-definition total_level :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+definition total_level :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "total_level E \<longleftrightarrow> emind E = \<bottom>"
 
 lemma row_level_value_at: "row_level (value_at c g)"
@@ -135,7 +135,7 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
   "asem (Dim d) = value_at (dim_lod d) (key_datum oo dim_val d)"
 | "asem (Col c) = column (col_sec c) (dim_lod (col_dim c)) (col_val c)"
 | "asem (Lit v) = value_at \<bottom> (\<Lambda> _. v)"
-| "asem (Call fn es) = smap (fsym_sem fn_other fn) (collect (map asem es))"
+| "asem (Call fn es) = smap (fup\<cdot>(fsym_sem fn_other fn)) (collect (map asem es))"
 | "asem (Aggr g e) = aggregate (ag_sem g) (asem e)"
 | "asem (GroupBy ds e) = include_dims (lod ds) (asem e)"
 | "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
@@ -194,10 +194,7 @@ text \<open>On the point family of a row and a key, the content semantics of a r
   its reading on the parts of that pair: the structural row reading is the content semantics at one
   row.  Key-level expressions, which read no columns, are read off the key alone.\<close>
 
-lemma those_map_Some: "those (map Some xs) = Some xs"
-  by (induct xs) simp_all
-
-theorem csem_point: "row_ast e \<Longrightarrow> csem (asem e) (gpoint (eguards (asem e)) p)\<cdot>(point (evalues (asem e)) p) = Some (pval e\<cdot>p)"
+theorem csem_point: "row_ast e \<Longrightarrow> csem (asem e) (gpoint (eguards (asem e)) p)\<cdot>(point (evalues (asem e)) p) = Present\<cdot>(pval e\<cdot>p)"
 proof (induct e rule: row_ast.induct)
   case (1 d)
   show ?case by (cases p) (simp add: dim_reads)
@@ -207,7 +204,7 @@ next
 next
   case (4 fn es)
   let ?Es = "map asem es" and ?Q = "\<lambda>E. gpoint (eguards E) p" and ?P = "\<lambda>E. point (evalues E) p"
-  have IH: "csem (asem e) (?Q (asem e))\<cdot>(?P (asem e)) = Some (pval e\<cdot>p)" if "e \<in> set es" for e
+  have IH: "csem (asem e) (?Q (asem e))\<cdot>(?P (asem e)) = Present\<cdot>(pval e\<cdot>p)" if "e \<in> set es" for e
     using 4 that by simp
   have bg: "blocks (map (\<lambda>E. length (eguards E)) ?Es) (gpoint (concat (map eguards ?Es)) p) = map ?Q ?Es"
     unfolding gpoint_concat map_map comp_def
@@ -218,11 +215,11 @@ next
   have z: "map2 (\<lambda>q Ys. csem (fst q) (snd q)\<cdot>Ys) (zip (map asem xs) (map (\<lambda>x. ?Q (asem x)) xs)) (map (\<lambda>x. ?P (asem x)) xs)
       = map (\<lambda>x. csem (asem x) (?Q (asem x))\<cdot>(?P (asem x))) xs" for xs
     by (induct xs) simp_all
-  have m: "map2 (\<lambda>q Ys. csem (fst q) (snd q)\<cdot>Ys) (zip ?Es (map ?Q ?Es)) (map ?P ?Es) = map (\<lambda>e. Some (pval e\<cdot>p)) es"
+  have m: "map2 (\<lambda>q Ys. csem (fst q) (snd q)\<cdot>Ys) (zip ?Es (map ?Q ?Es)) (map ?P ?Es) = map (\<lambda>e. Present\<cdot>(pval e\<cdot>p)) es"
     unfolding map_map comp_def z using IH by simp
   show ?case
     by (simp only: asem.simps smap_simps collect_simps collect_csem_def bg b m)
-      (simp add: those_map_Some[of "map (\<lambda>e. pval e\<cdot>p) es", unfolded map_map comp_def] tuple_cfun_apply map_map comp_def)
+      (simp add: those_pd_Present[of "map (\<lambda>e. pval e\<cdot>p) es", unfolded map_map comp_def] tuple_cfun_apply map_map comp_def)
 qed simp_all
 
 text \<open>Key-level expressions: dimensions, literals and calls, no columns.\<close>
@@ -259,7 +256,7 @@ lemma row_ast_gtrue: "row_ast e \<Longrightarrow> e' \<in> set (eguards (asem e)
 theorem esem_row_ast:
   assumes e: "row_ast e" and d: "conforms data" and xm: "x \<in> lower_maximal data" and xF: "frows F x"
     and kx: "k = rproj (kd (asem e) F) x"
-  shows "esem (asem e) data F k = Some (pval e\<cdot>(x, rkey\<cdot>x))"
+  shows "esem (asem e) data F k = Present\<cdot>(pval e\<cdot>(x, rkey\<cdot>x))"
 proof -
   have ES: "semilawful (asem e)" by (rule semilawful_asem[OF row_ast_wf[OF e]])
   have k: "proj (kd (asem e) F)\<cdot>k = k" by (simp add: kx)
@@ -293,7 +290,7 @@ proof -
   then show ?thesis by (simp only: semilawful_csem[OF ES d k] g csem_point[OF e])
 qed
 
-corollary csem_point_key: "key_ast e \<Longrightarrow> csem (asem e) (gpoint (eguards (asem e)) (r, k))\<cdot>(point (evalues (asem e)) (r, k)) = Some (kval e\<cdot>k)"
+corollary csem_point_key: "key_ast e \<Longrightarrow> csem (asem e) (gpoint (eguards (asem e)) (r, k))\<cdot>(point (evalues (asem e)) (r, k)) = Present\<cdot>(kval e\<cdot>k)"
   by (simp only: csem_point[OF key_ast_row_ast] pval_kval)
 
 end

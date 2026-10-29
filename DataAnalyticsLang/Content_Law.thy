@@ -155,18 +155,18 @@ abbreviation mk_value ::
 text \<open>An expression's content semantics takes the guards' contents, sets of keys, as a plain
   argument, and is continuous in the value entries' contents.\<close>
 
-record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::cpo) expr =
+record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::bifinite) expr =
   emind :: "'k semi_factor"
   eguards :: "('k, 'r guard) entry list"
   evalues :: "('k, 'r semi_factor) entry list"
-  esem :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<rightharpoonup> 'v"
-  csem :: "'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<rightarrow> 'v option"
+  esem :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd"
+  csem :: "'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<rightarrow> 'v option_pd"
 
 hide_const (open) expr.truncate
 
 text \<open>The selectors of all of an expression's entries.\<close>
 
-abbreviation esels :: "('k::{domain, distributive_cpo}, 'f, 'r::{bifinite, distributive_cpo}, 'v::cpo) expr \<Rightarrow> 'k selector list" where
+abbreviation esels :: "('k::{domain, distributive_cpo}, 'f, 'r::{bifinite, distributive_cpo}, 'v::bifinite) expr \<Rightarrow> 'k selector list" where
   "esels E \<equiv> map esel (eguards E) @ map esel (evalues E)"
 
 lemma esels_guardI: "e \<in> set (eguards E) \<Longrightarrow> esel e \<in> set (esels E)"
@@ -844,39 +844,39 @@ text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed value
 context dataspace
 begin
 
-abbreviation kd :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
+abbreviation kd :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
   "kd E F \<equiv> emind E \<squnion> flod F"
 
 text \<open>The content semantics of an expression at its contents.\<close>
 
-abbreviation csem_at :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option" where
+abbreviation csem_at :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
   "csem_at E data F k \<equiv> csem E (gcontents data (eguards E) F k)\<cdot>(contents data (evalues E) F k)"
 
-definition cstrict :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+definition cstrict :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "cstrict E \<longleftrightarrow> (\<forall>Gs Xs. length Gs = length (eguards E) \<longrightarrow> length Xs = length (evalues E) \<longrightarrow>
-     csem E Gs\<cdot>Xs \<noteq> None \<longrightarrow> {} \<notin> set Gs)"
+     csem E Gs\<cdot>Xs \<noteq> Absent \<longrightarrow> {} \<notin> set Gs)"
 
 lemma cstrictI:
-  "(\<And>Gs Xs. length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> csem E Gs\<cdot>Xs \<noteq> None \<Longrightarrow>
+  "(\<And>Gs Xs. length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> csem E Gs\<cdot>Xs \<noteq> Absent \<Longrightarrow>
      {} \<notin> set Gs) \<Longrightarrow> cstrict E"
   unfolding cstrict_def by blast
 
 lemma cstrictD:
   "cstrict E \<Longrightarrow> length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> {} \<in> set Gs \<Longrightarrow>
-     csem E Gs\<cdot>Xs = None"
+     csem E Gs\<cdot>Xs = Absent"
   unfolding cstrict_def by blast
 
-definition semilawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+definition semilawful :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom> \<and> (\<forall>e\<in>set (evalues E). entry_wf e) \<and>
      cstrict E \<and>
      (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem_at E data F k)"
 
-definition lawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+definition lawful :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "lawful E \<longleftrightarrow> semilawful E \<and>
-     (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow>
+     (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k \<noteq> Absent \<longrightarrow>
        keyimg data F (kd E F) k)"
 
-definition saturated :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+definition saturated :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "saturated E \<longleftrightarrow> (\<forall>S\<in>set (esels E). (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S)"
 
 lemma saturatedD: "saturated E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
@@ -932,7 +932,7 @@ lemma semilawful_mono:
 
 lemma lawful_semiI:
   assumes "semilawful E"
-    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k; esem E data F k \<noteq> None\<rbrakk> \<Longrightarrow>
+    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k; esem E data F k \<noteq> Absent\<rbrakk> \<Longrightarrow>
       keyimg data F (emind E \<squnion> flod F) k"
   shows "lawful E"
   unfolding lawful_def using assms by blast
@@ -941,7 +941,7 @@ lemma lawfulI:
   assumes "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
     and "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_wf e"
     and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem_at E data F k"
-    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k; esem E data F k \<noteq> None\<rbrakk> \<Longrightarrow>
+    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k; esem E data F k \<noteq> Absent\<rbrakk> \<Longrightarrow>
       keyimg data F (emind E \<squnion> flod F) k"
     and "cstrict E"
   shows "lawful E"
@@ -951,12 +951,12 @@ lemma lawful_semilawful: "lawful E \<Longrightarrow> semilawful E"
   unfolding lawful_def by blast
 
 lemma lawful_key_law_conf:
-  "lawful E \<Longrightarrow> fconf (evalues E) data F \<Longrightarrow> proj (kd E F)\<cdot>k = k \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow>
+  "lawful E \<Longrightarrow> fconf (evalues E) data F \<Longrightarrow> proj (kd E F)\<cdot>k = k \<Longrightarrow> esem E data F k \<noteq> Absent \<Longrightarrow>
     keyimg data F (kd E F) k"
   unfolding lawful_def by blast
 
 lemma lawful_key_law:
-  "lawful E \<Longrightarrow> conforms data \<Longrightarrow> proj (kd E F)\<cdot>k = k \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
+  "lawful E \<Longrightarrow> conforms data \<Longrightarrow> proj (kd E F)\<cdot>k = k \<Longrightarrow> esem E data F k \<noteq> Absent \<Longrightarrow> keyimg data F (kd E F) k"
   by (rule lawful_key_law_conf[OF _ semilawful_fconf[OF lawful_semilawful]])
 
 lemma lawful_keyed: "lawful E \<Longrightarrow> e \<in> set (evalues E) \<Longrightarrow> keyed_view (eview e)"
@@ -1029,7 +1029,7 @@ text \<open>The \<^emph>\<open>grain\<close> of an expression at a frame joins t
   so values, depend on the key only through its part at the grain: an expression emits at its
   grain, and its values at finer keys are broadcast.\<close>
 
-definition grain :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
+definition grain :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
   "grain E F = fold (\<squnion>) (map (\<lambda>S. sel_at S (flod F)) (esels E)) \<bottom>"
 
 lemma group_below_grain: assumes "S \<in> set (esels E)" shows "sel_at S (flod F) \<sqsubseteq> grain E F"

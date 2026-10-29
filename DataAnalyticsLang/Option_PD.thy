@@ -517,8 +517,8 @@ next
   fix x show "cont (\<lambda>a. case w x of None \<Rightarrow> Some a | Some y \<Rightarrow> Some (f\<cdot>a\<cdot>y))" by simp
 qed
 
-definition combine_option_pd :: "('v \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd" where
-  "combine_option_pd f = option_pd_op (\<Lambda> a b. opt_op f a b)"
+definition combine_option_pd :: "('v \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> 'v option_pd \<rightarrow> 'v option_pd \<rightarrow> 'v option_pd" where
+  "combine_option_pd f = (\<Lambda> x y. option_pd_op (\<Lambda> a b. opt_op f a b) x y)"
 
 lemma opt_op_cfun_apply [simp]: "(\<Lambda> a b. opt_op f a b)\<cdot>a\<cdot>b = opt_op f a b"
 proof -
@@ -527,27 +527,26 @@ proof -
   ultimately show ?thesis by (simp add: cont2cont_LAM)
 qed
 
-lemma combine_option_pd_of_option [simp]:
-  "combine_option_pd f (of_option\<cdot>a) (of_option\<cdot>b) = of_option\<cdot>(opt_op f a b)"
-  by (simp add: combine_option_pd_def)
+lemma combine_option_pd_apply: "combine_option_pd f\<cdot>x\<cdot>y = option_pd_op (\<Lambda> a b. opt_op f a b) x y"
+  by (simp add: combine_option_pd_def cont2cont_LAM)
 
-lemma combine_option_pd_Present [simp]: "combine_option_pd f (Present\<cdot>a) (Present\<cdot>b) = Present\<cdot>(f\<cdot>a\<cdot>b)"
+lemma combine_option_pd_of_option [simp]:
+  "combine_option_pd f\<cdot>(of_option\<cdot>a)\<cdot>(of_option\<cdot>b) = of_option\<cdot>(opt_op f a b)"
+  by (simp add: combine_option_pd_apply)
+
+lemma combine_option_pd_Present [simp]: "combine_option_pd f\<cdot>(Present\<cdot>a)\<cdot>(Present\<cdot>b) = Present\<cdot>(f\<cdot>a\<cdot>b)"
   using combine_option_pd_of_option[of f "Some a" "Some b"] by simp
 
-lemma cont_combine_option_pd [simp, cont2cont]:
-  "cont g \<Longrightarrow> cont h \<Longrightarrow> cont (\<lambda>x. combine_option_pd f (g x) (h x))"
-  by (simp add: combine_option_pd_def)
+lemma combine_option_pd_plus1: "combine_option_pd f\<cdot>(x + y)\<cdot>z = combine_option_pd f\<cdot>x\<cdot>z + combine_option_pd f\<cdot>y\<cdot>z"
+  by (simp add: combine_option_pd_apply option_pd_op_plus1)
 
-lemma combine_option_pd_plus1: "combine_option_pd f (x + y) z = combine_option_pd f x z + combine_option_pd f y z"
-  by (simp add: combine_option_pd_def option_pd_op_plus1)
-
-lemma combine_option_pd_plus2: "combine_option_pd f z (x + y) = combine_option_pd f z x + combine_option_pd f z y"
-  by (simp add: combine_option_pd_def option_pd_op_plus2)
+lemma combine_option_pd_plus2: "combine_option_pd f\<cdot>z\<cdot>(x + y) = combine_option_pd f\<cdot>z\<cdot>x + combine_option_pd f\<cdot>z\<cdot>y"
+  by (simp add: combine_option_pd_apply option_pd_op_plus2)
 
 lemma comm_monoid_combine_option_pd:
   assumes "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
-  shows "comm_monoid (combine_option_pd f) Absent"
-  unfolding combine_option_pd_def
+  shows "comm_monoid (\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y) Absent"
+  unfolding combine_option_pd_apply
   by (rule comm_monoid_option_pd_op) (simp add: comm_monoid_opt_op[OF assms])
 
 subsection \<open>Absorbing absence\<close>
@@ -594,9 +593,6 @@ qed
 
 subsection \<open>Mapping results\<close>
 
-definition map_option_pd :: "('a \<rightarrow> 'b) \<Rightarrow> 'a option_pd \<Rightarrow> 'b option_pd" where
-  "map_option_pd g x = Abs_option_pd (upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x))"
-
 lemma upper_map_u_map_nonbot: "S \<noteq> \<bottom> \<Longrightarrow> upper_map\<cdot>(u_map\<cdot>d)\<cdot>S \<noteq> \<bottom>"
 proof -
   assume S: "S \<noteq> \<bottom>"
@@ -609,19 +605,47 @@ proof -
   then show ?thesis using S by simp
 qed
 
-lemma Rep_map_option_pd [simp]:
-  "Rep_option_pd (map_option_pd g x) = upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x)"
-  unfolding map_option_pd_def by (rule Rep_Abs_option_pd, rule upper_map_u_map_nonbot) simp
-
-lemma cont_map_option_pd [simp, cont2cont]: "cont f \<Longrightarrow> cont (\<lambda>x. map_option_pd g (f x))"
-  unfolding map_option_pd_def
+lemma cont_map_Abs: "cont (\<lambda>x. Abs_option_pd (upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x)))"
   by (rule cont_Abs_option_pd) (simp_all add: cont_Rep_option_pd upper_map_u_map_nonbot)
 
+definition map_option_pd :: "('a \<rightarrow> 'b) \<Rightarrow> 'a option_pd \<rightarrow> 'b option_pd" where
+  "map_option_pd g = (\<Lambda> x. Abs_option_pd (upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x)))"
+
+lemma Rep_map_option_pd [simp]:
+  "Rep_option_pd (map_option_pd g\<cdot>x) = upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x)"
+  unfolding map_option_pd_def beta_cfun[OF cont_map_Abs]
+  by (rule Rep_Abs_option_pd, rule upper_map_u_map_nonbot) simp
+
 lemma map_option_pd_simps [simp]:
-  "map_option_pd g Absent = Absent" "map_option_pd g (Present\<cdot>v) = Present\<cdot>(g\<cdot>v)"
-  "map_option_pd g (of_option\<cdot>a) = of_option\<cdot>(map_option (Rep_cfun g) a)"
-  "map_option_pd g (x + y) = map_option_pd g x + map_option_pd g y"
+  "map_option_pd g\<cdot>Absent = Absent" "map_option_pd g\<cdot>(Present\<cdot>v) = Present\<cdot>(g\<cdot>v)"
+  "map_option_pd g\<cdot>(of_option\<cdot>a) = of_option\<cdot>(map_option (Rep_cfun g) a)"
+  "map_option_pd g\<cdot>(x + y) = map_option_pd g\<cdot>x + map_option_pd g\<cdot>y"
   by (simp_all add: Rep_option_pd_inject[symmetric])
+
+subsection \<open>Binary operations strict in absence\<close>
+
+text \<open>A binary function on values lifted to results: present where both arguments are.\<close>
+
+definition strict_opt2 :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> 'a option \<rightarrow> 'b option \<rightarrow> 'c option" where
+  "strict_opt2 f = (\<Lambda> a b. case a of None \<Rightarrow> None | Some v \<Rightarrow> (case b of None \<Rightarrow> None | Some w \<Rightarrow> Some (f\<cdot>v\<cdot>w)))"
+
+lemma strict_opt2_simps [simp]:
+  "strict_opt2 f\<cdot>None\<cdot>b = None" "strict_opt2 f\<cdot>a\<cdot>None = None" "strict_opt2 f\<cdot>(Some v)\<cdot>(Some w) = Some (f\<cdot>v\<cdot>w)"
+  by (simp_all add: strict_opt2_def) (cases a; simp)
+
+definition lift2_option_pd :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> 'a option_pd \<rightarrow> 'b option_pd \<rightarrow> 'c option_pd" where
+  "lift2_option_pd f = (\<Lambda> x y. option_pd_op (strict_opt2 f) x y)"
+
+lemma lift2_option_pd_apply: "lift2_option_pd f\<cdot>x\<cdot>y = option_pd_op (strict_opt2 f) x y"
+  by (simp add: lift2_option_pd_def cont2cont_LAM)
+
+lemma lift2_option_pd_simps [simp]:
+  "lift2_option_pd f\<cdot>(Present\<cdot>v)\<cdot>(Present\<cdot>w) = Present\<cdot>(f\<cdot>v\<cdot>w)"
+  "lift2_option_pd f\<cdot>Absent\<cdot>y = Absent" "lift2_option_pd f\<cdot>x\<cdot>Absent = Absent"
+proof -
+  show "lift2_option_pd f\<cdot>(Present\<cdot>v)\<cdot>(Present\<cdot>w) = Present\<cdot>(f\<cdot>v\<cdot>w)"
+    using option_pd_op_of_option[of "strict_opt2 f" "Some v" "Some w"] by (simp add: lift2_option_pd_apply)
+qed (simp_all add: lift2_option_pd_apply option_pd_op_Absent1 option_pd_op_Absent2)
 
 subsection \<open>Tuples of results\<close>
 
@@ -629,30 +653,17 @@ text \<open>Tuples are lifted lists, so that their results are pointed.  A tuple
   where every component is: the outcomes are all combinations, and one absent component makes the
   tuple absent.\<close>
 
-definition cons_opt :: "'a option \<rightarrow> 'a list u option \<rightarrow> 'a list u option" where
-  "cons_opt = (\<Lambda> a l. case a of None \<Rightarrow> None | Some v \<Rightarrow> (case l of None \<Rightarrow> None | Some w \<Rightarrow> Some (fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w)))"
-
-lemma cons_opt_simps [simp]:
-  "cons_opt\<cdot>None\<cdot>l = None" "cons_opt\<cdot>a\<cdot>None = None"
-  "cons_opt\<cdot>(Some v)\<cdot>(Some (up\<cdot>ys)) = Some (up\<cdot>(v # ys))"
-  by (simp_all add: cons_opt_def) (cases a; simp)
-
 primrec those_pd :: "'a::domain option_pd list \<Rightarrow> 'a list u option_pd" where
   "those_pd [] = Present\<cdot>(up\<cdot>[])"
-| "those_pd (x # xs) = option_pd_op cons_opt x (those_pd xs)"
+| "those_pd (x # xs) = lift2_option_pd (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w)\<cdot>x\<cdot>(those_pd xs)"
 
 lemma those_pd_Present [simp]: "those_pd (map (\<lambda>v. Present\<cdot>v) vs) = Present\<cdot>(up\<cdot>vs)"
-proof (induct vs)
-  case (Cons v vs)
-  have "option_pd_op cons_opt (of_option\<cdot>(Some v)) (of_option\<cdot>(Some (up\<cdot>vs))) = of_option\<cdot>(Some (up\<cdot>(v # vs)))"
-    by (simp only: option_pd_op_of_option cons_opt_simps)
-  then show ?case using Cons by simp
-qed simp
+  by (induct vs) simp_all
 
 lemma those_pd_Absent: "Absent \<in> set xs \<Longrightarrow> those_pd xs = Absent"
-  by (induct xs) (auto simp: option_pd_op_Absent1 option_pd_op_Absent2)
+  by (induct xs) auto
 
 lemma cont_those_pd: "cont (those_pd :: 'a::domain option_pd list \<Rightarrow> 'a list u option_pd)"
-  by (rule list_contI[where g = "\<lambda>x xs y. option_pd_op cons_opt x y"]) simp_all
+  by (rule list_contI[where g = "\<lambda>x xs y. lift2_option_pd (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w)\<cdot>x\<cdot>y"]) simp_all
 
 end

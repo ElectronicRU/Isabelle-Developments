@@ -14,8 +14,8 @@ text \<open>A collected expression is present where every component is; its valu
   components' values.  Absence is the expression's, so the list needs no bottom: tuples are plain
   lists, ordered componentwise at equal length.\<close>
 
-lemma those_not_None_iff: "those xs \<noteq> None \<longleftrightarrow> (\<forall>x\<in>set xs. x \<noteq> None)"
-  by (induct xs) (auto split: option.splits)
+lemma those_pd_not_Absent: "those_pd xs \<noteq> Absent \<Longrightarrow> x \<in> set xs \<Longrightarrow> x \<noteq> Absent"
+  using those_pd_Absent by blast
 
 context dataspace
 begin
@@ -32,22 +32,22 @@ lemma join_meet_self: "c \<squnion> (c \<sqinter> L) = c" for c :: "'k semi_fact
 lemma rigid_dom_empty: "rigid (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. dom (hd Xs) = {})"
   by (rule rigidI) (simp only: rigidD[OF rigid_comp[OF rigid_dom cont2mono[OF cont_hd]]])
 
-lemma cont_key_value: "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. Some (the_elem (dom (hd Xs))))"
+lemma cont_key_value: "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. Present\<cdot>(the_elem (dom (hd Xs))))"
   by (rule cont_rigid, rule rigidI) (simp only: rigidD[OF rigid_comp[OF rigid_dom cont2mono[OF cont_hd]]])
 
 lemma cont_key_at_csem:
-  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. if dom (hd Xs) = {} then None else Some (the_elem (dom (hd Xs))))"
+  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. if dom (hd Xs) = {} then Absent else Present\<cdot>(the_elem (dom (hd Xs))))"
   by (rule cont_if_rigid[OF rigid_dom_empty cont_const cont_key_value])
 
 definition key_at :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'k) expr" where
   "key_at c = \<lparr>emind = c, eguards = [], evalues = [mk_value (sel c c) \<bottom> c],
-     esem = \<lambda>data F k. if fiber data c c F k = {} then None else Some (proj c\<cdot>k),
-     csem = \<lambda>Gs. \<Lambda> Xs. if dom (hd Xs) = {} then None else Some (the_elem (dom (hd Xs)))\<rparr>"
+     esem = \<lambda>data F k. if fiber data c c F k = {} then Absent else Present\<cdot>(proj c\<cdot>k),
+     csem = \<lambda>Gs. \<Lambda> Xs. if dom (hd Xs) = {} then Absent else Present\<cdot>(the_elem (dom (hd Xs)))\<rparr>"
 
 lemma key_at_simps [simp]:
   "emind (key_at c) = c" "eguards (key_at c) = []" "evalues (key_at c) = [mk_value (sel c c) \<bottom> c]"
-  "esem (key_at c) data F k = (if fiber data c c F k = {} then None else Some (proj c\<cdot>k))"
-  "csem (key_at c) Gs\<cdot>Xs = (if dom (hd Xs) = {} then None else Some (the_elem (dom (hd Xs))))"
+  "esem (key_at c) data F k = (if fiber data c c F k = {} then Absent else Present\<cdot>(proj c\<cdot>k))"
+  "csem (key_at c) Gs\<cdot>Xs = (if dom (hd Xs) = {} then Absent else Present\<cdot>(the_elem (dom (hd Xs))))"
   by (simp_all only: key_at_def expr.select_convs beta_cfun[OF cont_key_at_csem])
 
 lemma group_own: "y \<in> group data c c F k \<Longrightarrow> rproj c y = proj c\<cdot>k"
@@ -79,8 +79,8 @@ proof (rule semilawfulI, simp_all only: key_at_simps)
   show "entry_wf e" if "e \<in> set [?e]" for e using that by (simp add: entry_wf_view keyed_view_key)
   show "c = fold (\<squnion>) (map lower_part (map esel [] @ map esel [?e])) \<bottom>"
     by (simp add: lattice_join_bot_right)
-  show "(if fiber data c c F k = {} then None else Some (proj c\<cdot>k))
-      = (if dom (hd (contents data [?e] F k)) = {} then None else Some (the_elem (dom (hd (contents data [?e] F k)))))"
+  show "(if fiber data c c F k = {} then Absent else Present\<cdot>(proj c\<cdot>k))
+      = (if dom (hd (contents data [?e] F k)) = {} then Absent else Present\<cdot>(the_elem (dom (hd (contents data [?e] F k)))))"
     for data F k
   proof (cases "fiber data c c F k = {}")
     case False
@@ -96,7 +96,7 @@ text \<open>A table column reads a section of the row.  An external oracle names
   the oracle's key part; like a key, it has no guard.\<close>
 
 lemma cont_column_value:
-  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
+  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. Present\<cdot>(v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
 proof -
   have "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. hd Xs (the_elem (dom (hd Xs))))"
     by (rule cont_rigid_arg[OF _ rigid_comp[OF rigid_dom cont2mono[OF cont_hd]]]) (simp add: cont2cont_fun)
@@ -104,21 +104,21 @@ proof -
 qed
 
 lemma cont_column_csem:
-  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. if dom (hd Xs) = {} then None
-     else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
+  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. if dom (hd Xs) = {} then Absent
+     else Present\<cdot>(v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
   by (rule cont_if_rigid[OF rigid_dom_empty cont_const cont_column_value])
 
-definition column :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::cpo) \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
+definition column :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
   "column c a v = \<lparr>emind = a, eguards = [], evalues = [mk_value (sel a a) c a],
-     esem = \<lambda>data F k. if fiber data a a F k = {} then None
-       else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k),
-     csem = \<lambda>Gs. \<Lambda> Xs. if dom (hd Xs) = {} then None else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs))))))\<rparr>"
+     esem = \<lambda>data F k. if fiber data a a F k = {} then Absent
+       else Present\<cdot>(THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k),
+     csem = \<lambda>Gs. \<Lambda> Xs. if dom (hd Xs) = {} then Absent else Present\<cdot>(v\<cdot>(the (hd Xs (the_elem (dom (hd Xs))))))\<rparr>"
 
 lemma column_simps [simp]:
   "emind (column c a v) = a" "eguards (column c a v) = []" "evalues (column c a v) = [mk_value (sel a a) c a]"
-  "esem (column c a v) data F k = (if fiber data a a F k = {} then None
-       else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k))"
-  "csem (column c a v) Gs\<cdot>Xs = (if dom (hd Xs) = {} then None else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
+  "esem (column c a v) data F k = (if fiber data a a F k = {} then Absent
+       else Present\<cdot>(THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k))"
+  "csem (column c a v) Gs\<cdot>Xs = (if dom (hd Xs) = {} then Absent else Present\<cdot>(v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
   by (simp_all only: column_def expr.select_convs beta_cfun[OF cont_column_csem])
 
 text \<open>The rows of a column's fiber carry one section.\<close>
@@ -148,9 +148,9 @@ proof (rule semilawfulI, simp_all only: column_simps)
     using that by (simp add: entry_wf_view keyed_view_columns[OF fd])
   show "a = fold (\<squnion>) (map lower_part (map esel [] @ map esel [?e])) \<bottom>"
     by (simp add: lattice_join_bot_right)
-  show "(if fiber data a a F k = {} then None else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k))
-      = (if dom (hd (contents data [?e] F k)) = {} then None
-         else Some (v\<cdot>(the (hd (contents data [?e] F k) (the_elem (dom (hd (contents data [?e] F k))))))))"
+  show "(if fiber data a a F k = {} then Absent else Present\<cdot>(THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k))
+      = (if dom (hd (contents data [?e] F k)) = {} then Absent
+         else Present\<cdot>(v\<cdot>(the (hd (contents data [?e] F k) (the_elem (dom (hd (contents data [?e] F k))))))))"
     if d: "fconf [?e] data F" for data F k
   proof (cases "fiber data a a F k = {}")
     case False
@@ -174,19 +174,22 @@ qed
 
 subsection \<open>Maps\<close>
 
-definition smap :: "('v::cpo \<rightarrow> 'w::cpo) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
+definition smap :: "('v::bifinite \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
   "smap g E = \<lparr>emind = emind E, eguards = eguards E, evalues = evalues E,
-     esem = \<lambda>data F k. map_option (Rep_cfun g) (esem E data F k),
-     csem = \<lambda>Gs. \<Lambda> Xs. map_option (Rep_cfun g) (csem E Gs\<cdot>Xs)\<rparr>"
+     esem = \<lambda>data F k. map_option_pd g\<cdot>(esem E data F k),
+     csem = \<lambda>Gs. \<Lambda> Xs. map_option_pd g\<cdot>(csem E Gs\<cdot>Xs)\<rparr>"
 
 lemma smap_simps [simp]:
   "emind (smap g E) = emind E" "eguards (smap g E) = eguards E" "evalues (smap g E) = evalues E"
-  "esem (smap g E) data F k = map_option (Rep_cfun g) (esem E data F k)"
-  "csem (smap g E) Gs\<cdot>Xs = map_option (Rep_cfun g) (csem E Gs\<cdot>Xs)"
+  "esem (smap g E) data F k = map_option_pd g\<cdot>(esem E data F k)"
+  "csem (smap g E) Gs\<cdot>Xs = map_option_pd g\<cdot>(csem E Gs\<cdot>Xs)"
   by (simp_all add: smap_def)
 
+lemma map_option_pd_not_Absent: "map_option_pd g\<cdot>x \<noteq> Absent \<Longrightarrow> x \<noteq> Absent"
+  by auto
+
 lemma cstrict_smap: "cstrict E \<Longrightarrow> cstrict (smap g E)"
-  unfolding cstrict_def by simp
+  unfolding cstrict_def smap_simps by (blast dest: map_option_pd_not_Absent)
 
 theorem semilawful_smap: assumes "semilawful E" shows "semilawful (smap g E)"
 proof -
@@ -196,7 +199,7 @@ proof -
     show "cstrict (smap g E)" by (rule cstrict_smap[OF semilawful_cstrict[OF ES]])
     show "entry_wf e" if "e \<in> set (evalues E)" for e by (rule semilawful_wf[OF ES that])
     show "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>" by (rule semilawful_mind_lub[OF ES])
-    show "map_option (Rep_cfun g) (esem E data F k) = map_option (Rep_cfun g) (csem_at E data F k)"
+    show "map_option_pd g\<cdot>(esem E data F k) = map_option_pd g\<cdot>(csem_at E data F k)"
       if "fconf (evalues E) data F" "proj (emind E \<squnion> flod F)\<cdot>k = k" for data F k
       by (simp only: semilawful_csem_conf[OF ES that])
   qed
@@ -208,20 +211,20 @@ proof -
   show ?thesis
   proof (rule lawful_semiI[OF semilawful_smap[OF lawful_semilawful[OF assms]]], simp_all only: smap_simps)
     show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (evalues E) data F" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k"
-      and "map_option (Rep_cfun g) (esem E data F k) \<noteq> None" for data F k
-      using that(3) by (intro lawful_key_law_conf[OF EL d k]) simp
+      and "map_option_pd g\<cdot>(esem E data F k) \<noteq> Absent" for data F k
+      by (rule lawful_key_law_conf[OF EL d k map_option_pd_not_Absent[OF that(3)]])
   qed
 qed
 
 text \<open>A function of the key at an LOD.\<close>
 
-definition value_at :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> 'v::cpo) \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition value_at :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> 'v::bifinite) \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "value_at c g = smap g (key_at c)"
 
 lemma value_at_simps [simp]:
   "emind (value_at c g) = c" "eguards (value_at c g) = []" "evalues (value_at c g) = [mk_value (sel c c) \<bottom> c]"
-  "esem (value_at c g) data F k = (if fiber data c c F k = {} then None else Some (g\<cdot>(proj c\<cdot>k)))"
-  "csem (value_at c g) Gs\<cdot>Xs = (if dom (hd Xs) = {} then None else Some (g\<cdot>(the_elem (dom (hd Xs)))))"
+  "esem (value_at c g) data F k = (if fiber data c c F k = {} then Absent else Present\<cdot>(g\<cdot>(proj c\<cdot>k)))"
+  "csem (value_at c g) Gs\<cdot>Xs = (if dom (hd Xs) = {} then Absent else Present\<cdot>(g\<cdot>(the_elem (dom (hd Xs)))))"
   by (simp_all add: value_at_def)
 
 theorem semilawful_value_at: "semilawful (value_at c g)"
@@ -240,7 +243,7 @@ lemma restrict_entry_simps [simp]:
   "eguard (restrict_entry \<gamma> e) = gand \<gamma> (eguard e)"
   by (simp_all add: restrict_entry_def)
 
-definition restrict :: "'r guard \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition restrict :: "'r guard \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "restrict \<gamma> E = \<lparr>emind = emind E, eguards = map (restrict_entry \<gamma>) (eguards E), evalues = evalues E,
      esem = \<lambda>data F. esem E data (frestrict (gsel \<gamma>) F), csem = csem E\<rparr>"
 
@@ -295,7 +298,7 @@ theorem lawful_restrict:
   shows "lawful (restrict \<gamma> E)"
 proof (rule lawful_semiI[OF semilawful_restrict[OF lawful_semilawful[OF EL]]], simp_all only: restrict_simps)
   show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (evalues E) data F" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k"
-    and "esem E data (frestrict (gsel \<gamma>) F) k \<noteq> None" for data F k
+    and "esem E data (frestrict (gsel \<gamma>) F) k \<noteq> Absent" for data F k
   proof -
     have d': "fconf (evalues E) data (frestrict (gsel \<gamma>) F)" using d by (simp only: fconf_frestrict)
     have "keyimg data (frestrict (gsel \<gamma>) F) (emind E \<squnion> flod F) k"
@@ -326,12 +329,12 @@ lemma for_value_simps [simp]:
   "esel (for_value \<tau> e) = trunc_sel \<tau> (esel e)" "ekeys (for_value \<tau> e) = ekeys e" "ecols (for_value \<tau> e) = ecols e"
   by (simp_all add: for_value_def)
 
-definition filtfor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition filtfor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "filtfor \<tau> G E = \<lparr>emind = emind E, eguards = map (for_entry \<tau> G) (eguards E),
      evalues = map (for_value \<tau>) (evalues E),
      esem = \<lambda>data F k. esem E data (ffor \<tau> G F) (proj (emind E \<squnion> flod (ffor \<tau> G F))\<cdot>k), csem = csem E\<rparr>"
 
-abbreviation fixed :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+abbreviation fixed :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "fixed D \<equiv> filtfor D \<^bold>1"
 
 lemma filtfor_simps [simp]:
@@ -491,22 +494,22 @@ text \<open>The presence test at a selector: a true guard keyed at nothing, whos
   the minimal LOD.  The expression is evaluated at its own key.  At \<open>(\<bottom>, \<top>)\<close> it is the test on the
   full group, the key's realisation.\<close>
 
-definition present_at :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition present_at :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "present_at a \<rho> E = \<lparr>emind = emind E \<squnion> a, eguards = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> # eguards E,
      evalues = evalues E,
-     esem = \<lambda>data F k. if group data (emind E \<squnion> a) \<rho> F k = {} then None else esem E data F (proj (kd E F)\<cdot>k),
-     csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs\<rparr>"
+     esem = \<lambda>data F k. if group data (emind E \<squnion> a) \<rho> F k = {} then Absent else esem E data F (proj (kd E F)\<cdot>k),
+     csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then Absent else csem E (tl Gs)\<cdot>Xs\<rparr>"
 
-abbreviation present :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+abbreviation present :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "present E \<equiv> present_at \<bottom> \<top> E"
 
 lemma present_at_simps [simp]:
   "emind (present_at a \<rho> E) = emind E \<squnion> a"
   "eguards (present_at a \<rho> E) = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> # eguards E"
   "evalues (present_at a \<rho> E) = evalues E"
-  "esem (present_at a \<rho> E) data F k = (if group data (emind E \<squnion> a) \<rho> F k = {} then None
+  "esem (present_at a \<rho> E) data F k = (if group data (emind E \<squnion> a) \<rho> F k = {} then Absent
      else esem E data F (proj (kd E F)\<cdot>k))"
-  "csem (present_at a \<rho> E) Gs\<cdot>Xs = (if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs)"
+  "csem (present_at a \<rho> E) Gs\<cdot>Xs = (if hd Gs = {} then Absent else csem E (tl Gs)\<cdot>Xs)"
   by (simp_all add: present_at_def)
 
 lemma cstrict_present_at:
@@ -515,11 +518,11 @@ lemma cstrict_present_at:
 proof (rule cstrictI)
   fix Gs :: "'k set list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (present_at a \<rho> E))" and lx: "length Xs = length (evalues (present_at a \<rho> E))"
-    and c: "csem (present_at a \<rho> E) Gs\<cdot>Xs \<noteq> None"
+    and c: "csem (present_at a \<rho> E) Gs\<cdot>Xs \<noteq> Absent"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
   have lx': "length Xs = length (evalues E)" using lx by simp
-  have "G \<noteq> {}" and "csem E Gs'\<cdot>Xs \<noteq> None" using c by (simp_all add: Gs split: if_splits)
+  have "G \<noteq> {}" and "csem E Gs'\<cdot>Xs \<noteq> Absent" using c by (simp_all add: Gs split: if_splits)
   then show "{} \<notin> set Gs" using cstrictD[OF E l' lx'] by (auto simp: Gs)
 qed
 
@@ -534,8 +537,8 @@ proof (rule semilawfulI, simp_all only: present_at_simps)
     by (rule fold_join_absorb) (auto intro: below_trans[OF lower_below_mind[OF ES] lattice_join_ge1])
   then show "emind E \<squnion> a = fold (\<squnion>) (map lower_part (map esel (?h # eguards E) @ map esel (evalues E))) \<bottom>"
     by (simp add: lattice_join_bot_right)
-  show "(if group data (emind E \<squnion> a) \<rho> F k = {} then None else esem E data F (proj (kd E F)\<cdot>k))
-      = (if hd (gcontents data (?h # eguards E) F k) = {} then None
+  show "(if group data (emind E \<squnion> a) \<rho> F k = {} then Absent else esem E data F (proj (kd E F)\<cdot>k))
+      = (if hd (gcontents data (?h # eguards E) F k) = {} then Absent
          else csem E (tl (gcontents data (?h # eguards E) F k))\<cdot>(contents data (evalues E) F k))"
     if d: "fconf (evalues E) data F" for data F k
   proof -
@@ -551,7 +554,7 @@ qed
 text \<open>Including dimensions: evaluating under the frame raised by \<open>M\<close>, with each entry's lower
   part raised by its masked part of \<open>M\<close>.  The minimal LOD is the join of the raised lower parts.\<close>
 
-definition include_dims :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition include_dims :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "include_dims M E = \<lparr>emind = fold (\<squnion>) (map (\<lambda>S. lower_part (include_sel M S)) (esels E)) \<bottom>,
      eguards = map (include_entry M) (eguards E), evalues = map (include_entry M) (evalues E),
      esem = \<lambda>data F. esem E data (finclude M F), csem = csem E\<rparr>"
@@ -611,8 +614,8 @@ text \<open>Covering is necessary, given rich enough data.  A lawful expression 
   not yet formalised; the general case needs views keyed within their group LODs: subdividing
   entries can jointly reveal a realising row.)\<close>
 
-definition total :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "total E \<longleftrightarrow> (\<forall>data F k. conforms data \<longrightarrow> keyimg data F (kd E F) k \<longrightarrow> esem E data F k \<noteq> None)"
+definition total :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
+  "total E \<longleftrightarrow> (\<forall>data F k. conforms data \<longrightarrow> keyimg data F (kd E F) k \<longrightarrow> esem E data F k \<noteq> Absent)"
 
 theorem lawful_total_separates:
   assumes EL: "lawful E" and T: "total E" and d: "conforms data" "conforms data'"
@@ -624,8 +627,8 @@ proof
   assume c: "gcontents data (eguards E) F k = gcontents data' (eguards E) F k \<and>
     contents data (evalues E) F k = contents data' (evalues E) F k"
   have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
-  have "esem E data F k = None" using lawful_key_law[OF EL d(1) k] nk by blast
-  moreover have "esem E data' F k \<noteq> None" using T d(2) rk by (simp add: total_def)
+  have "esem E data F k = Absent" using lawful_key_law[OF EL d(1) k] nk by blast
+  moreover have "esem E data' F k \<noteq> Absent" using T d(2) rk by (simp add: total_def)
   ultimately show False using c by (simp add: semilawful_csem[OF ES d(1) k] semilawful_csem[OF ES d(2) k])
 qed
 
@@ -688,8 +691,8 @@ lemma blocks_concat: "blocks (map (\<lambda>x. length (f x)) xs) (concat (map f 
 
 text \<open>The components' content semantics, each at its blocks of guard and value contents.\<close>
 
-definition collect_csem :: "('k, 'f, 'r, 'a::cpo) expr list \<Rightarrow> 'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'a list option" where
-  "collect_csem Es Gs Xs = those (map2 (\<lambda>p Ys. csem (fst p) (snd p)\<cdot>Ys)
+definition collect_csem :: "('k, 'f, 'r, 'a::domain) expr list \<Rightarrow> 'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'a list u option_pd" where
+  "collect_csem Es Gs Xs = those_pd (map2 (\<lambda>p Ys. csem (fst p) (snd p)\<cdot>Ys)
      (zip Es (blocks (map (\<lambda>E. length (eguards E)) Es) Gs)) (blocks (map (\<lambda>E. length (evalues E)) Es) Xs))"
 
 lemma cont_collect_csem: "cont (collect_csem Es Gs)"
@@ -697,19 +700,19 @@ proof -
   have "cont (\<lambda>Xs. map2 (\<lambda>p Ys. csem (fst p) (snd p)\<cdot>Ys)
       (zip Es (blocks (map (\<lambda>E. length (eguards E)) Es) Gs)) (blocks (map (\<lambda>E. length (evalues E)) Es) Xs))"
     by (rule cont_compose[OF cont_map2 cont_blocks]) simp
-  then show ?thesis unfolding collect_csem_def[abs_def] by (rule cont_compose[OF cont_those])
+  then show ?thesis unfolding collect_csem_def[abs_def] by (rule cont_compose[OF cont_those_pd])
 qed
 
-definition collect :: "('k, 'f, 'r, 'a::cpo) expr list \<Rightarrow> ('k, 'f, 'r, 'a list) expr" where
+definition collect :: "('k, 'f, 'r, 'a::domain) expr list \<Rightarrow> ('k, 'f, 'r, 'a list u) expr" where
   "collect Es = \<lparr>emind = fold (\<squnion>) (map emind Es) \<bottom>,
      eguards = concat (map eguards Es), evalues = concat (map evalues Es),
-     esem = \<lambda>data F k. those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es),
+     esem = \<lambda>data F k. those_pd (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es),
      csem = \<lambda>Gs. \<Lambda> Xs. collect_csem Es Gs Xs\<rparr>"
 
 lemma collect_simps [simp]:
   "emind (collect Es) = fold (\<squnion>) (map emind Es) \<bottom>"
   "eguards (collect Es) = concat (map eguards Es)" "evalues (collect Es) = concat (map evalues Es)"
-  "esem (collect Es) data F k = those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)"
+  "esem (collect Es) data F k = those_pd (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)"
   "csem (collect Es) Gs\<cdot>Xs = collect_csem Es Gs Xs"
   by (simp_all add: collect_def cont_collect_csem[unfolded eta_cfun])
 
@@ -717,13 +720,13 @@ lemma collect_blocks_strict:
   assumes "\<And>E. E \<in> set Es \<Longrightarrow> cstrict E"
     and "length Gs = sum_list (map (\<lambda>E. length (eguards E)) Es)"
     and "length Xs = sum_list (map (\<lambda>E. length (evalues E)) Es)"
-    and "collect_csem Es Gs Xs \<noteq> None"
+    and "collect_csem Es Gs Xs \<noteq> Absent"
   shows "{} \<notin> set Gs"
   using assms
 proof (induct Es arbitrary: Gs Xs)
   case (Cons E Es)
   let ?n = "length (eguards E)" and ?l = "length (evalues E)"
-  have t: "csem E (take ?n Gs)\<cdot>(take ?l Xs) \<noteq> None" and r: "collect_csem Es (drop ?n Gs) (drop ?l Xs) \<noteq> None"
+  have t: "csem E (take ?n Gs)\<cdot>(take ?l Xs) \<noteq> Absent" and r: "collect_csem Es (drop ?n Gs) (drop ?l Xs) \<noteq> Absent"
     using Cons.prems(4) by (auto simp: collect_csem_def split: option.splits)
   have "{} \<notin> set (take ?n Gs)"
     using cstrictD[OF Cons.prems(1)[of E] _ _] t Cons.prems(2,3) by force
@@ -766,7 +769,7 @@ proof (rule semilawfulI, simp_all only: collect_simps)
         unfolding a by (rule below_trans[OF lower_below_mind[OF law[OF E] S] fold_join_upper]) (simp add: E)
     qed simp
   qed
-  show "those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)
+  show "those_pd (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)
       = collect_csem Es (gcontents data (concat (map eguards Es)) F k) (contents data (concat (map evalues Es)) F k)"
     if d: "fconf (concat (map evalues Es)) data F" for data F k
   proof -
@@ -789,7 +792,7 @@ qed
 subsection \<open>The presence test is lawful\<close>
 
 lemma present_at_keyimg:
-  assumes k: "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" and p: "esem (present_at a \<top> E) data F k \<noteq> None"
+  assumes k: "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" and p: "esem (present_at a \<top> E) data F k \<noteq> Absent"
   shows "keyimg data F (emind E \<squnion> a \<squnion> flod F) k"
   using p keyimg_group_top[OF k] by (auto split: if_splits)
 
@@ -798,7 +801,7 @@ theorem lawful_present_at:
   shows "lawful (present_at a \<top> E)"
 proof (rule lawful_semiI[OF semilawful_present_at[OF ES]])
   fix data F k assume k: "proj (emind (present_at a \<top> E) \<squnion> flod F)\<cdot>k = k"
-    and p: "esem (present_at a \<top> E) data F k \<noteq> None"
+    and p: "esem (present_at a \<top> E) data F k \<noteq> Absent"
   have k': "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" using k by simp
   show "keyimg data F (emind (present_at a \<top> E) \<squnion> flod F) k" using present_at_keyimg[OF k' p] by simp
 qed
