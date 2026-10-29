@@ -16,6 +16,7 @@ session DataAnalyticsLang = "HOLCF-extra" +
     Frame
     LOD
     Value
+    Option_PD
     Content_Law
     Expr_Combinators
     Key_Reduction
