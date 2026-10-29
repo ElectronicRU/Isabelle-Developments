@@ -195,7 +195,7 @@ theorem gate_reduce:
       then esem E data F (proj (emind E \<squnion> flod F)\<cdot>k) else None)"
 proof -
   have ES: "semilawful E" by (fact E)
-  show ?thesis using sem_reduce[OF ES d below_refl red] by simp
+  show ?thesis using sem_reduce[OF ES d below_refl red] by (simp add: gate_esem[OF ES d])
 qed
 
 end

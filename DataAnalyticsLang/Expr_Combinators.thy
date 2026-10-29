@@ -455,36 +455,157 @@ lemma include_saturates: "upper_part (include_sel m S) \<sqinter> m \<sqsubseteq
 
 subsection \<open>The gate\<close>
 
-text \<open>The gate at \<open>M\<close> turns a semilawful expression into a lawful one: it evaluates under the
-  frame including the minimal LOD and \<open>M\<close>, which saturates the entries (their lower parts take in
-  the masked minimal LOD and \<open>M\<close>), and it is present exactly at the frame's data keys at that LOD,
-  which a presence guard at the full key records.  \<open>gate \<bottom>\<close> is the plain gate; a larger \<open>M\<close>
-  refines the expression's groups by further dimensions (requested ones, inside an aggregation).\<close>
+text \<open>The gate at \<open>M\<close> turns a semilawful expression into a lawful one.  It raises each entry's
+  lower part by the minimal LOD and \<open>M\<close> and evaluates under the frame raised likewise, which
+  saturates the entries; it asks nothing of the data.  Raised, a guard with upper part \<open>\<top>\<close> is the
+  full group at the key, so a covering expression is present only at realised keys, by strictness.
+  Any other expression first gets that guard: the presence test, the one combinator that reads the
+  key's realisation.  \<open>gate \<bottom>\<close> is the plain gate; a larger \<open>M\<close> refines the expression's groups by
+  further dimensions (requested ones, inside an aggregation).\<close>
 
-definition gate_presence :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate_presence M E = \<lparr>emind = emind E \<squnion> M,
-     eguards = mk_guard (sel (emind E \<squnion> M) \<top>) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (eguards E),
+lemma kd_finclude_mind: "emind E \<squnion> flod (finclude (emind E \<squnion> M) F) = (emind E \<squnion> M) \<squnion> flod F"
+proof -
+  have "emind E \<sqsubseteq> flod F \<squnion> (emind E \<squnion> M)" by (rule below_trans[OF lattice_join_ge1 lattice_join_ge2])
+  then show ?thesis unfolding flod_finclude by (simp only: lattice_join_absorb2 lattice_join_commute)
+qed
+
+text \<open>Raising alone: lawful as soon as presence under the raised frame has a witness in the full
+  group.\<close>
+
+definition gate_joint :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "gate_joint M E = \<lparr>emind = emind E \<squnion> M,
+     eguards = map (include_entry (emind E \<squnion> M)) (eguards E),
      evalues = map (include_entry (emind E \<squnion> M)) (evalues E),
-     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+     esem = \<lambda>data F k. if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
        then esem E data (finclude (emind E \<squnion> M) F) k else None,
+     csem = csem E\<rparr>"
+
+lemma gate_joint_simps [simp]:
+  "emind (gate_joint M E) = emind E \<squnion> M"
+  "eguards (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (eguards E)"
+  "evalues (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
+  "esem (gate_joint M E) data F k = (if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
+  "csem (gate_joint M E) = csem E"
+  by (simp_all add: gate_joint_def)
+
+theorem lawful_gate_joint_witness:
+  assumes ES: "semilawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
+    and W: "\<And>data F k. \<lbrakk>fconf (evalues E) data (finclude (emind E \<squnion> M) F); proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k;
+        esem E data (finclude (emind E \<squnion> M) F) k \<noteq> None\<rbrakk> \<Longrightarrow> group data (emind E \<squnion> M) \<top> F k \<noteq> {}"
+  shows "lawful (gate_joint M E)"
+proof -
+  let ?m = "emind E \<squnion> M"
+  have tm: "lower_part S \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
+  show ?thesis
+  proof (rule lawfulI, simp_all only: gate_joint_simps)
+    show "cstrict (gate_joint M E)"
+      using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
+    show "entry_wf e" if "e \<in> set (map (include_entry ?m) (evalues E))" for e
+      using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
+    show "(upper_part S' \<sqinter> ?m) \<sqsubseteq> lower_part S'"
+      if "S' \<in> set (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S'
+      using that by (auto intro: include_saturates[of ?m])
+    show "?m = fold (\<squnion>) (map lower_part (map esel (map (include_entry ?m) (eguards E))
+        @ map esel (map (include_entry ?m) (evalues E)))) \<bottom>"
+    proof (rule below_antisym)
+      let ?L = "map lower_part (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))"
+      have lo: "lower_part (include_sel ?m S) = ?m" using tm by (simp add: t(2) truncate_top lattice_join_absorb2)
+      have "lower_part (include_sel ?m S) \<in> set ?L" using t(1) by auto
+      then show "?m \<sqsubseteq> fold (\<squnion>) ?L \<bottom>" unfolding lo by (rule fold_join_upper)
+      show "fold (\<squnion>) ?L \<bottom> \<sqsubseteq> ?m"
+      proof (rule fold_join_least)
+        fix x assume "x \<in> set ?L"
+        then obtain S' where S': "S' \<in> set (esels E)" and x: "x = lower_part (include_sel ?m S')" by auto
+        show "x \<sqsubseteq> ?m" unfolding x by (rule include_lower_below[OF below_trans[OF lower_below_mind[OF ES S'] lattice_join_ge1]])
+      qed simp
+    qed
+    show "keyimg data F (?m \<squnion> flod F) k"
+      if d: "fconf (map (include_entry ?m) (evalues E)) data F"
+        and p: "(if proj (?m \<squnion> flod F)\<cdot>k = k then esem E data (finclude ?m F) k else None) \<noteq> None" for data F k
+    proof -
+      have k: "proj (?m \<squnion> flod F)\<cdot>k = k" using p by (simp split: if_splits)
+      have "esem E data (finclude ?m F) k \<noteq> None" using p k by simp
+      then show ?thesis using W[OF d[unfolded fconf_include] k] keyimg_group_top[OF k] by blast
+    qed
+    show "(if k = k then esem E data (finclude ?m F) k else None)
+        = csem E (gcontents data (map (include_entry ?m) (eguards E)) F k)\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k)"
+      if d: "fconf (map (include_entry ?m) (evalues E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
+    proof -
+      have d': "fconf (evalues E) data (finclude ?m F)" using d by (simp only: fconf_include)
+      have g: "gcontents data (map (include_entry ?m) (eguards E)) F k = gcontents data (eguards E) (finclude ?m F) k"
+        by (simp add: comp_def gcontent_include_entry)
+      have c: "contents data (map (include_entry ?m) (evalues E)) F k = contents data (evalues E) (finclude ?m F) k"
+        by (simp add: comp_def content_include_entry)
+      have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
+      then show ?thesis by (simp only: g c semilawful_csem_conf[OF ES d'] simp_thms if_True)
+    qed
+  qed
+qed
+
+text \<open>An expression \<^emph>\<open>covers\<close> the key space when one of its guards has upper part \<open>\<top>\<close>: raised
+  by the minimal LOD, that guard's group is all rows at the key, so by strictness its expression is
+  absent wherever the key is not realised, whatever the guard.  Then the gate needs no presence
+  guard: it only raises the entries.\<close>
+
+definition covering :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+  "covering E \<longleftrightarrow> (\<exists>e\<in>set (eguards E). eupper e = \<top>)"
+
+lemma gcontent_group_nonempty: "gcontent data e F k \<noteq> {} \<Longrightarrow> group data (elower e) (eupper e) F k \<noteq> {}"
+  by (auto simp: gcontent_def gfiber_def)
+
+theorem lawful_gate_joint_covering:
+  assumes ES: "semilawful E" and cov: "covering E"
+  shows "lawful (gate_joint M E)"
+proof -
+  obtain t where t: "t \<in> set (eguards E)" "eupper t = \<top>" using cov by (auto simp: covering_def)
+  let ?m = "emind E \<squnion> M"
+  have tm: "elower t \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind_guard[OF ES t(1)] lattice_join_ge1])
+  show ?thesis
+  proof (rule lawful_gate_joint_witness[OF ES esels_guardI[OF t(1)] t(2)])
+    fix data F k assume d: "fconf (evalues E) data (finclude ?m F)" and k: "proj (?m \<squnion> flod F)\<cdot>k = k"
+      and p: "esem E data (finclude ?m F) k \<noteq> None"
+    have k': "proj (kd E (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
+    have c: "csem_at E data (finclude ?m F) k \<noteq> None" using p unfolding semilawful_csem_conf[OF ES d k'] .
+    have "{} \<notin> set (gcontents data (eguards E) (finclude ?m F) k)"
+    proof
+      assume "{} \<in> set (gcontents data (eguards E) (finclude ?m F) k)"
+      then have "csem_at E data (finclude ?m F) k = None"
+        by (rule cstrictD[OF semilawful_cstrict[OF ES], rotated 2]) simp_all
+      with c show False by simp
+    qed
+    then have "gcontent data t (finclude ?m F) k \<noteq> {}" using t(1) by force
+    then have "group data (elower t) \<top> (finclude ?m F) k \<noteq> {}" using gcontent_group_nonempty t(2) by metis
+    then show "group data ?m \<top> F k \<noteq> {}" unfolding group_top_finclude[OF tm] .
+  qed
+qed
+
+text \<open>The presence test: a true guard on the full group, keyed at nothing.\<close>
+
+definition present :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "present E = \<lparr>emind = emind E, eguards = mk_guard (sel (emind E) \<top>) gtrue \<bottom> # eguards E,
+     evalues = evalues E,
+     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> flod F) k then esem E data F k else None,
      csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs\<rparr>"
 
-lemma gate_presence_simps [simp]:
-  "emind (gate_presence M E) = emind E \<squnion> M"
-  "eguards (gate_presence M E) = mk_guard (sel (emind E \<squnion> M) \<top>) gtrue \<bottom> # map (include_entry (emind E \<squnion> M)) (eguards E)"
-  "evalues (gate_presence M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
-  "esem (gate_presence M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
-       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
-  "csem (gate_presence M E) Gs\<cdot>Xs = (if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs)"
-  by (simp_all add: gate_presence_def)
+lemma present_simps [simp]:
+  "emind (present E) = emind E"
+  "eguards (present E) = mk_guard (sel (emind E) \<top>) gtrue \<bottom> # eguards E"
+  "evalues (present E) = evalues E"
+  "esem (present E) data F k = (if keyimg data F (emind E \<squnion> flod F) k then esem E data F k else None)"
+  "csem (present E) Gs\<cdot>Xs = (if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs)"
+  by (simp_all add: present_def)
 
-lemma cstrict_gate_presence:
+lemma covering_present: "covering (present E)"
+  by (simp add: covering_def)
+
+lemma cstrict_present:
   assumes E: "cstrict E"
-  shows "cstrict (gate_presence M E)"
+  shows "cstrict (present E)"
 proof (rule cstrictI)
   fix Gs :: "'k set list" and Xs :: "('k \<Rightarrow> 'r option) list"
-  assume l: "length Gs = length (eguards (gate_presence M E))" and lx: "length Xs = length (evalues (gate_presence M E))"
-    and c: "csem (gate_presence M E) Gs\<cdot>Xs \<noteq> None"
+  assume l: "length Gs = length (eguards (present E))" and lx: "length Xs = length (evalues (present E))"
+    and c: "csem (present E) Gs\<cdot>Xs \<noteq> None"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
   have lx': "length Xs = length (evalues E)" using lx by simp
@@ -499,179 +620,47 @@ lemma gcontent_const_top:
   shows "gcontent data (mk_guard (sel c \<top>) gtrue \<bottom>) F k = (if keyimg data F (c \<squnion> flod F) k then {\<bottom>} else {})"
   by (simp add: gcontent_gtrue_bot keyimg_group_top[OF assms])
 
-lemma kd_finclude_mind: "emind E \<squnion> flod (finclude (emind E \<squnion> M) F) = (emind E \<squnion> M) \<squnion> flod F"
-proof -
-  have "emind E \<sqsubseteq> flod F \<squnion> (emind E \<squnion> M)" by (rule below_trans[OF lattice_join_ge1 lattice_join_ge2])
-  then show ?thesis unfolding flod_finclude by (simp only: lattice_join_absorb2 lattice_join_commute)
-qed
-
-lemma include_mind:
+theorem semilawful_present:
   assumes ES: "semilawful E"
-  shows "fold (\<squnion>) (map lower_part (map esel (map (include_entry (emind E \<squnion> M)) (eguards E))
-      @ map esel (map (include_entry (emind E \<squnion> M)) (evalues E)))) (emind E \<squnion> M) = emind E \<squnion> M"
-proof (rule fold_join_absorb)
-  let ?m = "emind E \<squnion> M"
-  fix x assume "x \<in> set (map lower_part (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E))))"
-  then obtain S where S: "S \<in> set (esels E)" and x: "x = lower_part (include_sel ?m S)" by auto
-  show "x \<sqsubseteq> ?m" unfolding x by (rule include_lower_below[OF below_trans[OF lower_below_mind[OF ES S] lattice_join_ge1]])
-qed
-
-theorem lawful_gate_presence: assumes "semilawful E" shows "lawful (gate_presence M E)"
-proof -
-  have ES: "semilawful E" by (fact assms)
-  let ?m = "emind E \<squnion> M"
-  let ?h = "mk_guard (sel ?m \<top>) gtrue \<bottom> :: ('k, 'r guard) entry"
-  show ?thesis
-  proof (rule lawfulI, simp_all only: gate_presence_simps)
-    show "cstrict (gate_presence M E)" by (rule cstrict_gate_presence[OF semilawful_cstrict[OF ES]])
-    show "entry_wf e" if "e \<in> set (map (include_entry ?m) (evalues E))" for e
-      using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
-    show "(upper_part S \<sqinter> ?m) \<sqsubseteq> lower_part S"
-      if "S \<in> set (map esel (?h # map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S
-      using that by (auto simp: truncate_top intro: include_saturates[of ?m])
-    show "?m = fold (\<squnion>) (map lower_part (map esel (?h # map (include_entry ?m) (eguards E))
-        @ map esel (map (include_entry ?m) (evalues E)))) \<bottom>"
-      using include_mind[OF ES, of M] by (simp add: lattice_join_bot_right)
-    show "keyimg data F (?m \<squnion> flod F) k"
-      if "fconf (map (include_entry ?m) (evalues E)) data F" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
-      for data F k
-      using that by (simp split: if_splits)
-    show "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None)
-        = (if hd (gcontents data (?h # map (include_entry ?m) (eguards E)) F k) = {} then None
-           else csem E (tl (gcontents data (?h # map (include_entry ?m) (eguards E)) F k))\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k))"
-      if d: "fconf (map (include_entry ?m) (evalues E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
-    proof -
-      have d': "fconf (evalues E) data (finclude ?m F)" using d by (simp only: fconf_include)
-      have h: "hd (gcontents data (?h # map (include_entry ?m) (eguards E)) F k) = {}
-          \<longleftrightarrow> \<not> keyimg data F (?m \<squnion> flod F) k"
-        by (simp only: list.map list.sel gcontent_const_top[OF k]) simp
-      have t: "tl (gcontents data (?h # map (include_entry ?m) (eguards E)) F k)
-          = gcontents data (eguards E) (finclude ?m F) k"
-        by (simp add: comp_def gcontent_include_entry)
-      have v: "contents data (map (include_entry ?m) (evalues E)) F k = contents data (evalues E) (finclude ?m F) k"
-        by (simp add: comp_def content_include_entry)
-      have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
-      then show ?thesis by (simp only: h t v semilawful_csem_conf[OF ES d']) simp
-    qed
+  shows "semilawful (present E)"
+proof (rule semilawfulI, simp_all only: present_simps)
+  let ?h = "mk_guard (sel (emind E) \<top>) gtrue \<bottom> :: ('k, 'r guard) entry"
+  show "cstrict (present E)" by (rule cstrict_present[OF semilawful_cstrict[OF ES]])
+  show "entry_wf e" if "e \<in> set (evalues E)" for e by (rule semilawful_wf[OF ES that])
+  have "fold (\<squnion>) (map lower_part (esels E)) (emind E) = emind E"
+    by (rule fold_join_absorb) (auto intro: lower_below_mind[OF ES])
+  then show "emind E = fold (\<squnion>) (map lower_part (map esel (?h # eguards E) @ map esel (evalues E))) \<bottom>"
+    by (simp add: lattice_join_bot_right)
+  show "(if keyimg data F (emind E \<squnion> flod F) k then esem E data F k else None)
+      = (if hd (gcontents data (?h # eguards E) F k) = {} then None
+         else csem E (tl (gcontents data (?h # eguards E) F k))\<cdot>(contents data (evalues E) F k))"
+    if d: "fconf (evalues E) data F" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k" for data F k
+  proof -
+    have h: "hd (gcontents data (?h # eguards E) F k) = {} \<longleftrightarrow> \<not> keyimg data F (emind E \<squnion> flod F) k"
+      by (simp only: list.map list.sel gcontent_const_top[OF k]) simp
+    have t: "tl (gcontents data (?h # eguards E) F k) = gcontents data (eguards E) F k" by simp
+    show ?thesis by (simp only: h t semilawful_csem_conf[OF ES d k]) simp
   qed
 qed
 
-text \<open>An expression \<^emph>\<open>covers\<close> the key space when one of its guards has upper part \<open>\<top>\<close>: raised
-  by the minimal LOD, that guard's group is all rows at the key, so by strictness its expression is
-  absent wherever the key is not realised, whatever the guard.  Then the gate needs no presence
-  guard: it only raises the entries.\<close>
-
-definition covering :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "covering E \<longleftrightarrow> (\<exists>e\<in>set (eguards E). eupper e = \<top>)"
-
-lemma gcontent_include_top:
-  assumes e: "eupper e = \<top>" and am: "elower e \<sqsubseteq> m" and k: "proj (m \<squnion> flod F)\<cdot>k = k"
-    and nk: "\<not> keyimg data F (m \<squnion> flod F) k"
-  shows "gcontent data (include_entry m e) F k = {}"
-proof -
-  have lo: "elower (include_entry m e) = m" using am by (simp add: e truncate_top lattice_join_absorb2)
-  have g: "group data m \<top> F k = {}" using keyimg_group_top[OF k] nk by simp
-  have "group data (elower (include_entry m e)) (eupper (include_entry m e)) F k = {}"
-    by (simp only: lo) (simp add: e g)
-  then show ?thesis by (simp add: gcontent_def gfiber_def)
-qed
-
-definition gate_raise :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate_raise M E = \<lparr>emind = emind E \<squnion> M,
-     eguards = map (include_entry (emind E \<squnion> M)) (eguards E),
-     evalues = map (include_entry (emind E \<squnion> M)) (evalues E),
-     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
-       then esem E data (finclude (emind E \<squnion> M) F) k else None,
-     csem = csem E\<rparr>"
-
-lemma gate_raise_simps [simp]:
-  "emind (gate_raise M E) = emind E \<squnion> M"
-  "eguards (gate_raise M E) = map (include_entry (emind E \<squnion> M)) (eguards E)"
-  "evalues (gate_raise M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
-  "esem (gate_raise M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
-       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
-  "csem (gate_raise M E) = csem E"
-  by (simp_all add: gate_raise_def)
-
-theorem lawful_gate_raise:
-  assumes ES: "semilawful E" and cov: "covering E"
-  shows "lawful (gate_raise M E)"
-proof -
-  let ?m = "emind E \<squnion> M"
-  obtain t where t: "t \<in> set (eguards E)" "eupper t = \<top>" using cov by (auto simp: covering_def)
-  have tm: "elower t \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind_guard[OF ES t(1)] lattice_join_ge1])
-  show ?thesis
-  proof (rule lawfulI, simp_all only: gate_raise_simps)
-    show "cstrict (gate_raise M E)"
-      using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
-    show "entry_wf e" if "e \<in> set (map (include_entry ?m) (evalues E))" for e
-      using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
-    show "(upper_part S \<sqinter> ?m) \<sqsubseteq> lower_part S"
-      if "S \<in> set (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S
-      using that by (auto intro: include_saturates[of ?m])
-    show "?m = fold (\<squnion>) (map lower_part (map esel (map (include_entry ?m) (eguards E))
-        @ map esel (map (include_entry ?m) (evalues E)))) \<bottom>"
-    proof (rule below_antisym)
-      let ?L = "map lower_part (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))"
-      have lo: "elower (include_entry ?m t) = ?m" using tm by (simp add: t(2) truncate_top lattice_join_absorb2)
-      have "elower (include_entry ?m t) \<in> set ?L" using t(1) by auto
-      then show "?m \<sqsubseteq> fold (\<squnion>) ?L \<bottom>" unfolding lo by (rule fold_join_upper)
-      show "fold (\<squnion>) ?L \<bottom> \<sqsubseteq> ?m"
-      proof (rule fold_join_least)
-        fix x assume "x \<in> set ?L"
-        then obtain S where S: "S \<in> set (esels E)" and x: "x = lower_part (include_sel ?m S)" by auto
-        show "x \<sqsubseteq> ?m" unfolding x by (rule include_lower_below[OF below_trans[OF lower_below_mind[OF ES S] lattice_join_ge1]])
-      qed simp
-    qed
-    show "keyimg data F (?m \<squnion> flod F) k"
-      if "fconf (map (include_entry ?m) (evalues E)) data F" and "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None) \<noteq> None"
-      for data F k
-      using that by (simp split: if_splits)
-    show "(if keyimg data F (?m \<squnion> flod F) k then esem E data (finclude ?m F) k else None)
-        = csem E (gcontents data (map (include_entry ?m) (eguards E)) F k)\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k)"
-      if d: "fconf (map (include_entry ?m) (evalues E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
-    proof -
-      have d': "fconf (evalues E) data (finclude ?m F)" using d by (simp only: fconf_include)
-      have g: "gcontents data (map (include_entry ?m) (eguards E)) F k = gcontents data (eguards E) (finclude ?m F) k"
-        by (simp add: comp_def gcontent_include_entry)
-      have c: "contents data (map (include_entry ?m) (evalues E)) F k = contents data (evalues E) (finclude ?m F) k"
-        by (simp add: comp_def content_include_entry)
-      have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
-      then have v: "esem E data (finclude ?m F) k
-          = csem E (gcontents data (map (include_entry ?m) (eguards E)) F k)\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k)"
-        by (simp only: g c semilawful_csem_conf[OF ES d'])
-      show ?thesis
-      proof (cases "keyimg data F (?m \<squnion> flod F) k")
-        case False
-        have "{} \<in> set (gcontents data (map (include_entry ?m) (eguards E)) F k)"
-          using gcontent_include_top[OF t(2) tm k False] t(1) by force
-        then have "csem E (gcontents data (map (include_entry ?m) (eguards E)) F k)\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k) = None"
-          by (rule cstrictD[OF semilawful_cstrict[OF ES], rotated 2]) simp_all
-        then show ?thesis using False by simp
-      qed (simp add: v)
-    qed
-  qed
-qed
-
-text \<open>The gate at \<open>M\<close>: raising alone for covering expressions, else with a presence guard.\<close>
+text \<open>The gate at \<open>M\<close>: raising, after the presence test unless the expression covers.\<close>
 
 definition gate :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate M E = (if covering E then gate_raise M E else gate_presence M E)"
+  "gate M E = gate_joint M (if covering E then E else present E)"
 
 lemma gate_simps [simp]:
   "emind (gate M E) = emind E \<squnion> M"
   "evalues (gate M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
-  "esem (gate M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
-       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
-  by (simp_all add: gate_def)
+  by (cases "covering E"; simp add: gate_def)+
 
 theorem lawful_gate: "semilawful E \<Longrightarrow> lawful (gate M E)"
-  unfolding gate_def by (simp add: lawful_gate_raise lawful_gate_presence)
+  unfolding gate_def by (simp add: lawful_gate_joint_covering semilawful_present covering_present)
+
 
 text \<open>Gating is idempotent: a gated expression covers, so gating it again only raises its entries,
   which are raised already.  A lawful covering expression is left alone by the plain gate: its
-  entries are saturated, so raising does not change them, and the presence test and the frame
-  refinement are already implied by the key law.\<close>
+  entries are saturated, so raising does not change them, and the frame refinement is already
+  implied by the key law.\<close>
 
 lemma include_entry_saturated: "eupper e \<sqinter> m \<sqsubseteq> elower e \<Longrightarrow> include_entry m e = e"
   by (simp add: include_entry_def include_sel_def lattice_join_absorb1)
@@ -679,12 +668,11 @@ lemma include_entry_saturated: "eupper e \<sqinter> m \<sqsubseteq> elower e \<L
 lemma include_entry_idem: "include_entry m (include_entry m e) = include_entry m e"
   by (rule include_entry_saturated) (simp add: lattice_join_ge2)
 
+lemma covering_gate_joint: "covering E \<Longrightarrow> covering (gate_joint M E)"
+  by (force simp: covering_def)
+
 lemma covering_gate: "covering (gate M E)"
-proof (cases "covering E")
-  case True
-  then obtain t where "t \<in> set (eguards E)" "eupper t = \<top>" by (auto simp: covering_def)
-  then show ?thesis using True by (force simp: gate_def covering_def)
-qed (simp add: gate_def covering_def)
+  unfolding gate_def by (simp add: covering_gate_joint covering_present)
 
 lemma finclude_finclude_same: "finclude (m :: 'k semi_factor) (finclude m F) = finclude m F"
 proof -
@@ -695,35 +683,22 @@ qed
 lemma keyimg_finclude: "keyimg data (finclude m F) c k = keyimg data F c k"
   by (simp add: keyimg_def frows_def)
 
-theorem gate_idem: "gate M (gate M E) = gate M E"
+lemma gate_joint_idem: "gate_joint M (gate_joint M E) = gate_joint M E"
 proof -
   let ?m = "emind E \<squnion> M"
   have mM: "?m \<squnion> M = ?m" by (rule lattice_join_absorb1[OF lattice_join_ge2])
   have kd: "?m \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
-  proof -
-    have "?m \<squnion> (flod F \<squnion> ?m) = (?m \<squnion> flod F) \<squnion> ?m" by (metis lattice_join_assoc)
-    also have "\<dots> = ?m \<squnion> flod F" by (rule lattice_join_absorb1[OF lattice_join_ge1])
-    finally show ?thesis by (simp only: flod_finclude)
-  qed
-  have head: "include_entry ?m (mk_guard (sel ?m \<top>) gtrue \<bottom>) = mk_guard (sel ?m \<top>) gtrue \<bottom>"
-    by (rule include_entry_saturated) (simp add: truncate_top)
-  have es: "esem (gate_raise M (gate M E)) = esem (gate M E)"
-    by (simp add: fun_eq_iff mM kd keyimg_finclude finclude_finclude_same)
-  show ?thesis
-  proof (cases "covering E")
-    case True
-    show ?thesis unfolding gate_def[of M "gate M E"] using covering_gate[of M E] es True
-      by (simp add: gate_def mM include_entry_idem comp_def)
-  next
-    case False
-    show ?thesis unfolding gate_def[of M "gate M E"] using covering_gate[of M E] es False
-      by (simp add: gate_def mM include_entry_idem comp_def head)
-  qed
+    by (rule join_finclude_absorb[OF below_refl])
+  show ?thesis unfolding gate_joint_def[of M "gate_joint M E"] gate_joint_simps mM
+    by (simp add: gate_joint_def include_entry_idem comp_def kd finclude_finclude_same fun_eq_iff)
 qed
 
-text \<open>The plain gate leaves a lawful covering expression alone: its entries are saturated, so
-  raising does not change them, the frame refinement does not change its contents, and off the
-  realised keys it is absent already by the key law.\<close>
+theorem gate_idem: "gate M (gate M E) = gate M E"
+proof -
+  have "gate M (gate M E) = gate_joint M (gate M E)" using covering_gate[of M E] by (simp add: gate_def[of M "gate M E"])
+  also have "\<dots> = gate M E" unfolding gate_def[of M E] by (rule gate_joint_idem)
+  finally show ?thesis .
+qed
 
 theorem gate_lawful_covering:
   assumes EL: "lawful E" and cov: "covering E"
@@ -731,7 +706,7 @@ theorem gate_lawful_covering:
     and "conforms data \<Longrightarrow> esem (gate \<bottom> E) data F k = esem E data F k"
 proof -
   let ?m = "emind E"
-  have g: "gate \<bottom> E = gate_raise \<bottom> E" using cov by (simp add: gate_def)
+  have g: "gate \<bottom> E = gate_joint \<bottom> E" using cov by (simp add: gate_def)
   have "map (include_entry ?m) (eguards E) = eguards E"
     by (rule map_idI) (rule include_entry_saturated[OF lawful_saturated[OF EL esels_guardI]])
   then show "eguards (gate \<bottom> E) = eguards E" by (simp add: g)
@@ -742,25 +717,41 @@ proof -
   assume d: "conforms data"
   have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
   show "esem (gate \<bottom> E) data F k = esem E data F k"
-  proof (cases "keyimg data F (?m \<squnion> flod F) k")
+  proof (cases "proj (kd E F)\<cdot>k = k")
     case True
-    then obtain x where kx: "k = rproj (kd E F) x" by (auto simp: keyimg_def)
-    have kd: "kd E (finclude ?m F) = kd E F"
-    proof -
-      have "?m \<squnion> (flod F \<squnion> ?m) = (?m \<squnion> flod F) \<squnion> ?m" by (metis lattice_join_assoc)
-      also have "\<dots> = ?m \<squnion> flod F" by (rule lattice_join_absorb1[OF lattice_join_ge1])
-      finally show ?thesis by (simp only: flod_finclude)
-    qed
-    have k: "proj (kd E F)\<cdot>k = k" by (simp add: kx)
+    have kd: "kd E (finclude ?m F) = kd E F" by (rule join_finclude_absorb[OF below_refl])
     have "esem E data (finclude ?m F) k = esem E data F k"
       using contents_kd[OF EL amb_finclude slice_finclude kd]
-      by (simp only: semilawful_csem[OF ES d k] semilawful_csem[OF ES d k[folded kd]])
+      by (simp only: semilawful_csem[OF ES d True] semilawful_csem[OF ES d True[folded kd]])
     then show ?thesis using True by (simp add: g)
   next
     case False
-    have "esem E data F k = None" using lawful_key_law[OF EL d] False by blast
+    have "esem E data F k = None" using key_lives[OF EL d] False by blast
     then show ?thesis using False by (simp add: g)
   qed
+qed
+
+text \<open>On conforming data the gate is present exactly at the realised keys, with the expression's
+  value under the raised frame.\<close>
+
+lemma gate_esem:
+  assumes ES: "semilawful E" and d: "conforms data"
+  shows "esem (gate M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
+      then esem E data (finclude (emind E \<squnion> M) F) k else None)"
+proof (cases "keyimg data F (emind E \<squnion> M \<squnion> flod F) k")
+  case ki: True
+  let ?m = "emind E \<squnion> M"
+  obtain x where kx: "k = proj (?m \<squnion> flod F)\<cdot>(rkey\<cdot>x)" using ki by (auto simp: keyimg_def)
+  have k: "proj (?m \<squnion> flod F)\<cdot>k = k" by (simp add: kx)
+  have ki': "keyimg data (finclude ?m F) (emind E \<squnion> flod (finclude ?m F)) k"
+    using ki by (simp only: keyimg_finclude kd_finclude_mind)
+  show ?thesis by (cases "covering E") (simp_all add: gate_def k ki ki')
+next
+  case False
+  have "keyimg data F (emind E \<squnion> M \<squnion> flod F) k" if "esem (gate M E) data F k \<noteq> None"
+    using lawful_key_law[OF lawful_gate[OF ES] d that] by simp
+  then have "esem (gate M E) data F k = None" using False by blast
+  then show ?thesis using False by simp
 qed
 
 text \<open>Covering is necessary, given rich enough data.  A lawful expression present at every
@@ -1039,82 +1030,6 @@ qed
 
 lemma jointly_lawful_gate: "semilawful E \<Longrightarrow> jointly_lawful (gate M E)"
   by (rule lawful_jointly_lawful[OF lawful_gate])
-
-text \<open>The gate without a presence test only raises the entries and evaluates under the raised
-  frame.  It is lawful as soon as presence under the raised frame has a witness in the full group:
-  for a jointly lawful expression with a selector whose upper part is \<open>\<top>\<close>, a guard's or a value
-  entry's, and for a collection with one such component, whatever the others.\<close>
-
-definition gate_joint :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate_joint M E = \<lparr>emind = emind E \<squnion> M,
-     eguards = map (include_entry (emind E \<squnion> M)) (eguards E),
-     evalues = map (include_entry (emind E \<squnion> M)) (evalues E),
-     esem = \<lambda>data F k. if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
-       then esem E data (finclude (emind E \<squnion> M) F) k else None,
-     csem = csem E\<rparr>"
-
-lemma gate_joint_simps [simp]:
-  "emind (gate_joint M E) = emind E \<squnion> M"
-  "eguards (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (eguards E)"
-  "evalues (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
-  "esem (gate_joint M E) data F k = (if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
-       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
-  "csem (gate_joint M E) = csem E"
-  by (simp_all add: gate_joint_def)
-
-theorem lawful_gate_joint_witness:
-  assumes ES: "semilawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
-    and W: "\<And>data F k. \<lbrakk>fconf (evalues E) data (finclude (emind E \<squnion> M) F); proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k;
-        esem E data (finclude (emind E \<squnion> M) F) k \<noteq> None\<rbrakk> \<Longrightarrow> group data (emind E \<squnion> M) \<top> F k \<noteq> {}"
-  shows "lawful (gate_joint M E)"
-proof -
-  let ?m = "emind E \<squnion> M"
-  have tm: "lower_part S \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
-  show ?thesis
-  proof (rule lawfulI, simp_all only: gate_joint_simps)
-    show "cstrict (gate_joint M E)"
-      using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
-    show "entry_wf e" if "e \<in> set (map (include_entry ?m) (evalues E))" for e
-      using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
-    show "(upper_part S' \<sqinter> ?m) \<sqsubseteq> lower_part S'"
-      if "S' \<in> set (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S'
-      using that by (auto intro: include_saturates[of ?m])
-    show "?m = fold (\<squnion>) (map lower_part (map esel (map (include_entry ?m) (eguards E))
-        @ map esel (map (include_entry ?m) (evalues E)))) \<bottom>"
-    proof (rule below_antisym)
-      let ?L = "map lower_part (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))"
-      have lo: "lower_part (include_sel ?m S) = ?m" using tm by (simp add: t(2) truncate_top lattice_join_absorb2)
-      have "lower_part (include_sel ?m S) \<in> set ?L" using t(1) by auto
-      then show "?m \<sqsubseteq> fold (\<squnion>) ?L \<bottom>" unfolding lo by (rule fold_join_upper)
-      show "fold (\<squnion>) ?L \<bottom> \<sqsubseteq> ?m"
-      proof (rule fold_join_least)
-        fix x assume "x \<in> set ?L"
-        then obtain S' where S': "S' \<in> set (esels E)" and x: "x = lower_part (include_sel ?m S')" by auto
-        show "x \<sqsubseteq> ?m" unfolding x by (rule include_lower_below[OF below_trans[OF lower_below_mind[OF ES S'] lattice_join_ge1]])
-      qed simp
-    qed
-    show "keyimg data F (?m \<squnion> flod F) k"
-      if d: "fconf (map (include_entry ?m) (evalues E)) data F"
-        and p: "(if proj (?m \<squnion> flod F)\<cdot>k = k then esem E data (finclude ?m F) k else None) \<noteq> None" for data F k
-    proof -
-      have k: "proj (?m \<squnion> flod F)\<cdot>k = k" using p by (simp split: if_splits)
-      have "esem E data (finclude ?m F) k \<noteq> None" using p k by simp
-      then show ?thesis using W[OF d[unfolded fconf_include] k] keyimg_group_top[OF k] by blast
-    qed
-    show "(if k = k then esem E data (finclude ?m F) k else None)
-        = csem E (gcontents data (map (include_entry ?m) (eguards E)) F k)\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k)"
-      if d: "fconf (map (include_entry ?m) (evalues E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
-    proof -
-      have d': "fconf (evalues E) data (finclude ?m F)" using d by (simp only: fconf_include)
-      have g: "gcontents data (map (include_entry ?m) (eguards E)) F k = gcontents data (eguards E) (finclude ?m F) k"
-        by (simp add: comp_def gcontent_include_entry)
-      have c: "contents data (map (include_entry ?m) (evalues E)) F k = contents data (evalues E) (finclude ?m F) k"
-        by (simp add: comp_def content_include_entry)
-      have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
-      then show ?thesis by (simp only: g c semilawful_csem_conf[OF ES d'] simp_thms if_True)
-    qed
-  qed
-qed
 
 corollary lawful_gate_joint:
   assumes E: "jointly_lawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
