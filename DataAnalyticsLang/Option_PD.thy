@@ -1,5 +1,5 @@
 theory Option_PD
-  imports HOLCF "HOLCF-Library.Option_Cpo" "HOLCF-extra.Pointed_Profinite"
+  imports HOLCF "HOLCF-Library.Option_Cpo" "HOLCF-Library.List_Predomain" "HOLCF-extra.Pointed_Profinite"
 begin
 
 section \<open>Results with possible absence\<close>
@@ -440,7 +440,7 @@ lemma lift_up2_nonbot: "s \<noteq> \<bottom> \<Longrightarrow> t \<noteq> \<bott
 
 text \<open>The lifted operation on results: every combination of the outcomes.\<close>
 
-definition option_pd_op :: "('v option \<rightarrow> 'v option \<rightarrow> 'v option) \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd" where
+definition option_pd_op :: "('a option \<rightarrow> 'b option \<rightarrow> 'c option) \<Rightarrow> 'a option_pd \<Rightarrow> 'b option_pd \<Rightarrow> 'c option_pd" where
   "option_pd_op G x y = Abs_option_pd (upper_bin\<cdot>(lift_up2 G)\<cdot>(Rep_option_pd x)\<cdot>(Rep_option_pd y))"
 
 lemma Rep_option_pd_op [simp]:
@@ -549,5 +549,110 @@ lemma comm_monoid_combine_option_pd:
   shows "comm_monoid (combine_option_pd f) Absent"
   unfolding combine_option_pd_def
   by (rule comm_monoid_option_pd_op) (simp add: comm_monoid_opt_op[OF assms])
+
+subsection \<open>Absorbing absence\<close>
+
+lemma upper_bin_unit2: "upper_bin\<cdot>h\<cdot>S\<cdot>{t}\<sharp> = upper_map\<cdot>(\<Lambda> s. h\<cdot>s\<cdot>t)\<cdot>S"
+  by (induct S rule: upper_pd_induct) simp_all
+
+lemma upper_map_const_nonbot:
+  assumes f: "\<And>t. t \<noteq> \<bottom> \<Longrightarrow> f\<cdot>t = c" and T: "T \<noteq> \<bottom>"
+  shows "upper_map\<cdot>f\<cdot>T = {c}\<sharp>"
+proof -
+  have "T = \<bottom> \<or> upper_map\<cdot>f\<cdot>T = {c}\<sharp>"
+  proof (induct T rule: upper_pd_induct)
+    case (upper_unit t) then show ?case using f by auto
+  next
+    case (upper_plus T T') then show ?case by auto
+  qed simp
+  then show ?thesis using T by simp
+qed
+
+text \<open>An operation absent as soon as one argument is absent lifts to one absorbing \<open>Absent\<close>.\<close>
+
+lemma option_pd_op_Absent1:
+  assumes "\<And>b. G\<cdot>None\<cdot>b = None"
+  shows "option_pd_op G Absent y = Absent"
+proof -
+  have "upper_map\<cdot>(lift_up2 G\<cdot>(up\<cdot>None))\<cdot>(Rep_option_pd y) = {up\<cdot>None}\<sharp>"
+  proof (rule upper_map_const_nonbot)
+    show "lift_up2 G\<cdot>(up\<cdot>None)\<cdot>t = up\<cdot>None" if "t \<noteq> \<bottom>" for t using that assms by (cases t) simp_all
+  qed simp
+  then show ?thesis by (simp add: Rep_option_pd_inject[symmetric] upper_bin_unit1)
+qed
+
+lemma option_pd_op_Absent2:
+  assumes "\<And>a. G\<cdot>a\<cdot>None = None"
+  shows "option_pd_op G x Absent = Absent"
+proof -
+  have "upper_map\<cdot>(\<Lambda> s. lift_up2 G\<cdot>s\<cdot>(up\<cdot>None))\<cdot>(Rep_option_pd x) = {up\<cdot>None}\<sharp>"
+  proof (rule upper_map_const_nonbot)
+    show "(\<Lambda> s. lift_up2 G\<cdot>s\<cdot>(up\<cdot>None))\<cdot>t = up\<cdot>None" if "t \<noteq> \<bottom>" for t using that assms by (cases t) simp_all
+  qed simp
+  then show ?thesis by (simp add: Rep_option_pd_inject[symmetric] upper_bin_unit2)
+qed
+
+subsection \<open>Mapping results\<close>
+
+definition map_option_pd :: "('a \<rightarrow> 'b) \<Rightarrow> 'a option_pd \<Rightarrow> 'b option_pd" where
+  "map_option_pd g x = Abs_option_pd (upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x))"
+
+lemma upper_map_u_map_nonbot: "S \<noteq> \<bottom> \<Longrightarrow> upper_map\<cdot>(u_map\<cdot>d)\<cdot>S \<noteq> \<bottom>"
+proof -
+  assume S: "S \<noteq> \<bottom>"
+  have "S = \<bottom> \<or> upper_map\<cdot>(u_map\<cdot>d)\<cdot>S \<noteq> \<bottom>"
+  proof (induct S rule: upper_pd_induct)
+    case (upper_unit t) then show ?case by (cases t) simp_all
+  next
+    case (upper_plus T T') then show ?case by auto
+  qed simp
+  then show ?thesis using S by simp
+qed
+
+lemma Rep_map_option_pd [simp]:
+  "Rep_option_pd (map_option_pd g x) = upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x)"
+  unfolding map_option_pd_def by (rule Rep_Abs_option_pd, rule upper_map_u_map_nonbot) simp
+
+lemma cont_map_option_pd [simp, cont2cont]: "cont f \<Longrightarrow> cont (\<lambda>x. map_option_pd g (f x))"
+  unfolding map_option_pd_def
+  by (rule cont_Abs_option_pd) (simp_all add: cont_Rep_option_pd upper_map_u_map_nonbot)
+
+lemma map_option_pd_simps [simp]:
+  "map_option_pd g Absent = Absent" "map_option_pd g (Present\<cdot>v) = Present\<cdot>(g\<cdot>v)"
+  "map_option_pd g (of_option\<cdot>a) = of_option\<cdot>(map_option (Rep_cfun g) a)"
+  "map_option_pd g (x + y) = map_option_pd g x + map_option_pd g y"
+  by (simp_all add: Rep_option_pd_inject[symmetric])
+
+subsection \<open>Tuples of results\<close>
+
+text \<open>Tuples are lifted lists, so that their results are pointed.  A tuple of results is present
+  where every component is: the outcomes are all combinations, and one absent component makes the
+  tuple absent.\<close>
+
+definition cons_opt :: "'a option \<rightarrow> 'a list u option \<rightarrow> 'a list u option" where
+  "cons_opt = (\<Lambda> a l. case a of None \<Rightarrow> None | Some v \<Rightarrow> (case l of None \<Rightarrow> None | Some w \<Rightarrow> Some (fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w)))"
+
+lemma cons_opt_simps [simp]:
+  "cons_opt\<cdot>None\<cdot>l = None" "cons_opt\<cdot>a\<cdot>None = None"
+  "cons_opt\<cdot>(Some v)\<cdot>(Some (up\<cdot>ys)) = Some (up\<cdot>(v # ys))"
+  by (simp_all add: cons_opt_def) (cases a; simp)
+
+primrec those_pd :: "'a::domain option_pd list \<Rightarrow> 'a list u option_pd" where
+  "those_pd [] = Present\<cdot>(up\<cdot>[])"
+| "those_pd (x # xs) = option_pd_op cons_opt x (those_pd xs)"
+
+lemma those_pd_Present [simp]: "those_pd (map (\<lambda>v. Present\<cdot>v) vs) = Present\<cdot>(up\<cdot>vs)"
+proof (induct vs)
+  case (Cons v vs)
+  have "option_pd_op cons_opt (of_option\<cdot>(Some v)) (of_option\<cdot>(Some (up\<cdot>vs))) = of_option\<cdot>(Some (up\<cdot>(v # vs)))"
+    by (simp only: option_pd_op_of_option cons_opt_simps)
+  then show ?case using Cons by simp
+qed simp
+
+lemma those_pd_Absent: "Absent \<in> set xs \<Longrightarrow> those_pd xs = Absent"
+  by (induct xs) (auto simp: option_pd_op_Absent1 option_pd_op_Absent2)
+
+lemma cont_those_pd: "cont (those_pd :: 'a::domain option_pd list \<Rightarrow> 'a list u option_pd)"
+  by (rule list_contI[where g = "\<lambda>x xs y. option_pd_op cons_opt x y"]) simp_all
 
 end
