@@ -123,15 +123,15 @@ text \<open>The rows of a frame in the fiber of a key at an LOD.\<close>
 definition afiber :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'r set" where
   "afiber data F c k = {y \<in> lower_maximal data. frows F y \<and> rproj c y = k}"
 
-text \<open>\<open>aggregate f E\<close> folds the inner values over the inner keys below each key of the frame.
-  The inner keys are the realised ones: the keys, at the inner key LOD, of the frame's rows below
-  the key, where the inner expression is present.  Grouping finer than the frame is the inner
+text \<open>\<open>aggregate f E\<close> folds the inner values over the inner keys below each key of the frame:
+  the realised ones, the keys at the inner key LOD of the frame's rows below the key.  Where the
+  inner expression is absent the fold sees its unit.  Grouping finer than the frame is the inner
   expression's own (its \<open>GROUP BY\<close> dimensions included).  The aggregate's keys are the frame's, so
   it decides no detail: its entries are the inner ones released (their lower parts move into their
   views' key parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
 
 definition inner_keys :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
-  "inner_keys E data F k = {\<kappa> \<in> rproj (kd E F) ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
+  "inner_keys E data F k = rproj (kd E F) ` afiber data F (flod F) k"
 
 text \<open>An inner entry, seen from outside the aggregate, is \<^emph>\<open>released\<close>: its lower part, which the
   inner key fixes, moves into its view's key part, so the outer content is keyed by the inner keys
@@ -207,29 +207,16 @@ text \<open>The content semantics folds the inner content semantics over the fol
   the inner contents at each off the outer ones.\<close>
 
 definition agg_csem :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> 'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option" where
-  "agg_csem f E Gs Xs = agg_fold f (\<lambda>p. csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p))
-     {p \<in> hd Gs. csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p) \<noteq> None}"
+  "agg_csem f E Gs Xs = agg_fold f (\<lambda>p. csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p)) (hd Gs)"
 
-text \<open>It is continuous in the value contents: the fold's index set is rigid (the fold guard's keys,
-  and the inner keys present), and the fold is continuous in the values.\<close>
+text \<open>It is continuous in the value contents: the fold's index set is the fold guard's keys, and
+  the fold is continuous in the values.\<close>
 
 lemma cont_agg_csem:
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
   shows "cont (agg_csem f E Gs)"
-proof -
-  let ?\<Phi> = "\<lambda>Xs p. csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p)"
-  have \<Phi>: "cont (\<lambda>Xs. ?\<Phi> Xs p)" for p by (simp add: cont_compose[OF _ cont_agg_inner])
-  have S: "rigid (\<lambda>Xs. {p \<in> hd Gs. ?\<Phi> Xs p \<noteq> None})"
-  proof (rule rigidI)
-    fix Xs Ys :: "('k \<Rightarrow> 'r option) list" assume b: "Xs \<sqsubseteq> Ys"
-    have n: "?\<Phi> Xs p = None \<longleftrightarrow> ?\<Phi> Ys p = None" for p
-      by (rule option_below_None[OF cont2monofunE[OF \<Phi> b]])
-    show "{p \<in> hd Gs. ?\<Phi> Xs p \<noteq> None} = {p \<in> hd Gs. ?\<Phi> Ys p \<noteq> None}"
-      by (simp only: n)
-  qed
-  show ?thesis unfolding agg_csem_def[abs_def]
-    by (rule cont_rigid_arg[OF _ S, where h = "\<lambda>Xs A. agg_fold f (?\<Phi> Xs) A"]) (rule cont_agg_fold[OF f \<Phi>])
-qed
+  unfolding agg_csem_def[abs_def]
+  by (rule cont_agg_fold[OF f]) (simp add: cont_compose[OF _ cont_agg_inner])
 
 lemma map2_map: "map2 g xs (map h xs) = map (\<lambda>x. g x (h x)) xs"
   by (induct xs) simp_all
@@ -443,13 +430,9 @@ proof (rule cstrictI)
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
   have lx': "length Xs = length (evalues E)" using lx by simp
-  let ?S = "{p \<in> G. csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p) \<noteq> None}"
-  have ne: "?S \<noteq> {}"
-  proof
-    assume S: "?S = {}"
-    have "agg_csem f E Gs Xs = None" unfolding agg_csem_def Gs list.sel by (simp only: S agg_fold_empty[OF f])
-    then show False using c[unfolded aggregate_csem[OF f]] by simp
-  qed
+  let ?\<Phi> = "\<lambda>p. csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p)"
+  have "agg_fold f ?\<Phi> G \<noteq> None" using c unfolding aggregate_csem[OF f] agg_csem_def Gs list.sel .
+  then have ne: "\<exists>p\<in>G. ?\<Phi> p \<noteq> None" using agg_fold_absent[OF f, of G ?\<Phi>] by metis
   then have "G \<noteq> {}" by auto
   moreover have "{} \<notin> set Gs'"
   proof
@@ -533,22 +516,17 @@ proof -
         have "proj (kd E F)\<cdot>(\<psi> p) = \<psi> p" by (simp only: y(2) proj_idem)
         then show ?thesis by (simp only: g c semilawful_csem_conf[OF ES d])
       qed
-      let ?Q = "{p \<in> ?P. ?v (\<psi> p) \<noteq> None}"
-      have D: "inner_keys E data F k = \<psi> ` ?Q"
-        unfolding inner_keys_def bij_betw_imp_surj_on[OF b, symmetric] by auto
-      have T: "{p \<in> ?P. ?\<Phi> p \<noteq> None} = ?Q" using pt by auto
-      have bQ: "bij_betw \<psi> ?Q (\<psi> ` ?Q)"
-        by (rule inj_on_imp_bij_betw[OF inj_on_subset[OF bij_betw_imp_inj_on[OF b]]]) blast
-      have "agg_fold f ?v (\<psi> ` ?Q) = agg_fold f (?v \<circ> \<psi>) ?Q"
-        by (rule agg_fold_bij[OF f bQ, symmetric])
-      also have "\<dots> = agg_fold f ?\<Phi> ?Q"
+      have D: "inner_keys E data F k = ?K" by (simp only: inner_keys_def)
+      have "agg_fold f ?v ?K = agg_fold f (?v \<circ> \<psi>) ?P"
+        by (rule agg_fold_bij[OF f b, symmetric])
+      also have "\<dots> = agg_fold f ?\<Phi> ?P"
       proof (rule agg_fold_cong[OF f refl])
-        fix p assume "p \<in> ?Q"
-        then show "(?v \<circ> \<psi>) p = ?\<Phi> p" by (simp only: comp_apply pt mem_Collect_eq)
+        fix p assume "p \<in> ?P"
+        then show "(?v \<circ> \<psi>) p = ?\<Phi> p" by (simp only: comp_apply pt)
       qed
       finally have "agg_fold f (esem E data F) (inner_keys E data F k)
           = agg_csem f E (gcontents data ?gs F k) ?X"
-        unfolding agg_csem_def hd tl T D .
+        unfolding agg_csem_def hd tl D .
       then show ?thesis by (simp only: beta_cfun[OF cont_agg_csem[OF f]])
     qed
   qed
