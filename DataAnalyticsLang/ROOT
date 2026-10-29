@@ -19,7 +19,6 @@ session DataAnalyticsLang = "HOLCF-extra" +
     Option_PD
     Content_Law
     Expr_Combinators
-    Key_Reduction
     Aggregate
     Ast
     Ast_Semantics
