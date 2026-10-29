@@ -151,7 +151,7 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
 | "asem (Call fn es) = smap (fsym_sem fn_other fn) (collect (map asem es))"
 | "asem (Aggr g e) = aggregate (ag_sem g) (gate (requested e) (asem e))"
 | "asem (GroupBy ds e) = asem e"
-| "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
+| "asem (For ds C e) = filtfor (lod ds) {|C|} (gate \<bottom> (asem e))"
 | "asem (Where C e) = restrict (row_guard C) (gate \<bottom> (asem e))"
 
 text \<open>Well-formedness: every call has a number of arguments its symbol admits.\<close>
@@ -176,9 +176,12 @@ next
   case (5 g e)
   then show ?case by (simp add: lawful_semilawful lawful_aggregate[OF lawful_gate ag_abel])
 next
+  case (7 ds C e)
+  then show ?case by (simp add: semilawful_filtfor[OF lawful_semilawful[OF lawful_gate]])
+next
   case (8 C e)
   then show ?case by (simp add: lawful_semilawful[OF lawful_restrict[OF lawful_gate]])
-qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd] semilawful_filtfor)
+qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd])
 
 corollary lawful_gate_asem: "wf e \<Longrightarrow> lawful (gate \<bottom> (asem e))"
   by (rule lawful_gate[OF semilawful_asem])
