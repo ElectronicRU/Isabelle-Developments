@@ -970,6 +970,193 @@ proof (rule semilawfulI, simp_all only: collect_simps)
   qed
 qed
 
+subsection \<open>Joint presence\<close>
+
+text \<open>Leaves, maps, \<open>RESTRICT\<close> and \<open>FOR\<close> keep joint presence; lawful expressions have it.
+  Collecting does not: each component is present on its own rows.\<close>
+
+lemma jointly_lawful_key_at: "jointly_lawful (key_at c)"
+proof (rule jointly_lawfulI[OF semilawful_key_at])
+  fix data F k assume "esem (key_at c) data F k \<noteq> None"
+  then obtain y where "y \<in> group data c c F k" by (auto split: if_splits)
+  then show "jointly_present data (key_at c) F k" by (auto simp: jointly_present_def)
+qed
+
+lemma jointly_lawful_column:
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))"
+  shows "jointly_lawful (column c a v)"
+proof (rule jointly_lawfulI[OF semilawful_column[OF fd]])
+  fix data F k assume "esem (column c a v) data F k \<noteq> None"
+  then obtain y where "y \<in> group data a a F k" by (auto split: if_splits)
+  then show "jointly_present data (column c a v) F k" by (auto simp: jointly_present_def)
+qed
+
+lemma jointly_lawful_smap:
+  assumes E: "jointly_lawful E"
+  shows "jointly_lawful (smap g E)"
+proof (rule jointly_lawfulI[OF semilawful_smap[OF jointly_lawful_semilawful[OF E]]])
+  fix data F k assume "fconf (evalues (smap g E)) data F" and "proj (kd (smap g E) F)\<cdot>k = k"
+    and "esem (smap g E) data F k \<noteq> None"
+  then have "jointly_present data E F k" by (intro jointly_lawful_present[OF E]) simp_all
+  then show "jointly_present data (smap g E) F k" by (simp add: jointly_present_def)
+qed
+
+lemma jointly_lawful_value_at: "jointly_lawful (value_at c g)"
+  unfolding value_at_def by (rule jointly_lawful_smap[OF jointly_lawful_key_at])
+
+lemma jointly_lawful_restrict:
+  assumes E: "jointly_lawful E"
+  shows "jointly_lawful (restrict \<gamma> E)"
+proof (rule jointly_lawfulI[OF semilawful_restrict[OF jointly_lawful_semilawful[OF E]]])
+  fix data F k assume "fconf (evalues (restrict \<gamma> E)) data F" and "proj (kd (restrict \<gamma> E) F)\<cdot>k = k"
+    and "esem (restrict \<gamma> E) data F k \<noteq> None"
+  then have "jointly_present data E (frestrict (gsel \<gamma>) F) k"
+    by (intro jointly_lawful_present[OF E]) (simp_all add: fconf_frestrict)
+  then show "jointly_present data (restrict \<gamma> E) F k"
+    by (auto simp: jointly_present_def group_frestrict comp_def)
+qed
+
+lemma jointly_lawful_filtfor:
+  assumes E: "jointly_lawful E"
+  shows "jointly_lawful (filtfor \<tau> G E)"
+proof (rule jointly_lawfulI[OF semilawful_filtfor[OF jointly_lawful_semilawful[OF E]]])
+  have ES: "semilawful E" by (rule jointly_lawful_semilawful[OF E])
+  fix data F k assume d: "fconf (evalues (filtfor \<tau> G E)) data F" and p: "esem (filtfor \<tau> G E) data F k \<noteq> None"
+  let ?k = "proj (emind E \<squnion> flod (ffor \<tau> G F))\<cdot>k"
+  have d': "fconf (evalues E) data (ffor \<tau> G F)" using d by (simp add: fconf_filtfor[of _ _ _ _ G])
+  have "jointly_present data E (ffor \<tau> G F) ?k"
+    using p by (intro jointly_lawful_present[OF E d' proj_idem]) simp
+  then obtain y where y: "\<And>S. S \<in> set (esels E) \<Longrightarrow> y \<in> group data (lower_part S) (upper_part S) (ffor \<tau> G F) ?k"
+    by (auto simp: jointly_present_def)
+  show "jointly_present data (filtfor \<tau> G E) F k" unfolding jointly_present_def
+  proof (intro exI ballI)
+    fix S assume "S \<in> set (esels (filtfor \<tau> G E))"
+    then obtain S0 where S0: "S0 \<in> set (esels E)" and S: "S = trunc_sel \<tau> S0" by auto
+    show "y \<in> group data (lower_part S) (upper_part S) F k"
+      using y[OF S0] unfolding S group_ffor[OF lower_below_mind[OF ES S0]] by simp
+  qed
+qed
+
+lemma jointly_lawful_gate: "semilawful E \<Longrightarrow> jointly_lawful (gate M E)"
+  by (rule lawful_jointly_lawful[OF lawful_gate])
+
+text \<open>The gate without a presence test only raises the entries and evaluates under the raised
+  frame.  It is lawful as soon as presence under the raised frame has a witness in the full group:
+  for a jointly lawful expression with a selector whose upper part is \<open>\<top>\<close>, a guard's or a value
+  entry's, and for a collection with one such component, whatever the others.\<close>
+
+definition gate_joint :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "gate_joint M E = \<lparr>emind = emind E \<squnion> M,
+     eguards = map (include_entry (emind E \<squnion> M)) (eguards E),
+     evalues = map (include_entry (emind E \<squnion> M)) (evalues E),
+     esem = \<lambda>data F k. if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None,
+     csem = csem E\<rparr>"
+
+lemma gate_joint_simps [simp]:
+  "emind (gate_joint M E) = emind E \<squnion> M"
+  "eguards (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (eguards E)"
+  "evalues (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
+  "esem (gate_joint M E) data F k = (if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
+       then esem E data (finclude (emind E \<squnion> M) F) k else None)"
+  "csem (gate_joint M E) = csem E"
+  by (simp_all add: gate_joint_def)
+
+theorem lawful_gate_joint_witness:
+  assumes ES: "semilawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
+    and W: "\<And>data F k. \<lbrakk>fconf (evalues E) data (finclude (emind E \<squnion> M) F); proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k;
+        esem E data (finclude (emind E \<squnion> M) F) k \<noteq> None\<rbrakk> \<Longrightarrow> group data (emind E \<squnion> M) \<top> F k \<noteq> {}"
+  shows "lawful (gate_joint M E)"
+proof -
+  let ?m = "emind E \<squnion> M"
+  have tm: "lower_part S \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
+  show ?thesis
+  proof (rule lawfulI, simp_all only: gate_joint_simps)
+    show "cstrict (gate_joint M E)"
+      using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
+    show "entry_wf e" if "e \<in> set (map (include_entry ?m) (evalues E))" for e
+      using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
+    show "(upper_part S' \<sqinter> ?m) \<sqsubseteq> lower_part S'"
+      if "S' \<in> set (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S'
+      using that by (auto intro: include_saturates[of ?m])
+    show "?m = fold (\<squnion>) (map lower_part (map esel (map (include_entry ?m) (eguards E))
+        @ map esel (map (include_entry ?m) (evalues E)))) \<bottom>"
+    proof (rule below_antisym)
+      let ?L = "map lower_part (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))"
+      have lo: "lower_part (include_sel ?m S) = ?m" using tm by (simp add: t(2) truncate_top lattice_join_absorb2)
+      have "lower_part (include_sel ?m S) \<in> set ?L" using t(1) by auto
+      then show "?m \<sqsubseteq> fold (\<squnion>) ?L \<bottom>" unfolding lo by (rule fold_join_upper)
+      show "fold (\<squnion>) ?L \<bottom> \<sqsubseteq> ?m"
+      proof (rule fold_join_least)
+        fix x assume "x \<in> set ?L"
+        then obtain S' where S': "S' \<in> set (esels E)" and x: "x = lower_part (include_sel ?m S')" by auto
+        show "x \<sqsubseteq> ?m" unfolding x by (rule include_lower_below[OF below_trans[OF lower_below_mind[OF ES S'] lattice_join_ge1]])
+      qed simp
+    qed
+    show "keyimg data F (?m \<squnion> flod F) k"
+      if d: "fconf (map (include_entry ?m) (evalues E)) data F"
+        and p: "(if proj (?m \<squnion> flod F)\<cdot>k = k then esem E data (finclude ?m F) k else None) \<noteq> None" for data F k
+    proof -
+      have k: "proj (?m \<squnion> flod F)\<cdot>k = k" using p by (simp split: if_splits)
+      have "esem E data (finclude ?m F) k \<noteq> None" using p k by simp
+      then show ?thesis using W[OF d[unfolded fconf_include] k] keyimg_group_top[OF k] by blast
+    qed
+    show "(if k = k then esem E data (finclude ?m F) k else None)
+        = csem E (gcontents data (map (include_entry ?m) (eguards E)) F k)\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k)"
+      if d: "fconf (map (include_entry ?m) (evalues E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k" for data F k
+    proof -
+      have d': "fconf (evalues E) data (finclude ?m F)" using d by (simp only: fconf_include)
+      have g: "gcontents data (map (include_entry ?m) (eguards E)) F k = gcontents data (eguards E) (finclude ?m F) k"
+        by (simp add: comp_def gcontent_include_entry)
+      have c: "contents data (map (include_entry ?m) (evalues E)) F k = contents data (evalues E) (finclude ?m F) k"
+        by (simp add: comp_def content_include_entry)
+      have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
+      then show ?thesis by (simp only: g c semilawful_csem_conf[OF ES d'] simp_thms if_True)
+    qed
+  qed
+qed
+
+corollary lawful_gate_joint:
+  assumes E: "jointly_lawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
+  shows "lawful (gate_joint M E)"
+proof (rule lawful_gate_joint_witness[OF jointly_lawful_semilawful[OF E] t])
+  let ?m = "emind E \<squnion> M"
+  have tm: "lower_part S \<sqsubseteq> ?m"
+    by (rule below_trans[OF lower_below_mind[OF jointly_lawful_semilawful[OF E] t(1)] lattice_join_ge1])
+  fix data F k assume d: "fconf (evalues E) data (finclude ?m F)" and k: "proj (?m \<squnion> flod F)\<cdot>k = k"
+    and p: "esem E data (finclude ?m F) k \<noteq> None"
+  have k': "proj (kd E (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
+  obtain y where "\<And>S'. S' \<in> set (esels E) \<Longrightarrow> y \<in> group data (lower_part S') (upper_part S') (finclude ?m F) k"
+    using jointly_lawful_present[OF E d k' p] by (auto simp: jointly_present_def)
+  then have "y \<in> group data (lower_part S) \<top> (finclude ?m F) k" using t by fastforce
+  then show "group data ?m \<top> F k \<noteq> {}" unfolding group_top_finclude[OF tm] by blast
+qed
+
+theorem lawful_gate_joint_collect:
+  assumes law: "\<And>E. E \<in> set Es \<Longrightarrow> semilawful E" and E0: "E0 \<in> set Es" "jointly_lawful E0"
+    and t: "S \<in> set (esels E0)" "upper_part S = \<top>"
+  shows "lawful (gate_joint M (collect Es))"
+proof (rule lawful_gate_joint_witness[OF semilawful_collect[OF law]])
+  show "S \<in> set (esels (collect Es))" using t(1) E0(1) by auto
+  show "upper_part S = \<top>" by (fact t(2))
+  let ?m = "emind (collect Es) \<squnion> M"
+  have m0: "emind E0 \<sqsubseteq> ?m" unfolding collect_simps
+    by (rule below_trans[OF fold_join_upper lattice_join_ge1]) (simp add: E0(1))
+  have tm: "lower_part S \<sqsubseteq> ?m"
+    by (rule below_trans[OF lower_below_mind[OF jointly_lawful_semilawful[OF E0(2)] t(1)] m0])
+  fix data F k assume d: "fconf (evalues (collect Es)) data (finclude ?m F)" and k: "proj (?m \<squnion> flod F)\<cdot>k = k"
+    and p: "esem (collect Es) data (finclude ?m F) k \<noteq> None"
+  have kk: "proj (kd E0 (finclude ?m F))\<cdot>k = k" by (simp only: join_finclude_absorb[OF m0] k)
+  have "esem E0 data (finclude ?m F) (proj (kd E0 (finclude ?m F))\<cdot>k) \<noteq> None"
+    using p E0(1) unfolding collect_simps those_not_None_iff by auto
+  then have p0: "esem E0 data (finclude ?m F) k \<noteq> None" unfolding kk .
+  have d0: "fconf (evalues E0) data (finclude ?m F)" using d E0(1) by (auto simp: fconf_def)
+  obtain y where "\<And>S'. S' \<in> set (esels E0) \<Longrightarrow> y \<in> group data (lower_part S') (upper_part S') (finclude ?m F) k"
+    using jointly_lawful_present[OF E0(2) d0 kk p0] by (auto simp: jointly_present_def)
+  then have "y \<in> group data (lower_part S) \<top> (finclude ?m F) k" using t by fastforce
+  then show "group data ?m \<top> F k \<noteq> {}" unfolding group_top_finclude[OF tm] by blast
+qed
+
 end
 
 end
