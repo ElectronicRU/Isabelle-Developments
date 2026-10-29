@@ -10,7 +10,91 @@ text \<open>A result is a set of possible outcomes, each either absent (\<open>N
   again, by \<open>{None, Some \<bottom>}\<close>: possibly absent, otherwise an unknown value.  A definite absence is
   \<open>{None}\<close>, a definite value \<open>v\<close> is \<open>{Some v}\<close>, and \<open>{None, Some v}\<close> is the value \<open>v\<close>, if present.\<close>
 
-cpodef 'v option_pd = "{S :: ('v option u) upper_pd. S \<noteq> \<bottom>}"
+subsection \<open>Options of profinite cpos are profinite\<close>
+
+text \<open>An approximation chain of the lifting \<open>'a\<^sub>\<bottom>\<close> extends to \<open>('a option)\<^sub>\<bottom>\<close>, fixing \<open>None\<close>.\<close>
+
+definition option_approx :: "(nat \<Rightarrow> 'a::cpo u \<rightarrow> 'a u) \<Rightarrow> nat \<Rightarrow> 'a option u \<rightarrow> 'a option u" where
+  "option_approx d i = fup\<cdot>(\<Lambda> z. case z of None \<Rightarrow> up\<cdot>None | Some x \<Rightarrow> fup\<cdot>(\<Lambda> y. up\<cdot>(Some y))\<cdot>(d i\<cdot>(up\<cdot>x)))"
+
+lemma option_approx_simps [simp]:
+  "option_approx d i\<cdot>\<bottom> = \<bottom>" "option_approx d i\<cdot>(up\<cdot>None) = up\<cdot>None"
+  "option_approx d i\<cdot>(up\<cdot>(Some x)) = fup\<cdot>(\<Lambda> y. up\<cdot>(Some y))\<cdot>(d i\<cdot>(up\<cdot>x))"
+  by (simp_all add: option_approx_def)
+
+lemma approx_chain_option_approx:
+  assumes a: "approx_chain d"
+  shows "approx_chain (option_approx d)"
+proof (rule approx_chain.intro)
+  interpret approx_chain d by (fact a)
+  let ?s = "fup\<cdot>(\<Lambda> y. up\<cdot>(Some y)) :: 'a u \<rightarrow> 'a option u"
+  have s_up [simp]: "?s\<cdot>(up\<cdot>x) = up\<cdot>(Some x)" for x by simp
+  have cases3: "P z" if "P \<bottom>" "P (up\<cdot>None)" "\<And>x. P (up\<cdot>(Some x))" for P and z :: "'a option u"
+  proof (cases z)
+    case (up w) with that show ?thesis by (cases w) simp_all
+  qed (simp add: that)
+  show c: "chain (\<lambda>i. option_approx d i)"
+  proof (rule chainI, rule cfun_belowI)
+    fix i and z :: "'a option u"
+    show "option_approx d i\<cdot>z \<sqsubseteq> option_approx d (Suc i)\<cdot>z"
+      by (rule cases3[of _ z]) (simp_all add: monofun_cfun_arg monofun_cfun_fun[OF chainE[OF chain_approx]])
+  qed
+  show "(\<Squnion>i. option_approx d i) = ID"
+  proof (rule cfun_eqI)
+    fix z :: "'a option u"
+    show "(\<Squnion>i. option_approx d i)\<cdot>z = ID\<cdot>z"
+    proof (rule cases3[of _ z])
+      fix x
+      have "(\<Squnion>i. ?s\<cdot>(d i\<cdot>(up\<cdot>x))) = ?s\<cdot>(\<Squnion>i. d i\<cdot>(up\<cdot>x))"
+        by (rule contlub_cfun_arg[OF ch2ch_Rep_cfunL[OF chain_approx], symmetric])
+      then show "(\<Squnion>i. option_approx d i)\<cdot>(up\<cdot>(Some x)) = ID\<cdot>(up\<cdot>(Some x))"
+        by (simp add: contlub_cfun_fun[OF c] contlub_cfun_fun[OF chain_approx, symmetric])
+    qed (simp_all add: contlub_cfun_fun[OF c])
+  qed
+  show "finite_deflation (option_approx d i)" for i
+  proof -
+    interpret d: finite_deflation "d i" by simp
+    have idem: "option_approx d i\<cdot>(option_approx d i\<cdot>z) = option_approx d i\<cdot>z" for z
+    proof (rule cases3[of _ z])
+      fix x show "option_approx d i\<cdot>(option_approx d i\<cdot>(up\<cdot>(Some x))) = option_approx d i\<cdot>(up\<cdot>(Some x))"
+        using d.idem[of "up\<cdot>x"] by (cases "d i\<cdot>(up\<cdot>x)" rule: upE) simp_all
+    qed simp_all
+    have below: "option_approx d i\<cdot>z \<sqsubseteq> z" for z
+    proof (rule cases3[of _ z])
+      fix x show "option_approx d i\<cdot>(up\<cdot>(Some x)) \<sqsubseteq> up\<cdot>(Some x)"
+        using monofun_cfun_arg[OF d.below[of "up\<cdot>x"], of ?s] by simp
+    qed simp_all
+    have fin: "finite {z. option_approx d i\<cdot>z = z}"
+    proof (rule finite_subset)
+      show "{z. option_approx d i\<cdot>z = z} \<subseteq> insert \<bottom> (insert (up\<cdot>None) (Rep_cfun ?s ` {w. d i\<cdot>w = w}))"
+      proof
+        fix z assume z: "z \<in> {z. option_approx d i\<cdot>z = z}"
+        show "z \<in> insert \<bottom> (insert (up\<cdot>None) (Rep_cfun ?s ` {w. d i\<cdot>w = w}))"
+        proof (rule cases3[of "\<lambda>z. option_approx d i\<cdot>z = z \<longrightarrow> z \<in> insert \<bottom> (insert (up\<cdot>None) (Rep_cfun ?s ` {w. d i\<cdot>w = w}))" z, rule_format, OF _ _ _ z[simplified]])
+          fix x assume e: "option_approx d i\<cdot>(up\<cdot>(Some x)) = up\<cdot>(Some x)"
+          have "d i\<cdot>(d i\<cdot>(up\<cdot>x)) = d i\<cdot>(up\<cdot>x)" by (rule d.idem)
+          then show "up\<cdot>(Some x) \<in> insert \<bottom> (insert (up\<cdot>None) (Rep_cfun ?s ` {w. d i\<cdot>w = w}))"
+            using e by (auto intro!: image_eqI[of _ _ "d i\<cdot>(up\<cdot>x)"])
+        qed simp_all
+      qed
+      show "finite (insert \<bottom> (insert (up\<cdot>None) (Rep_cfun ?s ` {w. d i\<cdot>w = w})))" using d.finite_fixes by simp
+    qed
+    show ?thesis unfolding finite_deflation_def finite_deflation_axioms_def deflation_def
+      using idem below fin by blast
+  qed
+qed
+
+instance option :: (profinite) profinite
+proof
+  obtain d :: "nat \<Rightarrow> 'a u \<rightarrow> 'a u" where "approx_chain d" using profinite by blast
+  then show "\<exists>a :: nat \<Rightarrow> 'a option u \<rightarrow> 'a option u. approx_chain a" by (blast intro: approx_chain_option_approx)
+qed
+
+subsection \<open>The type\<close>
+
+default_sort bifinite
+
+cpodef ('v::bifinite) option_pd = "{S :: ('v option u) upper_pd. S \<noteq> \<bottom>}"
 proof
   show "{up\<cdot>None}\<sharp> \<in> {S :: ('v option u) upper_pd. S \<noteq> \<bottom>}" by simp
   show "adm (\<lambda>S. S \<in> {S :: ('v option u) upper_pd. S \<noteq> \<bottom>})" by simp
@@ -52,7 +136,7 @@ lemma upper_least_nonbot: "upper_least \<noteq> \<bottom>"
 lemma least_option_pd: "Abs_option_pd upper_least \<sqsubseteq> y"
   unfolding below_option_pd_def Rep_Abs_option_pd[OF upper_least_nonbot] by (rule upper_least_below) simp
 
-instance option_pd :: ("domain") pcpo
+instance option_pd :: (bifinite) pcpo
   by standard (rule exI, rule allI, rule least_option_pd)
 
 lemma option_pd_bottom: "(\<bottom> :: 'v option_pd) = Abs_option_pd upper_least"
@@ -106,7 +190,7 @@ lemma lower_lift_option_pd: "lower_option_pd\<cdot>(lift_option_pd\<cdot>S) = S"
 lemma lift_lower_option_pd: "lift_option_pd\<cdot>(lower_option_pd\<cdot>z) = z"
   by (cases z) (simp_all add: lower_option_pd_def lift_option_pd_apply cont_Rep_option_pd Rep_option_pd_inverse)
 
-instance option_pd :: ("domain") profinite
+instance option_pd :: (bifinite) profinite
 proof
   obtain a :: "nat \<Rightarrow> ('a option u) upper_pd \<rightarrow> ('a option u) upper_pd" where "approx_chain a"
     using bifinite by blast
@@ -114,7 +198,7 @@ proof
     by (blast intro: approx_chain_iso lift_lower_option_pd lower_lift_option_pd)
 qed
 
-instance option_pd :: ("domain") bifinite
+instance option_pd :: (bifinite) bifinite
   by (rule bifinite_profinite_pointed)
 
 text \<open>The results are a domain: lifted, they are the powerdomain, a domain.\<close>
@@ -153,7 +237,7 @@ definition Present :: "'v \<rightarrow> 'v option_pd" where
 text \<open>The sum of two results has the outcomes of both; \<open>Present\<cdot>v + Absent\<close> is the value \<open>v\<close>, if
   present.\<close>
 
-instantiation option_pd :: ("domain") plus
+instantiation option_pd :: (bifinite) plus
 begin
 
 definition plus_option_pd :: "'a option_pd \<Rightarrow> 'a option_pd \<Rightarrow> 'a option_pd" where
