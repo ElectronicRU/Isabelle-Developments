@@ -10,6 +10,7 @@ session "HOLCF-extra" = HOLCF +
     Top
     FiniteCF
     Bounded_Complete
+    Pointed_Profinite
     Distributive
     Filter_Sum
     DI

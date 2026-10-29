@@ -1,5 +1,5 @@
 theory Option_PD
-  imports HOLCF "HOLCF-Library.Option_Cpo"
+  imports HOLCF "HOLCF-Library.Option_Cpo" "HOLCF-extra.Pointed_Profinite"
 begin
 
 section \<open>Results with possible absence\<close>
@@ -57,6 +57,65 @@ instance option_pd :: ("domain") pcpo
 
 lemma option_pd_bottom: "(\<bottom> :: 'v option_pd) = Abs_option_pd upper_least"
   by (rule below_antisym[OF minimal least_option_pd])
+
+subsection \<open>Bifiniteness\<close>
+
+text \<open>Lifting the results gives back the powerdomain: the new bottom is the one cut off.  So the
+  results are profinite, and, being pointed, bifinite.\<close>
+
+lemma cont_raise_bottom: "cont (\<lambda>S :: ('v option u) upper_pd. if S = \<bottom> then upper_least else S)"
+proof (rule contI2)
+  show "monofun (\<lambda>S :: ('v option u) upper_pd. if S = \<bottom> then upper_least else S)"
+    by (rule monofunI) (auto simp: upper_least_below)
+  fix Y :: "nat \<Rightarrow> ('v option u) upper_pd" assume Y: "chain Y"
+    and Z: "chain (\<lambda>i. if Y i = \<bottom> then upper_least else Y i)"
+  show "(if (\<Squnion>i. Y i) = \<bottom> then upper_least else (\<Squnion>i. Y i)) \<sqsubseteq> (\<Squnion>i. if Y i = \<bottom> then upper_least else Y i)"
+  proof (cases "(\<Squnion>i. Y i) = \<bottom>")
+    case True
+    then have "Y 0 = \<bottom>" using is_ub_thelub[OF Y, of 0] by simp
+    then show ?thesis using True is_ub_thelub[OF Z, of 0] by simp
+  next
+    case False
+    have "(\<Squnion>i. Y i) \<sqsubseteq> (\<Squnion>i. if Y i = \<bottom> then upper_least else Y i)"
+      by (rule lub_mono[OF Y Z]) simp
+    then show ?thesis using False by simp
+  qed
+qed
+
+definition lift_option_pd :: "('v option u) upper_pd \<rightarrow> 'v option_pd u" where
+  "lift_option_pd = (\<Lambda> S. if S = \<bottom> then \<bottom> else up\<cdot>(Abs_option_pd (if S = \<bottom> then upper_least else S)))"
+
+lemma cont_lift_option_pd:
+  "cont (\<lambda>S :: ('v option u) upper_pd. if S = \<bottom> then \<bottom> else up\<cdot>(Abs_option_pd (if S = \<bottom> then upper_least else S)))"
+proof -
+  have "cont (\<lambda>S :: ('v option u) upper_pd. Abs_option_pd (if S = \<bottom> then upper_least else S))"
+    by (rule cont_Abs_option_pd[OF _ cont_raise_bottom]) (simp add: upper_least_nonbot)
+  then show ?thesis by simp
+qed
+
+lemma lift_option_pd_apply:
+  "lift_option_pd\<cdot>S = (if S = \<bottom> then \<bottom> else up\<cdot>(Abs_option_pd S))"
+  by (simp add: lift_option_pd_def cont_lift_option_pd)
+
+definition lower_option_pd :: "'v option_pd u \<rightarrow> ('v option u) upper_pd" where
+  "lower_option_pd = fup\<cdot>(\<Lambda> x. Rep_option_pd x)"
+
+lemma lower_lift_option_pd: "lower_option_pd\<cdot>(lift_option_pd\<cdot>S) = S"
+  by (simp add: lower_option_pd_def lift_option_pd_apply cont_Rep_option_pd Rep_Abs_option_pd)
+
+lemma lift_lower_option_pd: "lift_option_pd\<cdot>(lower_option_pd\<cdot>z) = z"
+  by (cases z) (simp_all add: lower_option_pd_def lift_option_pd_apply cont_Rep_option_pd Rep_option_pd_inverse)
+
+instance option_pd :: ("domain") profinite
+proof
+  obtain a :: "nat \<Rightarrow> ('a option u) upper_pd \<rightarrow> ('a option u) upper_pd" where "approx_chain a"
+    using bifinite by blast
+  then show "\<exists>a :: nat \<Rightarrow> 'a option_pd u \<rightarrow> 'a option_pd u. approx_chain a"
+    by (blast intro: approx_chain_iso lift_lower_option_pd lower_lift_option_pd)
+qed
+
+instance option_pd :: ("domain") bifinite
+  by (rule bifinite_profinite_pointed)
 
 subsection \<open>Absent, present, and their sums\<close>
 
