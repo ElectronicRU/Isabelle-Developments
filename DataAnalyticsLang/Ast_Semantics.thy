@@ -31,8 +31,8 @@ lemma total_level_value_at_bot: "total_level (value_at \<bottom> g)"
 lemma row_level_smap: "row_level (smap g E) \<longleftrightarrow> row_level E"
   by (simp add: row_level_def)
 
-lemma row_level_collect: "(\<And>E. E \<in> set Es \<Longrightarrow> row_level E) \<Longrightarrow> row_level (collect Es)"
-  unfolding row_level_def collect_simps by auto
+lemma row_level_tuple: "(\<And>E. E \<in> set Es \<Longrightarrow> row_level E) \<Longrightarrow> row_level (tuple Es)"
+  by (induct Es) (auto simp: row_level_def)
 
 lemma total_level_aggregate: "total_level (aggregate f E)"
   by (simp add: total_level_def)
@@ -135,7 +135,7 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
   "asem (Dim d) = value_at (dim_lod d) (key_datum oo dim_val d)"
 | "asem (Col c) = column (col_sec c) (dim_lod (col_dim c)) (col_val c)"
 | "asem (Lit v) = value_at \<bottom> (\<Lambda> _. v)"
-| "asem (Call fn es) = smap (fup\<cdot>(fsym_sem fn_other fn)) (collect (map asem es))"
+| "asem (Call fn es) = smap (fup\<cdot>(fsym_sem fn_other fn)) (tuple (map asem es))"
 | "asem (Aggr g e) = aggregate (ag_sem g) (asem e)"
 | "asem (GroupBy ds e) = include_dims (lod ds) (asem e)"
 | "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
@@ -158,7 +158,7 @@ text \<open>The semantics is semilawful; the presence test at the top gives the 
 theorem semilawful_asem: "wf e \<Longrightarrow> semilawful (asem e)"
 proof (induct e rule: wf.induct)
   case (4 fn es)
-  then show ?case by (auto intro!: semilawful_smap semilawful_collect)
+  then show ?case by (auto intro!: semilawful_smap semilawful_tuple)
 next
   case (5 g e)
   then show ?case
@@ -186,7 +186,7 @@ lemma row_level_Dim: "row_level (asem (Dim d))" and row_level_Col: "row_level (a
   by (simp_all add: row_level_value_at row_level_column total_level_value_at_bot total_level_aggregate)
 
 lemma row_level_Call: "(\<And>e. e \<in> set es \<Longrightarrow> row_level (asem e)) \<Longrightarrow> row_level (asem (Call fn es))"
-  unfolding asem.simps row_level_smap by (rule row_level_collect) auto
+  unfolding asem.simps row_level_smap by (rule row_level_tuple) auto
 
 section \<open>Row-level values from the content semantics\<close>
 
@@ -203,23 +203,15 @@ next
   show ?case by (cases p) (simp add: col_reads)
 next
   case (4 fn es)
-  let ?Es = "map asem es" and ?Q = "\<lambda>E. gpoint (eguards E) p" and ?P = "\<lambda>E. point (evalues E) p"
-  have IH: "csem (asem e) (?Q (asem e))\<cdot>(?P (asem e)) = Present\<cdot>(pval e\<cdot>p)" if "e \<in> set es" for e
+  have IH: "csem (asem e) (gpoint (eguards (asem e)) p)\<cdot>(point (evalues (asem e)) p) = Present\<cdot>(pval e\<cdot>p)"
+    if "e \<in> set es" for e
     using 4 that by simp
-  have bg: "blocks (map (\<lambda>E. length (eguards E)) ?Es) (gpoint (concat (map eguards ?Es)) p) = map ?Q ?Es"
-    unfolding gpoint_concat map_map comp_def
-    using blocks_concat[of "\<lambda>E. gpoint (eguards E) p" ?Es] by (simp add: comp_def)
-  have b: "blocks (map (\<lambda>E. length (evalues E)) ?Es) (point (concat (map evalues ?Es)) p) = map ?P ?Es"
-    unfolding point_concat map_map comp_def
-    using blocks_concat[of "\<lambda>E. point (evalues E) p" ?Es] by (simp add: comp_def)
-  have z: "map2 (\<lambda>q Ys. csem (fst q) (snd q)\<cdot>Ys) (zip (map asem xs) (map (\<lambda>x. ?Q (asem x)) xs)) (map (\<lambda>x. ?P (asem x)) xs)
-      = map (\<lambda>x. csem (asem x) (?Q (asem x))\<cdot>(?P (asem x))) xs" for xs
-    by (induct xs) simp_all
-  have m: "map2 (\<lambda>q Ys. csem (fst q) (snd q)\<cdot>Ys) (zip ?Es (map ?Q ?Es)) (map ?P ?Es) = map (\<lambda>e. Present\<cdot>(pval e\<cdot>p)) es"
-    unfolding map_map comp_def z using IH by simp
+  have t: "csem (tuple (map asem xs)) (gpoint (eguards (tuple (map asem xs))) p)\<cdot>(point (evalues (tuple (map asem xs))) p)
+      = Present\<cdot>(up\<cdot>(map (\<lambda>e. pval e\<cdot>p) xs))" if "set xs \<subseteq> set es" for xs
+    using that by (induct xs) (simp_all add: combine_csem_def IH)
   show ?case
-    by (simp only: asem.simps smap_simps collect_simps collect_csem_def bg b m)
-      (simp add: those_pd_Present[of "map (\<lambda>e. pval e\<cdot>p) es", unfolded map_map comp_def] tuple_cfun_apply map_map comp_def)
+    by (simp only: asem.simps smap_simps t[OF order_refl])
+      (simp add: tuple_cfun_apply map_map comp_def)
 qed simp_all
 
 text \<open>Key-level expressions: dimensions, literals and calls, no columns.\<close>
@@ -248,7 +240,7 @@ lemma row_ast_wf: "row_ast e \<Longrightarrow> wf e"
   by (induct e rule: row_ast.induct) auto
 
 lemma row_ast_row_level: "row_ast e \<Longrightarrow> row_level (asem e)"
-  by (induct e rule: row_ast.induct) (auto simp: row_level_value_at row_level_column row_level_smap intro!: row_level_collect)
+  by (induct e rule: row_ast.induct) (auto simp: row_level_value_at row_level_column row_level_smap intro!: row_level_tuple)
 
 lemma row_ast_gtrue: "row_ast e \<Longrightarrow> e' \<in> set (eguards (asem e)) \<Longrightarrow> eguard e' = gtrue"
   by (induct e arbitrary: e' rule: row_ast.induct) auto

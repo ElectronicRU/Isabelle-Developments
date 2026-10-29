@@ -14,8 +14,7 @@ text \<open>A collected expression is present where every component is; its valu
   components' values.  Absence is the expression's, so the list needs no bottom: tuples are plain
   lists, ordered componentwise at equal length.\<close>
 
-lemma those_pd_not_Absent: "those_pd xs \<noteq> Absent \<Longrightarrow> x \<in> set xs \<Longrightarrow> x \<noteq> Absent"
-  using those_pd_Absent by blast
+
 
 context dataspace
 begin
@@ -667,127 +666,114 @@ proof -
   show ?thesis unfolding one[OF d(1) x] one[OF d(2) x'] s ..
 qed
 
-subsection \<open>Collect\<close>
+subsection \<open>Combining\<close>
 
-text \<open>The components are evaluated under the frame itself, each at its own key; their entries are
-  the collected expression's entries, unchanged.  Collecting is semilawful: each component is
-  present on its own rows, and sees nothing of the others' minimal LODs.  The presence test asks
-  for one row realising the full key.\<close>
+text \<open>A binary function of two expressions: each is evaluated under the frame itself, at its own
+  key, and the result is present where both are.  The entries are the two lists of entries, one
+  after the other.  Any operator of any arity is a map after combining.\<close>
 
-text \<open>Cutting a list into consecutive blocks of given lengths.\<close>
+definition combine_csem :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'b::bifinite) expr \<Rightarrow>
+    'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'c::bifinite option_pd" where
+  "combine_csem f E\<^sub>1 E\<^sub>2 Gs Xs = lift2_option_pd f\<cdot>
+     (csem E\<^sub>1 (take (length (eguards E\<^sub>1)) Gs)\<cdot>(take (length (evalues E\<^sub>1)) Xs))\<cdot>
+     (csem E\<^sub>2 (drop (length (eguards E\<^sub>1)) Gs)\<cdot>(drop (length (evalues E\<^sub>1)) Xs))"
 
-fun blocks :: "nat list \<Rightarrow> 'a list \<Rightarrow> 'a list list" where
-  "blocks [] xs = []"
-| "blocks (n # ns) xs = take n xs # blocks ns (drop n xs)"
+lemma cont_combine_csem: "cont (combine_csem f E\<^sub>1 E\<^sub>2 Gs)"
+  unfolding combine_csem_def[abs_def] by (simp add: cont_take cont_drop)
 
-lemma cont_blocks: "cont (blocks ns :: 'a::cpo list \<Rightarrow> 'a list list)"
-proof (induct ns)
-  case (Cons n ns)
-  show ?case by (simp add: cont_compose[OF Cons cont_drop] cont_take)
-qed simp
+definition combine :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'b::bifinite) expr \<Rightarrow>
+    ('k, 'f, 'r, 'c::bifinite) expr" where
+  "combine f E\<^sub>1 E\<^sub>2 = \<lparr>emind = emind E\<^sub>1 \<squnion> emind E\<^sub>2,
+     eguards = eguards E\<^sub>1 @ eguards E\<^sub>2, evalues = evalues E\<^sub>1 @ evalues E\<^sub>2,
+     esem = \<lambda>data F k. lift2_option_pd f\<cdot>(esem E\<^sub>1 data F (proj (kd E\<^sub>1 F)\<cdot>k))\<cdot>(esem E\<^sub>2 data F (proj (kd E\<^sub>2 F)\<cdot>k)),
+     csem = \<lambda>Gs. \<Lambda> Xs. combine_csem f E\<^sub>1 E\<^sub>2 Gs Xs\<rparr>"
 
-lemma blocks_concat: "blocks (map (\<lambda>x. length (f x)) xs) (concat (map f xs)) = map f xs"
-  by (induct xs) simp_all
+lemma combine_simps [simp]:
+  "emind (combine f E\<^sub>1 E\<^sub>2) = emind E\<^sub>1 \<squnion> emind E\<^sub>2"
+  "eguards (combine f E\<^sub>1 E\<^sub>2) = eguards E\<^sub>1 @ eguards E\<^sub>2" "evalues (combine f E\<^sub>1 E\<^sub>2) = evalues E\<^sub>1 @ evalues E\<^sub>2"
+  "esem (combine f E\<^sub>1 E\<^sub>2) data F k = lift2_option_pd f\<cdot>(esem E\<^sub>1 data F (proj (kd E\<^sub>1 F)\<cdot>k))\<cdot>(esem E\<^sub>2 data F (proj (kd E\<^sub>2 F)\<cdot>k))"
+  "csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Xs = combine_csem f E\<^sub>1 E\<^sub>2 Gs Xs"
+  by (simp_all add: combine_def cont_combine_csem[unfolded eta_cfun])
 
-text \<open>The components' content semantics, each at its blocks of guard and value contents.\<close>
-
-definition collect_csem :: "('k, 'f, 'r, 'a::domain) expr list \<Rightarrow> 'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'a list u option_pd" where
-  "collect_csem Es Gs Xs = those_pd (map2 (\<lambda>p Ys. csem (fst p) (snd p)\<cdot>Ys)
-     (zip Es (blocks (map (\<lambda>E. length (eguards E)) Es) Gs)) (blocks (map (\<lambda>E. length (evalues E)) Es) Xs))"
-
-lemma cont_collect_csem: "cont (collect_csem Es Gs)"
-proof -
-  have "cont (\<lambda>Xs. map2 (\<lambda>p Ys. csem (fst p) (snd p)\<cdot>Ys)
-      (zip Es (blocks (map (\<lambda>E. length (eguards E)) Es) Gs)) (blocks (map (\<lambda>E. length (evalues E)) Es) Xs))"
-    by (rule cont_compose[OF cont_map2 cont_blocks]) simp
-  then show ?thesis unfolding collect_csem_def[abs_def] by (rule cont_compose[OF cont_those_pd])
+lemma cstrict_combine:
+  assumes E\<^sub>1: "cstrict E\<^sub>1" and E\<^sub>2: "cstrict E\<^sub>2"
+  shows "cstrict (combine f E\<^sub>1 E\<^sub>2)"
+proof (rule cstrictI)
+  fix Gs :: "'k set list" and Xs :: "('k \<Rightarrow> 'r option) list"
+  assume l: "length Gs = length (eguards (combine f E\<^sub>1 E\<^sub>2))" and lx: "length Xs = length (evalues (combine f E\<^sub>1 E\<^sub>2))"
+    and c: "csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Xs \<noteq> Absent"
+  let ?n = "length (eguards E\<^sub>1)" and ?m = "length (evalues E\<^sub>1)"
+  have c1: "csem E\<^sub>1 (take ?n Gs)\<cdot>(take ?m Xs) \<noteq> Absent" and c2: "csem E\<^sub>2 (drop ?n Gs)\<cdot>(drop ?m Xs) \<noteq> Absent"
+    using c by (auto simp: combine_csem_def)
+  have "{} \<notin> set (take ?n Gs)" by (rule notI, rule c1[THEN notE], rule cstrictD[OF E\<^sub>1]) (use l lx in simp_all)
+  moreover have "{} \<notin> set (drop ?n Gs)" by (rule notI, rule c2[THEN notE], rule cstrictD[OF E\<^sub>2]) (use l lx in simp_all)
+  ultimately show "{} \<notin> set Gs" using set_append[of "take ?n Gs" "drop ?n Gs"] by auto
 qed
 
-definition collect :: "('k, 'f, 'r, 'a::domain) expr list \<Rightarrow> ('k, 'f, 'r, 'a list u) expr" where
-  "collect Es = \<lparr>emind = fold (\<squnion>) (map emind Es) \<bottom>,
-     eguards = concat (map eguards Es), evalues = concat (map evalues Es),
-     esem = \<lambda>data F k. those_pd (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es),
-     csem = \<lambda>Gs. \<Lambda> Xs. collect_csem Es Gs Xs\<rparr>"
-
-lemma collect_simps [simp]:
-  "emind (collect Es) = fold (\<squnion>) (map emind Es) \<bottom>"
-  "eguards (collect Es) = concat (map eguards Es)" "evalues (collect Es) = concat (map evalues Es)"
-  "esem (collect Es) data F k = those_pd (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)"
-  "csem (collect Es) Gs\<cdot>Xs = collect_csem Es Gs Xs"
-  by (simp_all add: collect_def cont_collect_csem[unfolded eta_cfun])
-
-lemma collect_blocks_strict:
-  assumes "\<And>E. E \<in> set Es \<Longrightarrow> cstrict E"
-    and "length Gs = sum_list (map (\<lambda>E. length (eguards E)) Es)"
-    and "length Xs = sum_list (map (\<lambda>E. length (evalues E)) Es)"
-    and "collect_csem Es Gs Xs \<noteq> Absent"
-  shows "{} \<notin> set Gs"
-  using assms
-proof (induct Es arbitrary: Gs Xs)
-  case (Cons E Es)
-  let ?n = "length (eguards E)" and ?l = "length (evalues E)"
-  have t: "csem E (take ?n Gs)\<cdot>(take ?l Xs) \<noteq> Absent" and r: "collect_csem Es (drop ?n Gs) (drop ?l Xs) \<noteq> Absent"
-    using Cons.prems(4) by (auto simp: collect_csem_def split: option.splits)
-  have "{} \<notin> set (take ?n Gs)"
-    using cstrictD[OF Cons.prems(1)[of E] _ _] t Cons.prems(2,3) by force
-  moreover have "{} \<notin> set (drop ?n Gs)"
-    by (rule Cons.hyps) (use Cons.prems(1,2,3) r in auto)
-  ultimately show ?case using set_append[of "take ?n Gs" "drop ?n Gs"] by auto
-qed simp
-
-lemma cstrict_collect: "(\<And>E. E \<in> set Es \<Longrightarrow> cstrict E) \<Longrightarrow> cstrict (collect Es)"
-  by (rule cstrictI) (auto intro: collect_blocks_strict[THEN notE] simp: length_concat comp_def)
-
-lemma map2_zip_map: "map2 h (zip xs (map g xs)) (map v xs) = map (\<lambda>x. h (x, g x) (v x)) xs"
-  by (induct xs) simp_all
-
-theorem semilawful_collect:
-  assumes law: "\<And>E. E \<in> set Es \<Longrightarrow> semilawful E"
-  shows "semilawful (collect Es)"
-proof (rule semilawfulI, simp_all only: collect_simps)
-  show "cstrict (collect Es)" by (rule cstrict_collect[OF semilawful_cstrict[OF law]])
-  show "entry_wf e" if "e \<in> set (concat (map evalues Es))" for e
-    using that by (auto intro: semilawful_wf[OF law])
-  let ?R = "fold (\<squnion>) (map lower_part (map esel (concat (map eguards Es)) @ map esel (concat (map evalues Es)))) \<bottom>"
-  show "fold (\<squnion>) (map emind Es) \<bottom> = ?R"
-  proof (rule below_antisym)
-    show "fold (\<squnion>) (map emind Es) \<bottom> \<sqsubseteq> ?R"
-    proof (rule fold_join_least)
-      fix x assume "x \<in> set (map emind Es)"
-      then obtain E where E: "E \<in> set Es" and x: "x = emind E" by auto
-      show "x \<sqsubseteq> ?R" unfolding x semilawful_mind_lub[OF law[OF E]]
-      proof (rule fold_join_least)
-        fix a assume "a \<in> set (map lower_part (esels E))"
-        then show "a \<sqsubseteq> ?R" by (intro fold_join_upper) (use E in force)
-      qed simp
-    qed simp
-    show "?R \<sqsubseteq> fold (\<squnion>) (map emind Es) \<bottom>"
-    proof (rule fold_join_least)
-      fix a assume "a \<in> set (map lower_part (map esel (concat (map eguards Es)) @ map esel (concat (map evalues Es))))"
-      then obtain E S where E: "E \<in> set Es" and S: "S \<in> set (esels E)" and a: "a = lower_part S" by auto
-      show "a \<sqsubseteq> fold (\<squnion>) (map emind Es) \<bottom>"
-        unfolding a by (rule below_trans[OF lower_below_mind[OF law[OF E] S] fold_join_upper]) (simp add: E)
-    qed simp
-  qed
-  show "those_pd (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)
-      = collect_csem Es (gcontents data (concat (map eguards Es)) F k) (contents data (concat (map evalues Es)) F k)"
-    if d: "fconf (concat (map evalues Es)) data F" for data F k
+theorem semilawful_combine:
+  assumes E\<^sub>1: "semilawful E\<^sub>1" and E\<^sub>2: "semilawful E\<^sub>2"
+  shows "semilawful (combine f E\<^sub>1 E\<^sub>2)"
+proof (rule semilawfulI, simp_all only: combine_simps)
+  show "cstrict (combine f E\<^sub>1 E\<^sub>2)" by (rule cstrict_combine[OF semilawful_cstrict[OF E\<^sub>1] semilawful_cstrict[OF E\<^sub>2]])
+  show "entry_wf e" if "e \<in> set (evalues E\<^sub>1 @ evalues E\<^sub>2)" for e
+    using that by (auto intro: semilawful_wf[OF E\<^sub>1] semilawful_wf[OF E\<^sub>2])
+  let ?R = "fold (\<squnion>) (map lower_part (map esel (eguards E\<^sub>1 @ eguards E\<^sub>2) @ map esel (evalues E\<^sub>1 @ evalues E\<^sub>2))) \<bottom>"
+  have up1: "emind E\<^sub>1 \<sqsubseteq> ?R" unfolding semilawful_mind_lub[OF E\<^sub>1]
+  proof (rule fold_join_least)
+    fix a assume "a \<in> set (map lower_part (esels E\<^sub>1))"
+    then show "a \<sqsubseteq> ?R" by (intro fold_join_upper) force
+  qed simp
+  have up2: "emind E\<^sub>2 \<sqsubseteq> ?R" unfolding semilawful_mind_lub[OF E\<^sub>2]
+  proof (rule fold_join_least)
+    fix a assume "a \<in> set (map lower_part (esels E\<^sub>2))"
+    then show "a \<sqsubseteq> ?R" by (intro fold_join_upper) force
+  qed simp
+  have lo: "?R \<sqsubseteq> emind E\<^sub>1 \<squnion> emind E\<^sub>2"
+  proof (rule fold_join_least)
+    fix a assume "a \<in> set (map lower_part (map esel (eguards E\<^sub>1 @ eguards E\<^sub>2) @ map esel (evalues E\<^sub>1 @ evalues E\<^sub>2)))"
+    then have "a \<in> lower_part ` set (esels E\<^sub>1) \<or> a \<in> lower_part ` set (esels E\<^sub>2)" by auto
+    then show "a \<sqsubseteq> emind E\<^sub>1 \<squnion> emind E\<^sub>2"
+      by (auto intro: below_trans[OF lower_below_mind[OF E\<^sub>1] lattice_join_ge1]
+          below_trans[OF lower_below_mind[OF E\<^sub>2] lattice_join_ge2])
+  qed simp
+  show "emind E\<^sub>1 \<squnion> emind E\<^sub>2 = ?R" by (rule below_antisym[OF lattice_join_least[OF up1 up2] lo])
+  show "lift2_option_pd f\<cdot>(esem E\<^sub>1 data F (proj (kd E\<^sub>1 F)\<cdot>k))\<cdot>(esem E\<^sub>2 data F (proj (kd E\<^sub>2 F)\<cdot>k))
+      = combine_csem f E\<^sub>1 E\<^sub>2 (gcontents data (eguards E\<^sub>1 @ eguards E\<^sub>2) F k) (contents data (evalues E\<^sub>1 @ evalues E\<^sub>2) F k)"
+    if d: "fconf (evalues E\<^sub>1 @ evalues E\<^sub>2) data F" for data F k
   proof -
-    have bg: "blocks (map (\<lambda>E. length (eguards E)) Es) (gcontents data (concat (map eguards Es)) F k)
-        = map (\<lambda>E. gcontents data (eguards E) F k) Es"
-      using blocks_concat[of "\<lambda>E. gcontents data (eguards E) F k" Es] by (simp add: map_concat comp_def)
-    have bv: "blocks (map (\<lambda>E. length (evalues E)) Es) (contents data (concat (map evalues Es)) F k)
-        = map (\<lambda>E. contents data (evalues E) F k) Es"
-      using blocks_concat[of "\<lambda>E. contents data (evalues E) F k" Es] by (simp add: map_concat comp_def)
-    have "esem E data F (proj (kd E F)\<cdot>k) = csem_at E data F k" if E: "E \<in> set Es" for E
-    proof -
-      have dE: "fconf (evalues E) data F" using d E by (auto simp: fconf_def)
-      show ?thesis
-        by (simp only: semilawful_csem_conf[OF law[OF E] dE proj_idem] contents_own_key[OF law[OF E]])
-    qed
-    then show ?thesis unfolding collect_csem_def bg bv map2_zip_map fst_conv snd_conv by (simp cong: map_cong)
+    have d1: "fconf (evalues E\<^sub>1) data F" and d2: "fconf (evalues E\<^sub>2) data F" using d by (simp_all add: fconf_def)
+    show ?thesis unfolding combine_csem_def
+      by (simp add: semilawful_csem_conf[OF E\<^sub>1 d1 proj_idem] semilawful_csem_conf[OF E\<^sub>2 d2 proj_idem]
+          contents_own_key[OF E\<^sub>1] contents_own_key[OF E\<^sub>2])
   qed
 qed
+
+text \<open>A constant, present everywhere, with no entries.\<close>
+
+definition const_expr :: "'v::bifinite \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "const_expr v = \<lparr>emind = \<bottom>, eguards = [], evalues = [], esem = \<lambda>data F k. Present\<cdot>v, csem = \<lambda>Gs. \<Lambda> Xs. Present\<cdot>v\<rparr>"
+
+lemma const_expr_simps [simp]:
+  "emind (const_expr v) = \<bottom>" "eguards (const_expr v) = []" "evalues (const_expr v) = []"
+  "esem (const_expr v) data F k = Present\<cdot>v" "csem (const_expr v) Gs\<cdot>Xs = Present\<cdot>v"
+  by (simp_all add: const_expr_def)
+
+theorem semilawful_const_expr: "semilawful (const_expr v)"
+  by (rule semilawfulI) (simp_all add: cstrict_def)
+
+text \<open>Tuples, as lifted lists: combining with cons from the empty one.\<close>
+
+primrec tuple :: "('k, 'f, 'r, 'a::domain) expr list \<Rightarrow> ('k, 'f, 'r, 'a list u) expr" where
+  "tuple [] = const_expr (up\<cdot>[])"
+| "tuple (E # Es) = combine (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w) E (tuple Es)"
+
+lemma set_entries_tuple [simp]:
+  "set (eguards (tuple Es)) = (\<Union>E\<in>set Es. set (eguards E))"
+  "set (evalues (tuple Es)) = (\<Union>E\<in>set Es. set (evalues E))"
+  by (induct Es) auto
+
+lemma semilawful_tuple: "(\<And>E. E \<in> set Es \<Longrightarrow> semilawful E) \<Longrightarrow> semilawful (tuple Es)"
+  by (induct Es) (simp_all add: semilawful_const_expr semilawful_combine)
 
 subsection \<open>The presence test is lawful\<close>
 

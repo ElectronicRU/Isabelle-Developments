@@ -362,10 +362,6 @@ proof (induct as)
     by (rule list_contI[where g = "\<lambda>y ys z. h a y # map2 h as ys"]) (simp_all add: Cons)
 qed simp
 
-lemma cont_those: "cont (those :: 'a::cpo option list \<Rightarrow> 'a list option)"
-  by (rule list_contI[where g = "\<lambda>x xs y. case x of None \<Rightarrow> None | Some a \<Rightarrow> map_option (Cons a) y"])
-    (simp_all split: option.split)
-
 subsection \<open>Groups and contents\<close>
 
 context dataspace
@@ -529,12 +525,6 @@ lemma point_simps [simp]:
   "point [] p = []" "point (e # es) p = [proj (ekeys e)\<cdot>(snd p) \<mapsto> fst p \<downharpoonright> ecols e] # point es p"
   "point (es @ es') p = point es p @ point es' p" "length (point es p) = length es"
   by (simp_all add: point_def)
-
-lemma gpoint_concat: "gpoint (concat gss) p = concat (map (\<lambda>gs. gpoint gs p) gss)"
-  by (induct gss) simp_all
-
-lemma point_concat: "point (concat ess) p = concat (map (\<lambda>es. point es p) ess)"
-  by (induct ess) simp_all
 
 lemma content_single_fiber: "vfiber data e F k = {y} \<Longrightarrow> content data e F k = hd (point [e] (y, rkey\<cdot>y))"
   by (simp add: content_def cgraph_def cpair_def)
@@ -1161,19 +1151,6 @@ theorem sem_section:
 end
 
 subsection \<open>Lemmas for the combinators\<close>
-
-lemma concat_map_blocks:
-  assumes "concat (map f xs) = concat (map g xs)" and "\<And>x. x \<in> set xs \<Longrightarrow> length (f x) = length (g x)"
-    and "x \<in> set xs"
-  shows "f x = g x"
-  using assms
-proof (induct xs)
-  case (Cons y ys)
-  have l: "length (f y) = length (g y)" by (rule Cons.prems(2)) simp
-  have "f y = g y \<and> concat (map f ys) = concat (map g ys)"
-    using Cons.prems(1) by (simp add: append_eq_append_conv[OF disjI1[OF l]])
-  then show ?case using Cons by auto
-qed simp
 
 lemma proj_sup_eq:
   "proj (a \<squnion> b)\<cdot>x = proj (a \<squnion> b)\<cdot>z \<longleftrightarrow> proj a\<cdot>x = proj a\<cdot>z \<and> proj b\<cdot>x = proj b\<cdot>z"

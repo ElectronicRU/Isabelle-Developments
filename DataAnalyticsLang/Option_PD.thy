@@ -647,23 +647,4 @@ proof -
     using option_pd_op_of_option[of "strict_opt2 f" "Some v" "Some w"] by (simp add: lift2_option_pd_apply)
 qed (simp_all add: lift2_option_pd_apply option_pd_op_Absent1 option_pd_op_Absent2)
 
-subsection \<open>Tuples of results\<close>
-
-text \<open>Tuples are lifted lists, so that their results are pointed.  A tuple of results is present
-  where every component is: the outcomes are all combinations, and one absent component makes the
-  tuple absent.\<close>
-
-primrec those_pd :: "'a::domain option_pd list \<Rightarrow> 'a list u option_pd" where
-  "those_pd [] = Present\<cdot>(up\<cdot>[])"
-| "those_pd (x # xs) = lift2_option_pd (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w)\<cdot>x\<cdot>(those_pd xs)"
-
-lemma those_pd_Present [simp]: "those_pd (map (\<lambda>v. Present\<cdot>v) vs) = Present\<cdot>(up\<cdot>vs)"
-  by (induct vs) simp_all
-
-lemma those_pd_Absent: "Absent \<in> set xs \<Longrightarrow> those_pd xs = Absent"
-  by (induct xs) auto
-
-lemma cont_those_pd: "cont (those_pd :: 'a::domain option_pd list \<Rightarrow> 'a list u option_pd)"
-  by (rule list_contI[where g = "\<lambda>x xs y. lift2_option_pd (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w)\<cdot>x\<cdot>y"]) simp_all
-
 end
