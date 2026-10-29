@@ -117,6 +117,32 @@ qed
 instance option_pd :: ("domain") bifinite
   by (rule bifinite_profinite_pointed)
 
+text \<open>The results are a domain: lifted, they are the powerdomain, a domain.\<close>
+
+instantiation option_pd :: ("domain") "domain"
+begin
+
+definition "emb = emb oo lower_option_pd oo strictify\<cdot>up"
+
+definition "prj = fup\<cdot>ID oo lift_option_pd oo prj"
+
+definition "defl (t :: 'a option_pd itself) =
+  defl_fun1 emb prj (\<Lambda> d. (lower_option_pd oo u_drop_bottom oo lift_option_pd) oo d)\<cdot>
+    (defl_top :: ('a option u) upper_pd defl)"
+
+definition "(liftemb :: 'a option_pd u \<rightarrow> udom u) = u_map\<cdot>emb"
+
+definition "(liftprj :: udom u \<rightarrow> 'a option_pd u) = u_map\<cdot>prj"
+
+definition "liftdefl (t :: 'a option_pd itself) = liftdefl_of\<cdot>DEFL('a option_pd)"
+
+instance
+  by (rule domain_class_lift_iso[OF lift_lower_option_pd lower_lift_option_pd emb_option_pd_def prj_option_pd_def
+        defl_option_pd_def[abs_def, THEN meta_eq_to_obj_eq] liftemb_option_pd_def liftprj_option_pd_def
+        liftdefl_option_pd_def[abs_def, THEN meta_eq_to_obj_eq]])
+
+end
+
 subsection \<open>Absent, present, and their sums\<close>
 
 definition Absent :: "'v option_pd" where
