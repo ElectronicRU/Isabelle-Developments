@@ -151,7 +151,7 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
 | "asem (Call fn es) = smap (fsym_sem fn_other fn) (collect (map asem es))"
 | "asem (Aggr g e) = aggregate (ag_sem g) (gate (requested e) (asem e))"
 | "asem (GroupBy ds e) = asem e"
-| "asem (For ds C e) = filtfor (lod ds) {|C|} (gate \<bottom> (asem e))"
+| "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
 | "asem (Where C e) = restrict (row_guard C) (gate \<bottom> (asem e))"
 
 text \<open>Well-formedness: every call has a number of arguments its symbol admits.\<close>
@@ -177,7 +177,7 @@ next
   then show ?case by (simp add: lawful_semilawful lawful_aggregate[OF lawful_gate ag_abel])
 next
   case (7 ds C e)
-  then show ?case by (simp add: semilawful_filtfor[OF lawful_semilawful[OF lawful_gate]])
+  then show ?case by (simp add: semilawful_filtfor)
 next
   case (8 C e)
   then show ?case by (simp add: lawful_semilawful[OF lawful_restrict[OF lawful_gate]])
