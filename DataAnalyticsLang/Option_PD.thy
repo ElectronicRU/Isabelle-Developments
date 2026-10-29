@@ -360,4 +360,135 @@ qed
 lemma tr_mult_simps [simp]: "TT \<odot> x = x" "FF \<odot> x = Absent" "\<bottom> \<odot> x = x + Absent"
   by (simp_all add: tr_mult_def cont2cont_LAM cont_tr_mult1)
 
+subsection \<open>Lifting binary operations\<close>
+
+text \<open>A binary function extends to the upper powerdomain by binding both arguments: on units it is
+  the function, and it distributes over sums in each argument.\<close>
+
+definition upper_bin :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<rightarrow> 'a upper_pd \<rightarrow> 'b upper_pd \<rightarrow> 'c upper_pd" where
+  "upper_bin = (\<Lambda> h S T. upper_bind\<cdot>S\<cdot>(\<Lambda> s. upper_bind\<cdot>T\<cdot>(\<Lambda> t. {h\<cdot>s\<cdot>t}\<sharp>)))"
+
+lemma upper_bin_apply: "upper_bin\<cdot>h\<cdot>S\<cdot>T = upper_bind\<cdot>S\<cdot>(\<Lambda> s. upper_bind\<cdot>T\<cdot>(\<Lambda> t. {h\<cdot>s\<cdot>t}\<sharp>))"
+  by (simp add: upper_bin_def)
+
+lemma upper_bin_unit [simp]: "upper_bin\<cdot>h\<cdot>{s}\<sharp>\<cdot>{t}\<sharp> = {h\<cdot>s\<cdot>t}\<sharp>"
+  by (simp add: upper_bin_apply)
+
+lemma upper_bin_plus1 [simp]: "upper_bin\<cdot>h\<cdot>(S \<union>\<sharp> S')\<cdot>T = upper_bin\<cdot>h\<cdot>S\<cdot>T \<union>\<sharp> upper_bin\<cdot>h\<cdot>S'\<cdot>T"
+  by (simp add: upper_bin_apply)
+
+lemma upper_bin_plus2 [simp]: "upper_bin\<cdot>h\<cdot>S\<cdot>(T \<union>\<sharp> T') = upper_bin\<cdot>h\<cdot>S\<cdot>T \<union>\<sharp> upper_bin\<cdot>h\<cdot>S\<cdot>T'"
+  by (induct S rule: upper_pd_induct) (simp_all add: upper_bin_apply upper_plus_ac)
+
+lemma upper_bin_unit1: "upper_bin\<cdot>h\<cdot>{s}\<sharp>\<cdot>T = upper_map\<cdot>(h\<cdot>s)\<cdot>T"
+  by (induct T rule: upper_pd_induct) simp_all
+
+lemma upper_bin_commute:
+  assumes "\<And>s t. h\<cdot>s\<cdot>t = h\<cdot>t\<cdot>s"
+  shows "upper_bin\<cdot>h\<cdot>S\<cdot>T = upper_bin\<cdot>h\<cdot>T\<cdot>S"
+proof (induct S arbitrary: T rule: upper_pd_induct)
+  case (upper_unit s)
+  show ?case by (induct T rule: upper_pd_induct) (simp_all add: assms)
+qed simp_all
+
+lemma upper_bin_assoc:
+  assumes "\<And>a b c. h\<cdot>(h\<cdot>a\<cdot>b)\<cdot>c = h\<cdot>a\<cdot>(h\<cdot>b\<cdot>c)"
+  shows "upper_bin\<cdot>h\<cdot>(upper_bin\<cdot>h\<cdot>S\<cdot>T)\<cdot>U = upper_bin\<cdot>h\<cdot>S\<cdot>(upper_bin\<cdot>h\<cdot>T\<cdot>U)"
+proof (induct S arbitrary: T U rule: upper_pd_induct)
+  case (upper_unit s)
+  show ?case
+  proof (induct T arbitrary: U rule: upper_pd_induct)
+    case (upper_unit t)
+    show ?case by (induct U rule: upper_pd_induct) (simp_all add: assms)
+  qed simp_all
+qed simp_all
+
+lemma upper_bin_nonbot:
+  assumes h: "\<And>s t. s \<noteq> \<bottom> \<Longrightarrow> t \<noteq> \<bottom> \<Longrightarrow> h\<cdot>s\<cdot>t \<noteq> \<bottom>" and S: "S \<noteq> \<bottom>" and T: "T \<noteq> \<bottom>"
+  shows "upper_bin\<cdot>h\<cdot>S\<cdot>T \<noteq> \<bottom>"
+proof -
+  have "S = \<bottom> \<or> upper_bin\<cdot>h\<cdot>S\<cdot>T \<noteq> \<bottom>"
+  proof (induct S rule: upper_pd_induct)
+    case (upper_unit s)
+    have "T = \<bottom> \<or> s = \<bottom> \<or> upper_bin\<cdot>h\<cdot>{s}\<sharp>\<cdot>T \<noteq> \<bottom>"
+    proof (induct T rule: upper_pd_induct)
+      case (upper_unit t)
+      then show ?case using h by auto
+    next
+      case (upper_plus T T')
+      then show ?case by auto
+    qed simp
+    then show ?case using T by auto
+  next
+    case (upper_plus S S')
+    then show ?case by auto
+  qed simp
+  then show ?thesis using S by simp
+qed
+
+text \<open>A binary operation on options, lifted through the lifting: defined on lifted options only.\<close>
+
+definition lift_up2 :: "('a::cpo \<rightarrow> 'b::cpo \<rightarrow> 'c::cpo) \<Rightarrow> 'a u \<rightarrow> 'b u \<rightarrow> 'c u" where
+  "lift_up2 G = (\<Lambda> s t. fup\<cdot>(\<Lambda> a. fup\<cdot>(\<Lambda> b. up\<cdot>(G\<cdot>a\<cdot>b))\<cdot>t)\<cdot>s)"
+
+lemma lift_up2_simps [simp]:
+  "lift_up2 G\<cdot>(up\<cdot>a)\<cdot>(up\<cdot>b) = up\<cdot>(G\<cdot>a\<cdot>b)" "lift_up2 G\<cdot>\<bottom>\<cdot>t = \<bottom>" "lift_up2 G\<cdot>s\<cdot>\<bottom> = \<bottom>"
+  by (simp_all add: lift_up2_def) (cases s; simp)
+
+lemma lift_up2_nonbot: "s \<noteq> \<bottom> \<Longrightarrow> t \<noteq> \<bottom> \<Longrightarrow> lift_up2 G\<cdot>s\<cdot>t \<noteq> \<bottom>"
+  by (cases s; cases t) simp_all
+
+text \<open>The lifted operation on results: every combination of the outcomes.\<close>
+
+definition option_pd_op :: "('v option \<rightarrow> 'v option \<rightarrow> 'v option) \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd" where
+  "option_pd_op G x y = Abs_option_pd (upper_bin\<cdot>(lift_up2 G)\<cdot>(Rep_option_pd x)\<cdot>(Rep_option_pd y))"
+
+lemma Rep_option_pd_op [simp]:
+  "Rep_option_pd (option_pd_op G x y) = upper_bin\<cdot>(lift_up2 G)\<cdot>(Rep_option_pd x)\<cdot>(Rep_option_pd y)"
+  unfolding option_pd_op_def by (rule Rep_Abs_option_pd, rule upper_bin_nonbot[OF lift_up2_nonbot]) simp_all
+
+lemma cont_option_pd_op [simp, cont2cont]:
+  "cont f \<Longrightarrow> cont g \<Longrightarrow> cont (\<lambda>x. option_pd_op G (f x) (g x))"
+  unfolding option_pd_op_def
+  by (rule cont_Abs_option_pd) (simp_all add: cont_Rep_option_pd upper_bin_nonbot lift_up2_nonbot)
+
+lemma Rep_of_option [simp]: "Rep_option_pd (of_option\<cdot>c) = {up\<cdot>c}\<sharp>"
+  by (cases c) simp_all
+
+lemma option_pd_op_of_option [simp]:
+  "option_pd_op G (of_option\<cdot>a) (of_option\<cdot>b) = of_option\<cdot>(G\<cdot>a\<cdot>b)"
+  by (simp add: Rep_option_pd_inject[symmetric])
+
+lemma option_pd_op_plus1: "option_pd_op G (x + y) z = option_pd_op G x z + option_pd_op G y z"
+  by (simp add: Rep_option_pd_inject[symmetric])
+
+lemma option_pd_op_plus2: "option_pd_op G z (x + y) = option_pd_op G z x + option_pd_op G z y"
+  by (simp add: Rep_option_pd_inject[symmetric])
+
+text \<open>A commutative monoid on options with unit \<open>None\<close> lifts to one on results with unit
+  \<open>Absent\<close>.\<close>
+
+lemma comm_monoid_option_pd_op:
+  assumes G: "comm_monoid (\<lambda>a b. G\<cdot>a\<cdot>b) None"
+  shows "comm_monoid (option_pd_op G) Absent"
+proof -
+  interpret G: comm_monoid "\<lambda>a b. G\<cdot>a\<cdot>b" None by (fact G)
+  have h_comm: "lift_up2 G\<cdot>s\<cdot>t = lift_up2 G\<cdot>t\<cdot>s" for s t
+    by (cases s; cases t) (simp_all add: G.commute)
+  have h_assoc: "lift_up2 G\<cdot>(lift_up2 G\<cdot>a\<cdot>b)\<cdot>c = lift_up2 G\<cdot>a\<cdot>(lift_up2 G\<cdot>b\<cdot>c)" for a b c
+    by (cases a; cases b; cases c) (simp_all add: G.assoc)
+  have h_unit: "lift_up2 G\<cdot>(up\<cdot>None) = ID"
+    by (rule cfun_eqI, case_tac x) simp_all
+  show ?thesis
+  proof
+    show "option_pd_op G (option_pd_op G x y) z = option_pd_op G x (option_pd_op G y z)" for x y z
+      by (simp add: Rep_option_pd_inject[symmetric] upper_bin_assoc[OF h_assoc])
+    show "option_pd_op G x y = option_pd_op G y x" for x y
+      by (simp add: Rep_option_pd_inject[symmetric] upper_bin_commute[OF h_comm])
+    show "option_pd_op G x Absent = x" for x
+      by (simp add: Rep_option_pd_inject[symmetric] upper_bin_commute[OF h_comm, of _ "{up\<cdot>None}\<sharp>"]
+          upper_bin_unit1 h_unit upper_map_ID)
+  qed
+qed
+
 end
