@@ -489,44 +489,30 @@ lemma saturate_simps [simp]:
   "csem (saturate M E) = csem E"
   by (simp_all add: saturate_def)
 
-theorem lawful_saturate_witness:
-  assumes ES: "semilawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
-    and W: "\<And>data F k. \<lbrakk>fconf (evalues E) data (finclude (emind E \<squnion> M) F); proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k;
-        esem E data (finclude (emind E \<squnion> M) F) k \<noteq> None\<rbrakk> \<Longrightarrow> group data (emind E \<squnion> M) \<top> F k \<noteq> {}"
-  shows "lawful (saturate M E)"
+theorem semilawful_saturate:
+  assumes ES: "semilawful E" and t: "S \<in> set (esels E)"
+    and tm: "emind E \<squnion> M \<sqsubseteq> lower_part (include_sel (emind E \<squnion> M) S)"
+  shows "semilawful (saturate M E)"
 proof -
   let ?m = "emind E \<squnion> M"
-  have tm: "lower_part S \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
   show ?thesis
-  proof (rule lawfulI, simp_all only: saturate_simps)
+  proof (rule semilawfulI, simp_all only: saturate_simps)
     show "cstrict (saturate M E)"
       using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
     show "entry_wf e" if "e \<in> set (map (include_entry ?m) (evalues E))" for e
       using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
-    show "(upper_part S' \<sqinter> ?m) \<sqsubseteq> lower_part S'"
-      if "S' \<in> set (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S'
-      using that by (auto intro: include_saturates[of ?m])
     show "?m = fold (\<squnion>) (map lower_part (map esel (map (include_entry ?m) (eguards E))
         @ map esel (map (include_entry ?m) (evalues E)))) \<bottom>"
     proof (rule below_antisym)
       let ?L = "map lower_part (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))"
-      have lo: "lower_part (include_sel ?m S) = ?m" using tm by (simp add: t(2) truncate_top lattice_join_absorb2)
-      have "lower_part (include_sel ?m S) \<in> set ?L" using t(1) by auto
-      then show "?m \<sqsubseteq> fold (\<squnion>) ?L \<bottom>" unfolding lo by (rule fold_join_upper)
+      have "lower_part (include_sel ?m S) \<in> set ?L" using t by auto
+      then show "?m \<sqsubseteq> fold (\<squnion>) ?L \<bottom>" by (rule below_trans[OF tm fold_join_upper])
       show "fold (\<squnion>) ?L \<bottom> \<sqsubseteq> ?m"
       proof (rule fold_join_least)
         fix x assume "x \<in> set ?L"
         then obtain S' where S': "S' \<in> set (esels E)" and x: "x = lower_part (include_sel ?m S')" by auto
         show "x \<sqsubseteq> ?m" unfolding x by (rule include_lower_below[OF below_trans[OF lower_below_mind[OF ES S'] lattice_join_ge1]])
       qed simp
-    qed
-    show "keyimg data F (?m \<squnion> flod F) k"
-      if d: "fconf (map (include_entry ?m) (evalues E)) data F"
-        and p: "(if proj (?m \<squnion> flod F)\<cdot>k = k then esem E data (finclude ?m F) k else None) \<noteq> None" for data F k
-    proof -
-      have k: "proj (?m \<squnion> flod F)\<cdot>k = k" using p by (simp split: if_splits)
-      have "esem E data (finclude ?m F) k \<noteq> None" using p k by simp
-      then show ?thesis using W[OF d[unfolded fconf_include] k] keyimg_group_top[OF k] by blast
     qed
     show "(if k = k then esem E data (finclude ?m F) k else None)
         = csem E (gcontents data (map (include_entry ?m) (eguards E)) F k)\<cdot>(contents data (map (include_entry ?m) (evalues E)) F k)"
@@ -539,6 +525,32 @@ proof -
         by (simp add: comp_def content_include_entry)
       have "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
       then show ?thesis by (simp only: g c semilawful_csem_conf[OF ES d'] simp_thms if_True)
+    qed
+  qed
+qed
+
+theorem lawful_saturate_witness:
+  assumes ES: "semilawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
+    and W: "\<And>data F k. \<lbrakk>fconf (evalues E) data (finclude (emind E \<squnion> M) F); proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k;
+        esem E data (finclude (emind E \<squnion> M) F) k \<noteq> None\<rbrakk> \<Longrightarrow> group data (emind E \<squnion> M) \<top> F k \<noteq> {}"
+  shows "lawful (saturate M E)"
+proof -
+  let ?m = "emind E \<squnion> M"
+  have tm: "lower_part S \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
+  have lo: "lower_part (include_sel ?m S) = ?m" using tm by (simp add: t(2) truncate_top lattice_join_absorb2)
+  show ?thesis
+  proof (rule lawful_semiI[OF semilawful_saturate[OF ES t(1)]], simp_all only: saturate_simps)
+    show "?m \<sqsubseteq> lower_part (include_sel ?m S)" by (simp only: lo below_refl)
+    show "(upper_part S' \<sqinter> ?m) \<sqsubseteq> lower_part S'"
+      if "S' \<in> set (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S'
+      using that by (auto intro: include_saturates[of ?m])
+    show "keyimg data F (?m \<squnion> flod F) k"
+      if d: "fconf (map (include_entry ?m) (evalues E)) data F"
+        and p: "(if proj (?m \<squnion> flod F)\<cdot>k = k then esem E data (finclude ?m F) k else None) \<noteq> None" for data F k
+    proof -
+      have k: "proj (?m \<squnion> flod F)\<cdot>k = k" using p by (simp split: if_splits)
+      have "esem E data (finclude ?m F) k \<noteq> None" using p k by simp
+      then show ?thesis using W[OF d[unfolded fconf_include] k] keyimg_group_top[OF k] by blast
     qed
   qed
 qed
@@ -580,32 +592,61 @@ proof -
   qed
 qed
 
-text \<open>The presence test: a true guard on the full group, keyed at nothing.\<close>
+text \<open>The contents of a semilawful expression only see the key at its own key LOD.\<close>
 
-definition present :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "present E = \<lparr>emind = emind E, eguards = mk_guard (sel (emind E) \<top>) gtrue \<bottom> # eguards E,
+lemma contents_own_key:
+  assumes E: "semilawful E"
+  shows "gcontents data (eguards E) F (proj (kd E F)\<cdot>k) = gcontents data (eguards E) F k"
+    and "contents data (evalues E) F (proj (kd E F)\<cdot>k) = contents data (evalues E) F k"
+proof -
+  have at: "proj (sel_at S (flod F))\<cdot>(proj (kd E F)\<cdot>k) = proj (sel_at S (flod F))\<cdot>k" if "S \<in> set (esels E)" for S
+    by (rule proj_le[OF group_below_kd[OF E that]])
+  show "gcontents data (eguards E) F (proj (kd E F)\<cdot>k) = gcontents data (eguards E) F k"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (eguards E)"
+    show "gcontent data e F (proj (kd E F)\<cdot>k) = gcontent data e F k"
+      using at[OF esels_guardI[OF e]] by (intro gcontent_group_cong) (simp add: group_def)
+  qed
+  show "contents data (evalues E) F (proj (kd E F)\<cdot>k) = contents data (evalues E) F k"
+  proof (rule map_cong[OF refl])
+    fix e assume e: "e \<in> set (evalues E)"
+    show "content data e F (proj (kd E F)\<cdot>k) = content data e F k"
+      using at[OF esels_valueI[OF e]] by (intro content_fiber_cong) (simp add: fiber_def)
+  qed
+qed
+
+text \<open>The presence test at a selector: a true guard keyed at nothing, whose lower part also raises
+  the minimal LOD.  The expression is evaluated at its own key.  At \<open>(\<bottom>, \<top>)\<close> it is the test on the
+  full group, the key's realisation.\<close>
+
+definition present_at :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "present_at a \<rho> E = \<lparr>emind = emind E \<squnion> a, eguards = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> # eguards E,
      evalues = evalues E,
-     esem = \<lambda>data F k. if keyimg data F (emind E \<squnion> flod F) k then esem E data F k else None,
+     esem = \<lambda>data F k. if group data (emind E \<squnion> a) \<rho> F k = {} then None else esem E data F (proj (kd E F)\<cdot>k),
      csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs\<rparr>"
 
-lemma present_simps [simp]:
-  "emind (present E) = emind E"
-  "eguards (present E) = mk_guard (sel (emind E) \<top>) gtrue \<bottom> # eguards E"
-  "evalues (present E) = evalues E"
-  "esem (present E) data F k = (if keyimg data F (emind E \<squnion> flod F) k then esem E data F k else None)"
-  "csem (present E) Gs\<cdot>Xs = (if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs)"
-  by (simp_all add: present_def)
+abbreviation present :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "present E \<equiv> present_at \<bottom> \<top> E"
 
-lemma covering_present: "covering (present E)"
+lemma present_at_simps [simp]:
+  "emind (present_at a \<rho> E) = emind E \<squnion> a"
+  "eguards (present_at a \<rho> E) = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> # eguards E"
+  "evalues (present_at a \<rho> E) = evalues E"
+  "esem (present_at a \<rho> E) data F k = (if group data (emind E \<squnion> a) \<rho> F k = {} then None
+     else esem E data F (proj (kd E F)\<cdot>k))"
+  "csem (present_at a \<rho> E) Gs\<cdot>Xs = (if hd Gs = {} then None else csem E (tl Gs)\<cdot>Xs)"
+  by (simp_all add: present_at_def)
+
+lemma covering_present_at: "covering (present_at a \<top> E)"
   by (simp add: covering_def)
 
-lemma cstrict_present:
+lemma cstrict_present_at:
   assumes E: "cstrict E"
-  shows "cstrict (present E)"
+  shows "cstrict (present_at a \<rho> E)"
 proof (rule cstrictI)
   fix Gs :: "'k set list" and Xs :: "('k \<Rightarrow> 'r option) list"
-  assume l: "length Gs = length (eguards (present E))" and lx: "length Xs = length (evalues (present E))"
-    and c: "csem (present E) Gs\<cdot>Xs \<noteq> None"
+  assume l: "length Gs = length (eguards (present_at a \<rho> E))" and lx: "length Xs = length (evalues (present_at a \<rho> E))"
+    and c: "csem (present_at a \<rho> E) Gs\<cdot>Xs \<noteq> None"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
   have lx': "length Xs = length (evalues E)" using lx by simp
@@ -613,33 +654,28 @@ proof (rule cstrictI)
   then show "{} \<notin> set Gs" using cstrictD[OF E l' lx'] by (auto simp: Gs)
 qed
 
-text \<open>The presence guard at the full key is the key's realisation.\<close>
-
-lemma gcontent_const_top:
-  assumes "proj (c \<squnion> flod F)\<cdot>k = k"
-  shows "gcontent data (mk_guard (sel c \<top>) gtrue \<bottom>) F k = (if keyimg data F (c \<squnion> flod F) k then {\<bottom>} else {})"
-  by (simp add: gcontent_gtrue_bot keyimg_group_top[OF assms])
-
-theorem semilawful_present:
+theorem semilawful_present_at:
   assumes ES: "semilawful E"
-  shows "semilawful (present E)"
-proof (rule semilawfulI, simp_all only: present_simps)
-  let ?h = "mk_guard (sel (emind E) \<top>) gtrue \<bottom> :: ('k, 'r guard) entry"
-  show "cstrict (present E)" by (rule cstrict_present[OF semilawful_cstrict[OF ES]])
+  shows "semilawful (present_at a \<rho> E)"
+proof (rule semilawfulI, simp_all only: present_at_simps)
+  let ?h = "mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> :: ('k, 'r guard) entry"
+  show "cstrict (present_at a \<rho> E)" by (rule cstrict_present_at[OF semilawful_cstrict[OF ES]])
   show "entry_wf e" if "e \<in> set (evalues E)" for e by (rule semilawful_wf[OF ES that])
-  have "fold (\<squnion>) (map lower_part (esels E)) (emind E) = emind E"
-    by (rule fold_join_absorb) (auto intro: lower_below_mind[OF ES])
-  then show "emind E = fold (\<squnion>) (map lower_part (map esel (?h # eguards E) @ map esel (evalues E))) \<bottom>"
+  have "fold (\<squnion>) (map lower_part (esels E)) (emind E \<squnion> a) = emind E \<squnion> a"
+    by (rule fold_join_absorb) (auto intro: below_trans[OF lower_below_mind[OF ES] lattice_join_ge1])
+  then show "emind E \<squnion> a = fold (\<squnion>) (map lower_part (map esel (?h # eguards E) @ map esel (evalues E))) \<bottom>"
     by (simp add: lattice_join_bot_right)
-  show "(if keyimg data F (emind E \<squnion> flod F) k then esem E data F k else None)
+  show "(if group data (emind E \<squnion> a) \<rho> F k = {} then None else esem E data F (proj (kd E F)\<cdot>k))
       = (if hd (gcontents data (?h # eguards E) F k) = {} then None
          else csem E (tl (gcontents data (?h # eguards E) F k))\<cdot>(contents data (evalues E) F k))"
-    if d: "fconf (evalues E) data F" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k" for data F k
+    if d: "fconf (evalues E) data F" for data F k
   proof -
-    have h: "hd (gcontents data (?h # eguards E) F k) = {} \<longleftrightarrow> \<not> keyimg data F (emind E \<squnion> flod F) k"
-      by (simp only: list.map list.sel gcontent_const_top[OF k]) simp
+    have h: "hd (gcontents data (?h # eguards E) F k) = {} \<longleftrightarrow> group data (emind E \<squnion> a) \<rho> F k = {}"
+      by (simp add: gcontent_gtrue_bot)
     have t: "tl (gcontents data (?h # eguards E) F k) = gcontents data (eguards E) F k" by simp
-    show ?thesis by (simp only: h t semilawful_csem_conf[OF ES d k]) simp
+    have v: "esem E data F (proj (kd E F)\<cdot>k) = csem_at E data F k"
+      by (simp only: semilawful_csem_conf[OF ES d proj_idem] contents_own_key[OF ES])
+    show ?thesis by (simp only: h t v)
   qed
 qed
 
@@ -654,7 +690,7 @@ lemma gate_simps [simp]:
   by (cases "covering E"; simp add: gate_def)+
 
 theorem lawful_gate: "semilawful E \<Longrightarrow> lawful (gate M E)"
-  unfolding gate_def by (simp add: lawful_saturate_covering semilawful_present covering_present)
+  unfolding gate_def by (simp add: lawful_saturate_covering semilawful_present_at covering_present_at)
 
 
 text \<open>Gating is idempotent: a gated expression covers, so gating it again only raises its entries,
@@ -672,7 +708,7 @@ lemma covering_saturate: "covering E \<Longrightarrow> covering (saturate M E)"
   by (force simp: covering_def)
 
 lemma covering_gate: "covering (gate M E)"
-  unfolding gate_def by (simp add: covering_saturate covering_present)
+  unfolding gate_def by (simp add: covering_saturate covering_present_at)
 
 lemma finclude_finclude_same: "finclude (m :: 'k semi_factor) (finclude m F) = finclude m F"
 proof -
@@ -743,9 +779,10 @@ proof (cases "keyimg data F (emind E \<squnion> M \<squnion> flod F) k")
   let ?m = "emind E \<squnion> M"
   obtain x where kx: "k = proj (?m \<squnion> flod F)\<cdot>(rkey\<cdot>x)" using ki by (auto simp: keyimg_def)
   have k: "proj (?m \<squnion> flod F)\<cdot>k = k" by (simp add: kx)
-  have ki': "keyimg data (finclude ?m F) (emind E \<squnion> flod (finclude ?m F)) k"
-    using ki by (simp only: keyimg_finclude kd_finclude_mind)
-  show ?thesis by (cases "covering E") (simp_all add: gate_def k ki ki')
+  have g: "group data (emind E) \<top> (finclude ?m F) k \<noteq> {}"
+    using ki unfolding keyimg_group_top[OF k] group_top_finclude[OF lattice_join_ge1] .
+  have kk: "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
+  show ?thesis by (cases "covering E") (simp_all add: gate_def k ki g kk lattice_join_bot_right)
 next
   case False
   have "keyimg data F (emind E \<squnion> M \<squnion> flod F) k" if "esem (gate M E) data F k \<noteq> None"
@@ -864,29 +901,6 @@ lemma collect_simps [simp]:
   "esem (collect Es) data F k = those (map (\<lambda>E. esem E data F (proj (kd E F)\<cdot>k)) Es)"
   "csem (collect Es) Gs\<cdot>Xs = collect_csem Es Gs Xs"
   by (simp_all add: collect_def cont_collect_csem[unfolded eta_cfun])
-
-text \<open>The contents of a semilawful expression only see the key at its own key LOD.\<close>
-
-lemma contents_own_key:
-  assumes E: "semilawful E"
-  shows "gcontents data (eguards E) F (proj (kd E F)\<cdot>k) = gcontents data (eguards E) F k"
-    and "contents data (evalues E) F (proj (kd E F)\<cdot>k) = contents data (evalues E) F k"
-proof -
-  have at: "proj (sel_at S (flod F))\<cdot>(proj (kd E F)\<cdot>k) = proj (sel_at S (flod F))\<cdot>k" if "S \<in> set (esels E)" for S
-    by (rule proj_le[OF group_below_kd[OF E that]])
-  show "gcontents data (eguards E) F (proj (kd E F)\<cdot>k) = gcontents data (eguards E) F k"
-  proof (rule map_cong[OF refl])
-    fix e assume e: "e \<in> set (eguards E)"
-    show "gcontent data e F (proj (kd E F)\<cdot>k) = gcontent data e F k"
-      using at[OF esels_guardI[OF e]] by (intro gcontent_group_cong) (simp add: group_def)
-  qed
-  show "contents data (evalues E) F (proj (kd E F)\<cdot>k) = contents data (evalues E) F k"
-  proof (rule map_cong[OF refl])
-    fix e assume e: "e \<in> set (evalues E)"
-    show "content data e F (proj (kd E F)\<cdot>k) = content data e F k"
-      using at[OF esels_valueI[OF e]] by (intro content_fiber_cong) (simp add: fiber_def)
-  qed
-qed
 
 lemma collect_blocks_strict:
   assumes "\<And>E. E \<in> set Es \<Longrightarrow> cstrict E"
@@ -1070,6 +1084,67 @@ proof (rule lawful_saturate_witness[OF semilawful_collect[OF law]])
     using jointly_lawful_present[OF E0(2) d0 kk p0] by (auto simp: jointly_present_def)
   then have "y \<in> group data (lower_part S) \<top> (finclude ?m F) k" using t by fastforce
   then show "group data ?m \<top> F k \<noteq> {}" unfolding group_top_finclude[OF tm] by blast
+qed
+
+text \<open>The joint gate: saturating after the presence test at the selector of the minimal LOD raised
+  by \<open>M\<close> and the join of the upper parts.  That group lies inside every raised group, so its row is
+  a joint witness: the result is jointly lawful, whatever the expression.\<close>
+
+lemma group_include:
+  "group data (sel_at S m) (upper_part S) F k = group data (lower_part S) (upper_part S) (finclude m F) k"
+  by (rule group_cong) (simp_all only: amb_finclude slice_finclude include_lod[unfolded include_sel_simps])
+
+lemma group_sub_mono:
+  assumes G: "a' \<squnion> (\<rho>' \<sqinter> flod F) \<sqsubseteq> a \<squnion> (\<rho> \<sqinter> flod F)" and r: "\<rho>' \<sqsubseteq> \<rho>" and y: "y \<in> group data a \<rho> F k"
+  shows "y \<in> group data a' \<rho>' F k"
+proof -
+  let ?G = "a \<squnion> (\<rho> \<sqinter> flod F)" and ?G' = "a' \<squnion> (\<rho>' \<sqinter> flod F)"
+  have y': "y \<in> lower_maximal data" "selects (amb F) y" "holds (coarsen \<rho> (slice F)) (rkey\<cdot>y)" "rproj ?G y = proj ?G\<cdot>k"
+    using y by (simp_all add: group_def)
+  have "rproj ?G' y = proj ?G'\<cdot>k" using proj_le[OF G, of "rkey\<cdot>y"] proj_le[OF G, of k] y'(4) by metis
+  then show ?thesis using y' holds_coarsen_le[OF r y'(3)] by (simp add: group_def)
+qed
+
+definition gate_joint :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "gate_joint M E = saturate M (present_at M (fold (\<squnion>) (map upper_part (esels E)) \<bottom>) E)"
+
+theorem jointly_lawful_gate_joint:
+  assumes ES: "semilawful E"
+  shows "jointly_lawful (gate_joint M E)"
+proof -
+  let ?\<rho> = "fold (\<squnion>) (map upper_part (esels E)) \<bottom>" and ?m = "emind E \<squnion> M"
+  let ?P = "present_at M ?\<rho> E"
+  have PS: "semilawful ?P" by (rule semilawful_present_at[OF ES])
+  have mM: "?m \<squnion> M = ?m" by (rule lattice_join_absorb1[OF lattice_join_ge2])
+  have h: "sel ?m ?\<rho> \<in> set (esels ?P)" by simp
+  have hm: "emind ?P \<squnion> M \<sqsubseteq> lower_part (include_sel (emind ?P \<squnion> M) (sel ?m ?\<rho>))"
+    by (simp add: mM lattice_join_ge1)
+  have SS: "semilawful (gate_joint M E)" unfolding gate_joint_def by (rule semilawful_saturate[OF PS h hm])
+  show ?thesis
+  proof (rule jointly_lawfulI[OF SS])
+    fix data F k assume p: "esem (gate_joint M E) data F k \<noteq> None"
+    have "esem ?P data (finclude ?m F) k \<noteq> None" using p by (simp add: gate_joint_def mM split: if_splits)
+    then obtain y where y: "y \<in> group data ?m ?\<rho> (finclude ?m F) k" by (auto split: if_splits)
+    show "jointly_present data (gate_joint M E) F k" unfolding jointly_present_def
+    proof (intro exI ballI)
+      fix S assume "S \<in> set (esels (gate_joint M E))"
+      then obtain S0 where S0: "S0 \<in> set (esels ?P)" and S: "S = include_sel ?m S0"
+        by (auto simp: gate_joint_def mM)
+      have lb: "lower_part S0 \<sqsubseteq> ?m"
+        using S0 by (auto intro: below_trans[OF lower_below_mind[OF ES] lattice_join_ge1])
+      have ub: "upper_part S0 \<sqsubseteq> ?\<rho>"
+      proof (cases "S0 = sel ?m ?\<rho>")
+        case False
+        then have "S0 \<in> set (esels E)" using S0 by simp
+        then have "upper_part S0 \<in> set (map upper_part (esels E))" unfolding set_map by (rule imageI)
+        then show ?thesis by (rule fold_join_upper)
+      qed simp
+      have "y \<in> group data (lower_part S0) (upper_part S0) (finclude ?m F) k"
+        by (rule group_sub_mono[OF lattice_join_mono[OF lb lattice_meet_mono[OF ub below_refl]] ub y])
+      then show "y \<in> group data (lower_part S) (upper_part S) F k"
+        unfolding S include_sel_simps group_include .
+    qed
+  qed
 qed
 
 end
