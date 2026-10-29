@@ -469,37 +469,37 @@ proof -
   then show ?thesis unfolding flod_finclude by (simp only: lattice_join_absorb2 lattice_join_commute)
 qed
 
-text \<open>Raising alone: lawful as soon as presence under the raised frame has a witness in the full
-  group.\<close>
+text \<open>Saturating: raising alone, with no presence test.  It is lawful as soon as presence under
+  the raised frame has a witness in the full group.\<close>
 
-definition gate_joint :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate_joint M E = \<lparr>emind = emind E \<squnion> M,
+definition saturate :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "saturate M E = \<lparr>emind = emind E \<squnion> M,
      eguards = map (include_entry (emind E \<squnion> M)) (eguards E),
      evalues = map (include_entry (emind E \<squnion> M)) (evalues E),
      esem = \<lambda>data F k. if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
        then esem E data (finclude (emind E \<squnion> M) F) k else None,
      csem = csem E\<rparr>"
 
-lemma gate_joint_simps [simp]:
-  "emind (gate_joint M E) = emind E \<squnion> M"
-  "eguards (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (eguards E)"
-  "evalues (gate_joint M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
-  "esem (gate_joint M E) data F k = (if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
+lemma saturate_simps [simp]:
+  "emind (saturate M E) = emind E \<squnion> M"
+  "eguards (saturate M E) = map (include_entry (emind E \<squnion> M)) (eguards E)"
+  "evalues (saturate M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
+  "esem (saturate M E) data F k = (if proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k
        then esem E data (finclude (emind E \<squnion> M) F) k else None)"
-  "csem (gate_joint M E) = csem E"
-  by (simp_all add: gate_joint_def)
+  "csem (saturate M E) = csem E"
+  by (simp_all add: saturate_def)
 
-theorem lawful_gate_joint_witness:
+theorem lawful_saturate_witness:
   assumes ES: "semilawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
     and W: "\<And>data F k. \<lbrakk>fconf (evalues E) data (finclude (emind E \<squnion> M) F); proj (emind E \<squnion> M \<squnion> flod F)\<cdot>k = k;
         esem E data (finclude (emind E \<squnion> M) F) k \<noteq> None\<rbrakk> \<Longrightarrow> group data (emind E \<squnion> M) \<top> F k \<noteq> {}"
-  shows "lawful (gate_joint M E)"
+  shows "lawful (saturate M E)"
 proof -
   let ?m = "emind E \<squnion> M"
   have tm: "lower_part S \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind[OF ES t(1)] lattice_join_ge1])
   show ?thesis
-  proof (rule lawfulI, simp_all only: gate_joint_simps)
-    show "cstrict (gate_joint M E)"
+  proof (rule lawfulI, simp_all only: saturate_simps)
+    show "cstrict (saturate M E)"
       using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
     show "entry_wf e" if "e \<in> set (map (include_entry ?m) (evalues E))" for e
       using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
@@ -554,15 +554,15 @@ definition covering :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
 lemma gcontent_group_nonempty: "gcontent data e F k \<noteq> {} \<Longrightarrow> group data (elower e) (eupper e) F k \<noteq> {}"
   by (auto simp: gcontent_def gfiber_def)
 
-theorem lawful_gate_joint_covering:
+theorem lawful_saturate_covering:
   assumes ES: "semilawful E" and cov: "covering E"
-  shows "lawful (gate_joint M E)"
+  shows "lawful (saturate M E)"
 proof -
   obtain t where t: "t \<in> set (eguards E)" "eupper t = \<top>" using cov by (auto simp: covering_def)
   let ?m = "emind E \<squnion> M"
   have tm: "elower t \<sqsubseteq> ?m" by (rule below_trans[OF lower_below_mind_guard[OF ES t(1)] lattice_join_ge1])
   show ?thesis
-  proof (rule lawful_gate_joint_witness[OF ES esels_guardI[OF t(1)] t(2)])
+  proof (rule lawful_saturate_witness[OF ES esels_guardI[OF t(1)] t(2)])
     fix data F k assume d: "fconf (evalues E) data (finclude ?m F)" and k: "proj (?m \<squnion> flod F)\<cdot>k = k"
       and p: "esem E data (finclude ?m F) k \<noteq> None"
     have k': "proj (kd E (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
@@ -646,7 +646,7 @@ qed
 text \<open>The gate at \<open>M\<close>: raising, after the presence test unless the expression covers.\<close>
 
 definition gate :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate M E = gate_joint M (if covering E then E else present E)"
+  "gate M E = saturate M (if covering E then E else present E)"
 
 lemma gate_simps [simp]:
   "emind (gate M E) = emind E \<squnion> M"
@@ -654,7 +654,7 @@ lemma gate_simps [simp]:
   by (cases "covering E"; simp add: gate_def)+
 
 theorem lawful_gate: "semilawful E \<Longrightarrow> lawful (gate M E)"
-  unfolding gate_def by (simp add: lawful_gate_joint_covering semilawful_present covering_present)
+  unfolding gate_def by (simp add: lawful_saturate_covering semilawful_present covering_present)
 
 
 text \<open>Gating is idempotent: a gated expression covers, so gating it again only raises its entries,
@@ -668,11 +668,11 @@ lemma include_entry_saturated: "eupper e \<sqinter> m \<sqsubseteq> elower e \<L
 lemma include_entry_idem: "include_entry m (include_entry m e) = include_entry m e"
   by (rule include_entry_saturated) (simp add: lattice_join_ge2)
 
-lemma covering_gate_joint: "covering E \<Longrightarrow> covering (gate_joint M E)"
+lemma covering_saturate: "covering E \<Longrightarrow> covering (saturate M E)"
   by (force simp: covering_def)
 
 lemma covering_gate: "covering (gate M E)"
-  unfolding gate_def by (simp add: covering_gate_joint covering_present)
+  unfolding gate_def by (simp add: covering_saturate covering_present)
 
 lemma finclude_finclude_same: "finclude (m :: 'k semi_factor) (finclude m F) = finclude m F"
 proof -
@@ -683,20 +683,20 @@ qed
 lemma keyimg_finclude: "keyimg data (finclude m F) c k = keyimg data F c k"
   by (simp add: keyimg_def frows_def)
 
-lemma gate_joint_idem: "gate_joint M (gate_joint M E) = gate_joint M E"
+lemma saturate_idem: "saturate M (saturate M E) = saturate M E"
 proof -
   let ?m = "emind E \<squnion> M"
   have mM: "?m \<squnion> M = ?m" by (rule lattice_join_absorb1[OF lattice_join_ge2])
   have kd: "?m \<squnion> flod (finclude ?m F) = ?m \<squnion> flod F" for F
     by (rule join_finclude_absorb[OF below_refl])
-  show ?thesis unfolding gate_joint_def[of M "gate_joint M E"] gate_joint_simps mM
-    by (simp add: gate_joint_def include_entry_idem comp_def kd finclude_finclude_same fun_eq_iff)
+  show ?thesis unfolding saturate_def[of M "saturate M E"] saturate_simps mM
+    by (simp add: saturate_def include_entry_idem comp_def kd finclude_finclude_same fun_eq_iff)
 qed
 
 theorem gate_idem: "gate M (gate M E) = gate M E"
 proof -
-  have "gate M (gate M E) = gate_joint M (gate M E)" using covering_gate[of M E] by (simp add: gate_def[of M "gate M E"])
-  also have "\<dots> = gate M E" unfolding gate_def[of M E] by (rule gate_joint_idem)
+  have "gate M (gate M E) = saturate M (gate M E)" using covering_gate[of M E] by (simp add: gate_def[of M "gate M E"])
+  also have "\<dots> = gate M E" unfolding gate_def[of M E] by (rule saturate_idem)
   finally show ?thesis .
 qed
 
@@ -706,7 +706,7 @@ theorem gate_lawful_covering:
     and "conforms data \<Longrightarrow> esem (gate \<bottom> E) data F k = esem E data F k"
 proof -
   let ?m = "emind E"
-  have g: "gate \<bottom> E = gate_joint \<bottom> E" using cov by (simp add: gate_def)
+  have g: "gate \<bottom> E = saturate \<bottom> E" using cov by (simp add: gate_def)
   have "map (include_entry ?m) (eguards E) = eguards E"
     by (rule map_idI) (rule include_entry_saturated[OF lawful_saturated[OF EL esels_guardI]])
   then show "eguards (gate \<bottom> E) = eguards E" by (simp add: g)
@@ -1031,10 +1031,10 @@ qed
 lemma jointly_lawful_gate: "semilawful E \<Longrightarrow> jointly_lawful (gate M E)"
   by (rule lawful_jointly_lawful[OF lawful_gate])
 
-corollary lawful_gate_joint:
+corollary lawful_saturate:
   assumes E: "jointly_lawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
-  shows "lawful (gate_joint M E)"
-proof (rule lawful_gate_joint_witness[OF jointly_lawful_semilawful[OF E] t])
+  shows "lawful (saturate M E)"
+proof (rule lawful_saturate_witness[OF jointly_lawful_semilawful[OF E] t])
   let ?m = "emind E \<squnion> M"
   have tm: "lower_part S \<sqsubseteq> ?m"
     by (rule below_trans[OF lower_below_mind[OF jointly_lawful_semilawful[OF E] t(1)] lattice_join_ge1])
@@ -1047,11 +1047,11 @@ proof (rule lawful_gate_joint_witness[OF jointly_lawful_semilawful[OF E] t])
   then show "group data ?m \<top> F k \<noteq> {}" unfolding group_top_finclude[OF tm] by blast
 qed
 
-theorem lawful_gate_joint_collect:
+theorem lawful_saturate_collect:
   assumes law: "\<And>E. E \<in> set Es \<Longrightarrow> semilawful E" and E0: "E0 \<in> set Es" "jointly_lawful E0"
     and t: "S \<in> set (esels E0)" "upper_part S = \<top>"
-  shows "lawful (gate_joint M (collect Es))"
-proof (rule lawful_gate_joint_witness[OF semilawful_collect[OF law]])
+  shows "lawful (saturate M (collect Es))"
+proof (rule lawful_saturate_witness[OF semilawful_collect[OF law]])
   show "S \<in> set (esels (collect Es))" using t(1) E0(1) by auto
   show "upper_part S = \<top>" by (fact t(2))
   let ?m = "emind (collect Es) \<squnion> M"
