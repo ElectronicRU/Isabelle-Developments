@@ -22,24 +22,28 @@ begin
 
 subsection \<open>Keys\<close>
 
-text \<open>The key at an LOD \<open>c\<close>.  It is a guard alone: the group of rows with that key part, the
-  frame's filters coarsened to \<open>c\<close>, keyed there, so its content is that key part, or nothing; it
-  is present where that group is nonempty, so it is gated at its own row LOD, not at the frame's
-  keys.\<close>
+text \<open>The key at an LOD \<open>c\<close>.  Its presence is a true guard on the group of rows with that key
+  part, the frame's filters coarsened to \<open>c\<close>; its value entry reads no columns and is keyed at
+  \<open>c\<close>, so its content's one key is that key part.  It is present where that group is nonempty, so
+  it is gated at its own row LOD, not at the frame's keys.\<close>
 
 lemma join_meet_self: "c \<squnion> (c \<sqinter> L) = c" for c :: "'k semi_factor"
   by (rule lattice_join_absorb1[OF lattice_meet_le1])
 
+lemma cont_key_value: "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. Some (the_elem (dom (hd Xs))))"
+  by (rule cont_rigid, rule rigidI) (simp only: rigidD[OF rigid_comp[OF rigid_dom cont2mono[OF cont_hd]]])
+
 definition key_at :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'k) expr" where
-  "key_at c = \<lparr>emind = c, eguards = [mk_guard (sel c c) gtrue c], evalues = [],
+  "key_at c = \<lparr>emind = c, eguards = [mk_guard (sel c c) gtrue \<bottom>], evalues = [mk_value (sel c c) \<bottom> c],
      esem = \<lambda>data F k. if group data c c F k = {} then None else Some (proj c\<cdot>k),
-     csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then None else Some (the_elem (hd Gs))\<rparr>"
+     csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then None else Some (the_elem (dom (hd Xs)))\<rparr>"
 
 lemma key_at_simps [simp]:
-  "emind (key_at c) = c" "eguards (key_at c) = [mk_guard (sel c c) gtrue c]" "evalues (key_at c) = []"
+  "emind (key_at c) = c" "eguards (key_at c) = [mk_guard (sel c c) gtrue \<bottom>]"
+  "evalues (key_at c) = [mk_value (sel c c) \<bottom> c]"
   "esem (key_at c) data F k = (if group data c c F k = {} then None else Some (proj c\<cdot>k))"
-  "csem (key_at c) Gs\<cdot>Xs = (if hd Gs = {} then None else Some (the_elem (hd Gs)))"
-  by (simp_all add: key_at_def)
+  "csem (key_at c) Gs\<cdot>Xs = (if hd Gs = {} then None else Some (the_elem (dom (hd Xs))))"
+  by (simp_all add: key_at_def cont_key_value)
 
 lemma group_own: "y \<in> group data c c F k \<Longrightarrow> rproj c y = proj c\<cdot>k"
   by (simp add: group_def join_meet_self)
@@ -47,12 +51,14 @@ lemma group_own: "y \<in> group data c c F k \<Longrightarrow> rproj c y = proj 
 lemma fiber_own: "y \<in> fiber data c c F k \<Longrightarrow> rproj c y = proj c\<cdot>k"
   by (simp add: fiber_def join_meet_self)
 
-lemma gcontent_key_at:
-  "gcontent data (mk_guard (sel c c) gtrue c) F k = (if group data c c F k = {} then {} else {proj c\<cdot>k})"
+lemma dom_content_key_at:
+  assumes "fiber data c c F k \<noteq> {}"
+  shows "dom (content data (mk_value (sel c c) \<bottom> c) F k) = {proj c\<cdot>k}"
 proof -
-  have "gcontent data (mk_guard (sel c c) gtrue c) F k = (\<lambda>_. proj c\<cdot>k) ` group data c c F k"
-    unfolding gcontent_gtrue by (rule image_cong) (simp_all add: group_own)
-  then show ?thesis by (simp add: image_constant_conv)
+  have "dom (content data (mk_value (sel c c) \<bottom> c) F k) = (\<lambda>_. proj c\<cdot>k) ` fiber data c c F k"
+    unfolding content_def dom_gmap cgraph_def image_image cpair_def
+    by (rule image_cong) (simp_all add: vfiber_def fiber_own)
+  then show ?thesis using assms by (simp add: image_constant_conv)
 qed
 
 lemma cstrict_key_at: "cstrict (key_at c)"
@@ -60,14 +66,19 @@ lemma cstrict_key_at: "cstrict (key_at c)"
 
 theorem semilawful_key_at: "semilawful (key_at c)"
 proof (rule semilawfulI, simp_all only: key_at_simps)
+  let ?g = "mk_guard (sel c c) gtrue \<bottom> :: ('k, 'r guard) entry" and ?e = "mk_value (sel c c) \<bottom> c"
   show "cstrict (key_at c)" by (rule cstrict_key_at)
-  show "entry_wf e" if "e \<in> set []" for e using that by simp
-  show "c = fold (\<squnion>) (map lower_part (map esel [mk_guard (sel c c) gtrue c] @ map esel [])) \<bottom>"
-    by (simp add: lattice_join_bot_right)
+  show "entry_wf e" if "e \<in> set [?e]" for e using that by (simp add: entry_wf_view keyed_view_key)
+  show "c = fold (\<squnion>) (map lower_part (map esel [?g] @ map esel [?e])) \<bottom>"
+    by (simp add: lattice_join_bot_right lattice_join_absorb1[OF below_refl])
   show "(if group data c c F k = {} then None else Some (proj c\<cdot>k))
-      = (if hd (gcontents data [mk_guard (sel c c) gtrue c] F k) = {} then None
-         else Some (the_elem (hd (gcontents data [mk_guard (sel c c) gtrue c] F k))))" for data F k
-    by (simp only: list.map list.sel gcontent_key_at) simp
+      = (if hd (gcontents data [?g] F k) = {} then None
+         else Some (the_elem (dom (hd (contents data [?e] F k)))))" for data F k
+  proof (cases "group data c c F k = {}")
+    case False
+    then have f: "fiber data c c F k \<noteq> {}" using group_sub_fiber by blast
+    show ?thesis using False by (simp only: list.map list.sel gcontent_gtrue_bot dom_content_key_at[OF f]) simp
+  qed (simp add: gcontent_gtrue_bot)
 qed
 
 subsection \<open>Table columns\<close>
@@ -200,9 +211,10 @@ definition value_at :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> 'v::cpo) 
   "value_at c g = smap g (key_at c)"
 
 lemma value_at_simps [simp]:
-  "emind (value_at c g) = c" "eguards (value_at c g) = [mk_guard (sel c c) gtrue c]" "evalues (value_at c g) = []"
+  "emind (value_at c g) = c" "eguards (value_at c g) = [mk_guard (sel c c) gtrue \<bottom>]"
+  "evalues (value_at c g) = [mk_value (sel c c) \<bottom> c]"
   "esem (value_at c g) data F k = (if group data c c F k = {} then None else Some (g\<cdot>(proj c\<cdot>k)))"
-  "csem (value_at c g) Gs\<cdot>Xs = (if hd Gs = {} then None else Some (g\<cdot>(the_elem (hd Gs))))"
+  "csem (value_at c g) Gs\<cdot>Xs = (if hd Gs = {} then None else Some (g\<cdot>(the_elem (dom (hd Xs)))))"
   by (simp_all add: value_at_def)
 
 theorem semilawful_value_at: "semilawful (value_at c g)"

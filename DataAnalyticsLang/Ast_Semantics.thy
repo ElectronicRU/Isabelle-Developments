@@ -20,7 +20,7 @@ definition total_level :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
   "total_level E \<longleftrightarrow> emind E = \<bottom>"
 
 lemma row_level_value_at: "row_level (value_at c g)"
-  by (simp add: row_level_def row_guard_entry_def guard_keyed_gtrue)
+  by (simp add: row_level_def row_entry_def row_guard_entry_def guard_keyed_gtrue)
 
 lemma row_level_column: "row_level (column c a v)"
   by (simp add: row_level_def row_entry_def row_guard_entry_def guard_keyed_gtrue)
