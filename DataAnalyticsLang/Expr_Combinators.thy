@@ -453,8 +453,8 @@ subsection \<open>Presence and raising\<close>
 
 text \<open>An expression becomes lawful by the presence test on its full group: the one combinator that
   reads a key's realisation.  Raising the frame is separate.  Including dimensions \<open>M\<close> evaluates
-  under the frame raised by \<open>M\<close>, which refines the groups by them (requested dimensions, inside an
-  aggregation); saturating raises by the minimal LOD as well, which saturates the entries, so a
+  under the frame raised by \<open>M\<close>, which refines the groups by them where the expression does not
+  mask them (\<open>GROUP BY\<close>); saturating raises by the minimal LOD as well, which saturates the entries, so a
   covering expression needs no presence test.\<close>
 
 lemma kd_finclude_mind: "emind E \<squnion> flod (finclude (emind E \<squnion> M) F) = (emind E \<squnion> M) \<squnion> flod F"

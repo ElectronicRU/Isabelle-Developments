@@ -84,19 +84,6 @@ begin
 sublocale dataspace "ast_slicing :: (('d, 'c, 'fn, 'ag) slice, 'k) slicer_ops" rules keying
   by (simp add: dataspace_def slicer_ast_slicing keyed_schema_axioms)
 
-text \<open>The \<^emph>\<open>requested\<close> dimensions of an expression: \<open>GROUP BY\<close> raises them, an aggregation
-  consumes those of its argument and requests none itself; cuts and filters leave them alone.\<close>
-
-fun requested :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> 'k semi_factor" where
-  "requested (Dim d) = \<bottom>"
-| "requested (Col c) = \<bottom>"
-| "requested (Lit v) = \<bottom>"
-| "requested (Call fn es) = fold (\<squnion>) (map requested es) \<bottom>"
-| "requested (Aggr g e) = \<bottom>"
-| "requested (GroupBy ds e) = lod ds \<squnion> requested e"
-| "requested (For ds C e) = requested e"
-| "requested (Where C e) = requested e"
-
 text \<open>Row-level expressions read the parts of their views directly: dimensions the key part,
   columns their sections, calls their arguments' parts.  Their view joins the views of the
   dimensions and columns they read.  (A reading of row-level conditions apart from the expression
@@ -149,8 +136,8 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
 | "asem (Col c) = column (col_sec c) (dim_lod (col_dim c)) (col_val c)"
 | "asem (Lit v) = value_at \<bottom> (\<Lambda> _. v)"
 | "asem (Call fn es) = smap (fsym_sem fn_other fn) (collect (map asem es))"
-| "asem (Aggr g e) = aggregate (ag_sem g) (present_at (requested e) \<top> (include_dims (requested e) (asem e)))"
-| "asem (GroupBy ds e) = asem e"
+| "asem (Aggr g e) = aggregate (ag_sem g) (present (asem e))"
+| "asem (GroupBy ds e) = include_dims (lod ds) (asem e)"
 | "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
 | "asem (Where C e) = restrict (row_guard C) (present (asem e))"
 
@@ -166,7 +153,7 @@ fun wf :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> bool" where
 | "wf (For ds C e) \<longleftrightarrow> wf e"
 | "wf (Where C e) \<longleftrightarrow> row_ast C \<and> wf e"
 
-text \<open>The semantics is semilawful; gating it at the top gives the lawful expression.\<close>
+text \<open>The semantics is semilawful; the presence test at the top gives the lawful expression.\<close>
 
 theorem semilawful_asem: "wf e \<Longrightarrow> semilawful (asem e)"
 proof (induct e rule: wf.induct)
@@ -175,7 +162,10 @@ proof (induct e rule: wf.induct)
 next
   case (5 g e)
   then show ?case
-    by (simp add: lawful_semilawful lawful_aggregate[OF lawful_present_at[OF semilawful_include_dims] ag_abel])
+    by (simp add: lawful_semilawful lawful_aggregate[OF lawful_present_at ag_abel])
+next
+  case (6 ds e)
+  then show ?case by (simp add: semilawful_include_dims)
 next
   case (7 ds C e)
   then show ?case by (simp add: semilawful_filtfor)

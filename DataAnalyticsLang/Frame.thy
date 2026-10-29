@@ -24,8 +24,7 @@ hide_const (open) frame.truncate
 section \<open>Frame transformers\<close>
 
 text \<open>The level-of-detail constructs act on the frame an inner expression is evaluated under.
-  \<open>finclude D\<close> adds detail \<open>D\<close> (requested detail: \<open>INCLUDE\<close> is not a combinator of its own, it
-  compiles into the grouping inside an aggregate); \<open>frestrict \<phi>\<close> adds \<open>\<phi>\<close> to the ambient filter;
+  \<open>finclude D\<close> adds detail \<open>D\<close> (\<open>GROUP BY\<close>); \<open>frestrict \<phi>\<close> adds \<open>\<phi>\<close> to the ambient filter;
   \<open>ffor \<tau> G\<close> needs the slicer: it drops detail by a truncation \<open>\<tau>\<close>, from the frame and from the
   slice, and conjoins \<open>G\<close>.  Pegging conjoins a key's pin to the slice.\<close>
 

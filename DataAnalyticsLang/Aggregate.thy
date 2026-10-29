@@ -126,7 +126,7 @@ definition afiber :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \
 text \<open>\<open>aggregate f E\<close> folds the inner values over the inner keys below each key of the frame.
   The inner keys are those where the inner expression is present: its own domain, so for a lawful
   inner expression they are data keys.  Grouping finer than the frame is the inner expression's own
-  (the requested dimensions included).  The aggregate's keys are the frame's, so it decides no
+  (its \<open>GROUP BY\<close> dimensions included).  The aggregate's keys are the frame's, so it decides no
   detail: its entries are the inner ones released (their lower parts move into their views' key
   parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
 
