@@ -124,43 +124,14 @@ definition afiber :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \
   "afiber data F c k = {y \<in> lower_maximal data. frows F y \<and> rproj c y = k}"
 
 text \<open>\<open>aggregate f E\<close> folds the inner values over the inner keys below each key of the frame.
-  The inner keys are those where the inner expression is present: its own domain, so for a lawful
-  inner expression they are data keys.  Grouping finer than the frame is the inner expression's own
-  (its \<open>GROUP BY\<close> dimensions included).  The aggregate's keys are the frame's, so it decides no
-  detail: its entries are the inner ones released (their lower parts move into their views' key
-  parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
+  The inner keys are the realised ones: the keys, at the inner key LOD, of the frame's rows below
+  the key, where the inner expression is present.  Grouping finer than the frame is the inner
+  expression's own (its \<open>GROUP BY\<close> dimensions included).  The aggregate's keys are the frame's, so
+  it decides no detail: its entries are the inner ones released (their lower parts move into their
+  views' key parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
 
 definition inner_keys :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
-  "inner_keys E data F k = {\<kappa>. proj (kd E F)\<cdot>\<kappa> = \<kappa> \<and> proj (flod F)\<cdot>\<kappa> = k \<and> esem E data F \<kappa> \<noteq> None}"
-
-text \<open>For a lawful inner expression at a conforming dataset, its keys below \<open>k\<close> are the defined ones
-  among the inner keys of the fiber of \<open>k\<close>.\<close>
-
-lemma inner_keys_fiber:
-  assumes EL: "lawful E" and d: "fconf (evalues E) data F"
-  shows "inner_keys E data F k = {\<kappa> \<in> rproj (kd E F) ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
-proof -
-  let ?X = "kd E F"
-  have le: "flod F \<sqsubseteq> ?X" by (rule lattice_join_ge2)
-  show ?thesis
-  proof (rule set_eqI, rule iffI)
-    fix \<kappa> assume "\<kappa> \<in> inner_keys E data F k"
-    then have kfix: "proj ?X\<cdot>\<kappa> = \<kappa>" and below: "proj (flod F)\<cdot>\<kappa> = k" and kdef: "esem E data F \<kappa> \<noteq> None"
-      by (simp_all add: inner_keys_def)
-    obtain x where x: "x \<in> lower_maximal data" "frows F x" and kx: "\<kappa> = rproj ?X x"
-      using lawful_key_law_conf[OF EL d kfix kdef] by (auto simp: keyimg_def)
-    have "rproj (flod F) x = k" using below unfolding kx by (simp only: proj_le[OF le])
-    then show "\<kappa> \<in> {\<kappa> \<in> rproj ?X ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
-      using x kx kdef by (auto simp: afiber_def)
-  next
-    fix \<kappa> assume "\<kappa> \<in> {\<kappa> \<in> rproj ?X ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
-    then obtain x where x: "x \<in> afiber data F (flod F) k" and kx: "\<kappa> = rproj ?X x"
-      and kdef: "esem E data F \<kappa> \<noteq> None" by blast
-    have "rproj (flod F) x = k" using x by (simp add: afiber_def)
-    then have "proj (flod F)\<cdot>\<kappa> = k" unfolding kx by (simp only: proj_le[OF le])
-    then show "\<kappa> \<in> inner_keys E data F k" using kdef by (simp add: inner_keys_def kx)
-  qed
-qed
+  "inner_keys E data F k = {\<kappa> \<in> rproj (kd E F) ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
 
 text \<open>An inner entry, seen from outside the aggregate, is \<^emph>\<open>released\<close>: its lower part, which the
   inner key fixes, moves into its view's key part, so the outer content is keyed by the inner keys
@@ -498,10 +469,9 @@ lemma fconf_release: "fconf (map release es) data F \<longleftrightarrow> fconf 
   by (simp add: fconf_def entry_conf_def lattice_join_ac)
 
 theorem lawful_aggregate:
-  assumes EL: "lawful E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
+  assumes ES: "semilawful E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
   shows "lawful (aggregate f E)"
 proof -
-  have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
   let ?m = "emind E"
   let ?h = "mk_guard (sel \<bottom> \<top>) gtrue ?m :: ('k, 'r guard) entry"
   let ?gs = "?h # map release (eguards E)" and ?vs = "map release (evalues E)"
@@ -522,7 +492,7 @@ proof -
     proof -
       have d: "fconf (evalues E) data F" using d0 by (simp only: fconf_release)
       have "inner_keys E data F k \<noteq> {}" using agg_fold_nonempty[OF f that(2)] by auto
-      then have "afiber data F (flod F) k \<noteq> {}" by (auto simp: inner_keys_fiber[OF EL d])
+      then have "afiber data F (flod F) k \<noteq> {}" by (auto simp: inner_keys_def)
       then show ?thesis by (auto simp: afiber_def keyimg_def)
     qed
     show "agg_fold f (esem E data F) (inner_keys E data F k)
@@ -565,7 +535,7 @@ proof -
       qed
       let ?Q = "{p \<in> ?P. ?v (\<psi> p) \<noteq> None}"
       have D: "inner_keys E data F k = \<psi> ` ?Q"
-        unfolding inner_keys_fiber[OF EL d] bij_betw_imp_surj_on[OF b, symmetric] by auto
+        unfolding inner_keys_def bij_betw_imp_surj_on[OF b, symmetric] by auto
       have T: "{p \<in> ?P. ?\<Phi> p \<noteq> None} = ?Q" using pt by auto
       have bQ: "bij_betw \<psi> ?Q (\<psi> ` ?Q)"
         by (rule inj_on_imp_bij_betw[OF inj_on_subset[OF bij_betw_imp_inj_on[OF b]]]) blast

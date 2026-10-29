@@ -136,10 +136,10 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
 | "asem (Col c) = column (col_sec c) (dim_lod (col_dim c)) (col_val c)"
 | "asem (Lit v) = value_at \<bottom> (\<Lambda> _. v)"
 | "asem (Call fn es) = smap (fsym_sem fn_other fn) (collect (map asem es))"
-| "asem (Aggr g e) = aggregate (ag_sem g) (present (asem e))"
+| "asem (Aggr g e) = aggregate (ag_sem g) (asem e)"
 | "asem (GroupBy ds e) = include_dims (lod ds) (asem e)"
 | "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
-| "asem (Where C e) = restrict (row_guard C) (present (asem e))"
+| "asem (Where C e) = restrict (row_guard C) (asem e)"
 
 text \<open>Well-formedness: every call has a number of arguments its symbol admits.\<close>
 
@@ -162,7 +162,7 @@ proof (induct e rule: wf.induct)
 next
   case (5 g e)
   then show ?case
-    by (simp add: lawful_semilawful lawful_aggregate[OF lawful_present_at ag_abel])
+    by (simp add: lawful_semilawful lawful_aggregate[OF _ ag_abel])
 next
   case (6 ds e)
   then show ?case by (simp add: semilawful_include_dims)
@@ -171,7 +171,7 @@ next
   then show ?case by (simp add: semilawful_filtfor)
 next
   case (8 C e)
-  then show ?case by (simp add: lawful_semilawful[OF lawful_restrict[OF lawful_present_at]])
+  then show ?case by (simp add: semilawful_restrict)
 qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd])
 
 corollary lawful_present_asem: "wf e \<Longrightarrow> lawful (present (asem e))"

@@ -22,28 +22,33 @@ begin
 
 subsection \<open>Keys\<close>
 
-text \<open>The key at an LOD \<open>c\<close>.  Its presence is a true guard on the group of rows with that key
-  part, the frame's filters coarsened to \<open>c\<close>; its value entry reads no columns and is keyed at
-  \<open>c\<close>, so its content's one key is that key part.  It is present where that group is nonempty, so
-  it is gated at its own row LOD, not at the frame's keys.\<close>
+text \<open>The key at an LOD \<open>c\<close>.  It has no guard: the frame's filters reach expressions only through
+  the guards aggregations expose.  Its value entry reads no columns and is keyed at \<open>c\<close>, so its
+  content's one key is that key part; it is present where some row of the data has that key part.\<close>
 
 lemma join_meet_self: "c \<squnion> (c \<sqinter> L) = c" for c :: "'k semi_factor"
   by (rule lattice_join_absorb1[OF lattice_meet_le1])
 
+lemma rigid_dom_empty: "rigid (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. dom (hd Xs) = {})"
+  by (rule rigidI) (simp only: rigidD[OF rigid_comp[OF rigid_dom cont2mono[OF cont_hd]]])
+
 lemma cont_key_value: "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. Some (the_elem (dom (hd Xs))))"
   by (rule cont_rigid, rule rigidI) (simp only: rigidD[OF rigid_comp[OF rigid_dom cont2mono[OF cont_hd]]])
 
+lemma cont_key_at_csem:
+  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. if dom (hd Xs) = {} then None else Some (the_elem (dom (hd Xs))))"
+  by (rule cont_if_rigid[OF rigid_dom_empty cont_const cont_key_value])
+
 definition key_at :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'k) expr" where
-  "key_at c = \<lparr>emind = c, eguards = [mk_guard (sel c c) gtrue \<bottom>], evalues = [mk_value (sel c c) \<bottom> c],
-     esem = \<lambda>data F k. if group data c c F k = {} then None else Some (proj c\<cdot>k),
-     csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then None else Some (the_elem (dom (hd Xs)))\<rparr>"
+  "key_at c = \<lparr>emind = c, eguards = [], evalues = [mk_value (sel c c) \<bottom> c],
+     esem = \<lambda>data F k. if fiber data c c F k = {} then None else Some (proj c\<cdot>k),
+     csem = \<lambda>Gs. \<Lambda> Xs. if dom (hd Xs) = {} then None else Some (the_elem (dom (hd Xs)))\<rparr>"
 
 lemma key_at_simps [simp]:
-  "emind (key_at c) = c" "eguards (key_at c) = [mk_guard (sel c c) gtrue \<bottom>]"
-  "evalues (key_at c) = [mk_value (sel c c) \<bottom> c]"
-  "esem (key_at c) data F k = (if group data c c F k = {} then None else Some (proj c\<cdot>k))"
-  "csem (key_at c) Gs\<cdot>Xs = (if hd Gs = {} then None else Some (the_elem (dom (hd Xs))))"
-  by (simp_all add: key_at_def cont_key_value)
+  "emind (key_at c) = c" "eguards (key_at c) = []" "evalues (key_at c) = [mk_value (sel c c) \<bottom> c]"
+  "esem (key_at c) data F k = (if fiber data c c F k = {} then None else Some (proj c\<cdot>k))"
+  "csem (key_at c) Gs\<cdot>Xs = (if dom (hd Xs) = {} then None else Some (the_elem (dom (hd Xs))))"
+  by (simp_all only: key_at_def expr.select_convs beta_cfun[OF cont_key_at_csem])
 
 lemma group_own: "y \<in> group data c c F k \<Longrightarrow> rproj c y = proj c\<cdot>k"
   by (simp add: group_def join_meet_self)
@@ -51,34 +56,36 @@ lemma group_own: "y \<in> group data c c F k \<Longrightarrow> rproj c y = proj 
 lemma fiber_own: "y \<in> fiber data c c F k \<Longrightarrow> rproj c y = proj c\<cdot>k"
   by (simp add: fiber_def join_meet_self)
 
+lemma dom_content_own:
+  "dom (content data (mk_value (sel c c) b c) F k) = (\<lambda>_. proj c\<cdot>k) ` fiber data c c F k"
+  unfolding content_def dom_gmap cgraph_def image_image cpair_def
+  by (rule image_cong) (simp_all add: vfiber_def fiber_own)
+
+lemma dom_content_own_empty: "dom (content data (mk_value (sel c c) b c) F k) = {} \<longleftrightarrow> fiber data c c F k = {}"
+  by (simp add: dom_content_own)
+
 lemma dom_content_key_at:
   assumes "fiber data c c F k \<noteq> {}"
   shows "dom (content data (mk_value (sel c c) \<bottom> c) F k) = {proj c\<cdot>k}"
-proof -
-  have "dom (content data (mk_value (sel c c) \<bottom> c) F k) = (\<lambda>_. proj c\<cdot>k) ` fiber data c c F k"
-    unfolding content_def dom_gmap cgraph_def image_image cpair_def
-    by (rule image_cong) (simp_all add: vfiber_def fiber_own)
-  then show ?thesis using assms by (simp add: image_constant_conv)
-qed
+  using assms by (simp add: dom_content_own image_constant_conv)
 
 lemma cstrict_key_at: "cstrict (key_at c)"
-  by (rule cstrictI) (auto simp: length_Suc_conv)
+  by (rule cstrictI) simp
 
 theorem semilawful_key_at: "semilawful (key_at c)"
 proof (rule semilawfulI, simp_all only: key_at_simps)
-  let ?g = "mk_guard (sel c c) gtrue \<bottom> :: ('k, 'r guard) entry" and ?e = "mk_value (sel c c) \<bottom> c"
+  let ?e = "mk_value (sel c c) \<bottom> c"
   show "cstrict (key_at c)" by (rule cstrict_key_at)
   show "entry_wf e" if "e \<in> set [?e]" for e using that by (simp add: entry_wf_view keyed_view_key)
-  show "c = fold (\<squnion>) (map lower_part (map esel [?g] @ map esel [?e])) \<bottom>"
-    by (simp add: lattice_join_bot_right lattice_join_absorb1[OF below_refl])
-  show "(if group data c c F k = {} then None else Some (proj c\<cdot>k))
-      = (if hd (gcontents data [?g] F k) = {} then None
-         else Some (the_elem (dom (hd (contents data [?e] F k)))))" for data F k
-  proof (cases "group data c c F k = {}")
+  show "c = fold (\<squnion>) (map lower_part (map esel [] @ map esel [?e])) \<bottom>"
+    by (simp add: lattice_join_bot_right)
+  show "(if fiber data c c F k = {} then None else Some (proj c\<cdot>k))
+      = (if dom (hd (contents data [?e] F k)) = {} then None else Some (the_elem (dom (hd (contents data [?e] F k)))))"
+    for data F k
+  proof (cases "fiber data c c F k = {}")
     case False
-    then have f: "fiber data c c F k \<noteq> {}" using group_sub_fiber by blast
-    show ?thesis using False by (simp only: list.map list.sel gcontent_gtrue_bot dom_content_key_at[OF f]) simp
-  qed (simp add: gcontent_gtrue_bot)
+    then show ?thesis by (simp only: list.map list.sel dom_content_key_at[OF False]) simp
+  qed (simp add: content_def cgraph_def vfiber_def)
 qed
 
 subsection \<open>Table columns\<close>
@@ -86,7 +93,7 @@ subsection \<open>Table columns\<close>
 text \<open>A table column reads a section of the row.  An external oracle names the key part that
   determines it in every conforming dataset; then the rows of a key's fiber carry one section,
   and the column's value is the column function of it.  Its value entry is that section, keyed at
-  the oracle's key part; its presence is a guard on the same selector.\<close>
+  the oracle's key part; like a key, it has no guard.\<close>
 
 lemma cont_column_value:
   "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
@@ -96,19 +103,23 @@ proof -
   then show ?thesis by (simp add: cont_compose[OF cont_the])
 qed
 
+lemma cont_column_csem:
+  "cont (\<lambda>Xs :: ('k \<Rightarrow> 'r option) list. if dom (hd Xs) = {} then None
+     else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
+  by (rule cont_if_rigid[OF rigid_dom_empty cont_const cont_column_value])
+
 definition column :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::cpo) \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
-  "column c a v = \<lparr>emind = a, eguards = [mk_guard (sel a a) gtrue \<bottom>], evalues = [mk_value (sel a a) c a],
-     esem = \<lambda>data F k. if group data a a F k = {} then None
-       else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` group data a a F k),
-     csem = \<lambda>Gs. \<Lambda> Xs. if hd Gs = {} then None else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs))))))\<rparr>"
+  "column c a v = \<lparr>emind = a, eguards = [], evalues = [mk_value (sel a a) c a],
+     esem = \<lambda>data F k. if fiber data a a F k = {} then None
+       else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k),
+     csem = \<lambda>Gs. \<Lambda> Xs. if dom (hd Xs) = {} then None else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs))))))\<rparr>"
 
 lemma column_simps [simp]:
-  "emind (column c a v) = a" "eguards (column c a v) = [mk_guard (sel a a) gtrue \<bottom>]"
-  "evalues (column c a v) = [mk_value (sel a a) c a]"
-  "esem (column c a v) data F k = (if group data a a F k = {} then None
-       else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` group data a a F k))"
-  "csem (column c a v) Gs\<cdot>Xs = (if hd Gs = {} then None else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
-  by (simp_all add: column_def cont_column_value)
+  "emind (column c a v) = a" "eguards (column c a v) = []" "evalues (column c a v) = [mk_value (sel a a) c a]"
+  "esem (column c a v) data F k = (if fiber data a a F k = {} then None
+       else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k))"
+  "csem (column c a v) Gs\<cdot>Xs = (if dom (hd Xs) = {} then None else Some (v\<cdot>(the (hd Xs (the_elem (dom (hd Xs)))))))"
+  by (simp_all only: column_def expr.select_convs beta_cfun[OF cont_column_csem])
 
 text \<open>The rows of a column's fiber carry one section.\<close>
 
@@ -125,41 +136,39 @@ proof -
 qed
 
 lemma cstrict_column: "cstrict (column c a v)"
-  by (rule cstrictI) (auto simp: length_Suc_conv)
+  by (rule cstrictI) simp
 
 theorem semilawful_column:
   assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))"
   shows "semilawful (column c a v)"
 proof (rule semilawfulI, simp_all only: column_simps)
-  let ?g = "mk_guard (sel a a) gtrue \<bottom> :: ('k, 'r guard) entry" and ?e = "mk_value (sel a a) c a"
+  let ?e = "mk_value (sel a a) c a"
   show "cstrict (column c a v)" by (rule cstrict_column)
   show "entry_wf e" if "e \<in> set [?e]" for e
     using that by (simp add: entry_wf_view keyed_view_columns[OF fd])
-  show "a = fold (\<squnion>) (map lower_part (map esel [?g] @ map esel [?e])) \<bottom>"
-    by (simp add: lattice_join_bot_right lattice_join_absorb1[OF below_refl])
-  show "(if group data a a F k = {} then None else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` group data a a F k))
-      = (if hd (gcontents data [?g] F k) = {} then None
+  show "a = fold (\<squnion>) (map lower_part (map esel [] @ map esel [?e])) \<bottom>"
+    by (simp add: lattice_join_bot_right)
+  show "(if fiber data a a F k = {} then None else Some (THE w. w \<in> (\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k))
+      = (if dom (hd (contents data [?e] F k)) = {} then None
          else Some (v\<cdot>(the (hd (contents data [?e] F k) (the_elem (dom (hd (contents data [?e] F k))))))))"
     if d: "fconf [?e] data F" for data F k
-  proof (cases "group data a a F k = {}")
+  proof (cases "fiber data a a F k = {}")
     case False
-    then obtain x where xg: "x \<in> group data a a F k" by blast
-    have x: "x \<in> fiber data a a F k" using xg group_sub_fiber by blast
+    then obtain x where x: "x \<in> fiber data a a F k" by blast
     have cf: "entry_conf ?e data F" using d by (simp add: fconf_def)
     have "cgraph data ?e F k = (\<lambda>_. (proj a\<cdot>k, x \<downharpoonright> c)) ` fiber data a a F k"
       unfolding cgraph_def vfiber_def cpair_def
       by (rule image_cong) (simp_all add: fiber_own column_fiber_section[OF cf x])
     then have C: "content data ?e F k = [proj a\<cdot>k \<mapsto> x \<downharpoonright> c]"
       unfolding content_def using x by (auto simp: image_constant_conv)
-    have "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` group data a a F k = (\<lambda>_. v\<cdot>(x \<downharpoonright> c)) ` group data a a F k"
-      by (rule image_cong[OF refl]) (simp add: column_fiber_section[OF cf x] subsetD[OF group_sub_fiber])
-    then have V: "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` group data a a F k = {v\<cdot>(x \<downharpoonright> c)}"
+    have "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = (\<lambda>_. v\<cdot>(x \<downharpoonright> c)) ` fiber data a a F k"
+      by (rule image_cong[OF refl]) (simp add: column_fiber_section[OF cf x])
+    then have V: "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = {v\<cdot>(x \<downharpoonright> c)}"
       using False by (simp add: image_constant_conv)
-    have g: "gcontent data ?g F k \<noteq> {}" using False by (simp add: gcontent_gtrue_bot)
-    show ?thesis using False g by (simp only: list.map list.sel C V) simp
+    show ?thesis using False by (simp only: list.map list.sel C V) simp
   next
     case True
-    then show ?thesis by (simp add: gcontent_gtrue_bot)
+    then show ?thesis by (simp add: content_def cgraph_def vfiber_def)
   qed
 qed
 
@@ -210,10 +219,9 @@ definition value_at :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> 'v::cpo) 
   "value_at c g = smap g (key_at c)"
 
 lemma value_at_simps [simp]:
-  "emind (value_at c g) = c" "eguards (value_at c g) = [mk_guard (sel c c) gtrue \<bottom>]"
-  "evalues (value_at c g) = [mk_value (sel c c) \<bottom> c]"
-  "esem (value_at c g) data F k = (if group data c c F k = {} then None else Some (g\<cdot>(proj c\<cdot>k)))"
-  "csem (value_at c g) Gs\<cdot>Xs = (if hd Gs = {} then None else Some (g\<cdot>(the_elem (dom (hd Xs)))))"
+  "emind (value_at c g) = c" "eguards (value_at c g) = []" "evalues (value_at c g) = [mk_value (sel c c) \<bottom> c]"
+  "esem (value_at c g) data F k = (if fiber data c c F k = {} then None else Some (g\<cdot>(proj c\<cdot>k)))"
+  "csem (value_at c g) Gs\<cdot>Xs = (if dom (hd Xs) = {} then None else Some (g\<cdot>(the_elem (dom (hd Xs)))))"
   by (simp_all add: value_at_def)
 
 theorem semilawful_value_at: "semilawful (value_at c g)"
