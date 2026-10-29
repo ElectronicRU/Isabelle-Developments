@@ -198,10 +198,9 @@ proof -
   have EL: "lawful E" by (fact assms)
   show ?thesis
   proof (rule lawful_semiI[OF semilawful_smap[OF lawful_semilawful[OF assms]]], simp_all only: smap_simps)
-    show "(upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S" if "S \<in> set (esels E)" for S
-      by (rule lawful_saturated[OF EL that])
-    show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (evalues E) data F" and "map_option (Rep_cfun g) (esem E data F k) \<noteq> None" for data F k
-      using that(2) by (intro lawful_key_law_conf[OF EL d]) simp
+    show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (evalues E) data F" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k"
+      and "map_option (Rep_cfun g) (esem E data F k) \<noteq> None" for data F k
+      using that(3) by (intro lawful_key_law_conf[OF EL d k]) simp
   qed
 qed
 
@@ -287,15 +286,12 @@ theorem lawful_restrict:
   assumes EL: "lawful E"
   shows "lawful (restrict \<gamma> E)"
 proof (rule lawful_semiI[OF semilawful_restrict[OF lawful_semilawful[OF EL]]], simp_all only: restrict_simps)
-  show "(upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
-    if "S \<in> set (map esel (map (restrict_entry \<gamma>) (eguards E)) @ map esel (evalues E))" for S
-    using that lawful_saturated[OF EL] by (auto simp: comp_def)
-  show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (evalues E) data F"
+  show "keyimg data F (emind E \<squnion> flod F) k" if d: "fconf (evalues E) data F" and k: "proj (emind E \<squnion> flod F)\<cdot>k = k"
     and "esem E data (frestrict (gsel \<gamma>) F) k \<noteq> None" for data F k
   proof -
     have d': "fconf (evalues E) data (frestrict (gsel \<gamma>) F)" using d by (simp only: fconf_frestrict)
     have "keyimg data (frestrict (gsel \<gamma>) F) (emind E \<squnion> flod F) k"
-      using lawful_key_law_conf[OF EL d' that(2)] by simp
+      using lawful_key_law_conf[OF EL d' _ that(3)] k by simp
     then show ?thesis by (rule keyimg_mono[rotated]) (simp add: frows_frestrict)
   qed
 qed
@@ -453,15 +449,13 @@ lemma include_lower_below: "lower_part S \<sqsubseteq> m \<Longrightarrow> lower
 lemma include_saturates: "upper_part (include_sel m S) \<sqinter> m \<sqsubseteq> lower_part (include_sel m S)"
   by (simp add: lattice_join_ge2)
 
-subsection \<open>The gate\<close>
+subsection \<open>Presence and raising\<close>
 
-text \<open>The gate at \<open>M\<close> turns a semilawful expression into a lawful one.  It raises each entry's
-  lower part by the minimal LOD and \<open>M\<close> and evaluates under the frame raised likewise, which
-  saturates the entries; it asks nothing of the data.  Raised, a guard with upper part \<open>\<top>\<close> is the
-  full group at the key, so a covering expression is present only at realised keys, by strictness.
-  Any other expression first gets that guard: the presence test, the one combinator that reads the
-  key's realisation.  \<open>gate \<bottom>\<close> is the plain gate; a larger \<open>M\<close> refines the expression's groups by
-  further dimensions (requested ones, inside an aggregation).\<close>
+text \<open>An expression becomes lawful by the presence test on its full group: the one combinator that
+  reads a key's realisation.  Raising the frame is separate.  Including dimensions \<open>M\<close> evaluates
+  under the frame raised by \<open>M\<close>, which refines the groups by them (requested dimensions, inside an
+  aggregation); saturating raises by the minimal LOD as well, which saturates the entries, so a
+  covering expression needs no presence test.\<close>
 
 lemma kd_finclude_mind: "emind E \<squnion> flod (finclude (emind E \<squnion> M) F) = (emind E \<squnion> M) \<squnion> flod F"
 proof -
@@ -541,15 +535,11 @@ proof -
   show ?thesis
   proof (rule lawful_semiI[OF semilawful_saturate[OF ES t(1)]], simp_all only: saturate_simps)
     show "?m \<sqsubseteq> lower_part (include_sel ?m S)" by (simp only: lo below_refl)
-    show "(upper_part S' \<sqinter> ?m) \<sqsubseteq> lower_part S'"
-      if "S' \<in> set (map esel (map (include_entry ?m) (eguards E)) @ map esel (map (include_entry ?m) (evalues E)))" for S'
-      using that by (auto intro: include_saturates[of ?m])
     show "keyimg data F (?m \<squnion> flod F) k"
-      if d: "fconf (map (include_entry ?m) (evalues E)) data F"
-        and p: "(if proj (?m \<squnion> flod F)\<cdot>k = k then esem E data (finclude ?m F) k else None) \<noteq> None" for data F k
+      if d: "fconf (map (include_entry ?m) (evalues E)) data F" and k: "proj (?m \<squnion> flod F)\<cdot>k = k"
+        and p: "(if k = k then esem E data (finclude ?m F) k else None) \<noteq> None" for data F k
     proof -
-      have k: "proj (?m \<squnion> flod F)\<cdot>k = k" using p by (simp split: if_splits)
-      have "esem E data (finclude ?m F) k \<noteq> None" using p k by simp
+      have "esem E data (finclude ?m F) k \<noteq> None" using p by simp
       then show ?thesis using W[OF d[unfolded fconf_include] k] keyimg_group_top[OF k] by blast
     qed
   qed
@@ -557,8 +547,8 @@ qed
 
 text \<open>An expression \<^emph>\<open>covers\<close> the key space when one of its guards has upper part \<open>\<top>\<close>: raised
   by the minimal LOD, that guard's group is all rows at the key, so by strictness its expression is
-  absent wherever the key is not realised, whatever the guard.  Then the gate needs no presence
-  guard: it only raises the entries.\<close>
+  absent wherever the key is not realised, whatever the guard.  Then saturating alone makes it
+  lawful, with no presence test.\<close>
 
 definition covering :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
   "covering E \<longleftrightarrow> (\<exists>e\<in>set (eguards E). eupper e = \<top>)"
@@ -679,24 +669,61 @@ proof (rule semilawfulI, simp_all only: present_at_simps)
   qed
 qed
 
-text \<open>The gate at \<open>M\<close>: raising, after the presence test unless the expression covers.\<close>
+text \<open>Including dimensions: evaluating under the frame raised by \<open>M\<close>, with each entry's lower
+  part raised by its masked part of \<open>M\<close>.  The minimal LOD is the join of the raised lower parts.\<close>
 
-definition gate :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "gate M E = saturate M (if covering E then E else present E)"
+definition include_dims :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+  "include_dims M E = \<lparr>emind = fold (\<squnion>) (map (\<lambda>S. lower_part (include_sel M S)) (esels E)) \<bottom>,
+     eguards = map (include_entry M) (eguards E), evalues = map (include_entry M) (evalues E),
+     esem = \<lambda>data F. esem E data (finclude M F), csem = csem E\<rparr>"
 
-lemma gate_simps [simp]:
-  "emind (gate M E) = emind E \<squnion> M"
-  "evalues (gate M E) = map (include_entry (emind E \<squnion> M)) (evalues E)"
-  by (cases "covering E"; simp add: gate_def)+
+lemma include_dims_simps [simp]:
+  "emind (include_dims M E) = fold (\<squnion>) (map (\<lambda>S. lower_part (include_sel M S)) (esels E)) \<bottom>"
+  "eguards (include_dims M E) = map (include_entry M) (eguards E)"
+  "evalues (include_dims M E) = map (include_entry M) (evalues E)"
+  "esem (include_dims M E) data F = esem E data (finclude M F)"
+  "csem (include_dims M E) = csem E"
+  by (simp_all add: include_dims_def)
 
-theorem lawful_gate: "semilawful E \<Longrightarrow> lawful (gate M E)"
-  unfolding gate_def by (simp add: lawful_saturate_covering semilawful_present_at covering_present_at)
+lemma proj_fix_mono: "a \<sqsubseteq> b \<Longrightarrow> proj a\<cdot>k = k \<Longrightarrow> proj b\<cdot>k = k"
+  by (metis proj_absorb)
 
+theorem semilawful_include_dims:
+  assumes ES: "semilawful E"
+  shows "semilawful (include_dims M E)"
+proof (rule semilawfulI, simp_all only: include_dims_simps)
+  let ?n = "fold (\<squnion>) (map (\<lambda>S. lower_part (include_sel M S)) (esels E)) \<bottom>"
+  show "cstrict (include_dims M E)" using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
+  show "entry_wf e" if "e \<in> set (map (include_entry M) (evalues E))" for e
+    using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
+  show "?n = fold (\<squnion>) (map lower_part (map esel (map (include_entry M) (eguards E)) @ map esel (map (include_entry M) (evalues E)))) \<bottom>"
+    by (simp add: comp_def)
+  show "esem E data (finclude M F) k
+      = csem E (gcontents data (map (include_entry M) (eguards E)) F k)\<cdot>(contents data (map (include_entry M) (evalues E)) F k)"
+    if d: "fconf (map (include_entry M) (evalues E)) data F" and k: "proj (?n \<squnion> flod F)\<cdot>k = k" for data F k
+  proof -
+    have d': "fconf (evalues E) data (finclude M F)" using d by (simp only: fconf_include)
+    have le: "?n \<sqsubseteq> emind E \<squnion> M"
+    proof (rule fold_join_least)
+      fix x assume "x \<in> set (map (\<lambda>S. lower_part (include_sel M S)) (esels E))"
+      then obtain S where S: "S \<in> set (esels E)" and x: "x = lower_part (include_sel M S)" by auto
+      show "x \<sqsubseteq> emind E \<squnion> M" unfolding x include_sel_simps
+        by (rule lattice_join_mono[OF lower_below_mind[OF ES S] truncate_below])
+    qed simp
+    have "?n \<squnion> flod F \<sqsubseteq> emind E \<squnion> flod (finclude M F)"
+    proof -
+      have "?n \<squnion> flod F \<sqsubseteq> (emind E \<squnion> M) \<squnion> flod F" by (rule lattice_join_mono[OF le below_refl])
+      also have "\<dots> = emind E \<squnion> flod (finclude M F)" unfolding flod_finclude by (simp only: lattice_join_ac)
+      finally show ?thesis .
+    qed
+    then have "proj (emind E \<squnion> flod (finclude M F))\<cdot>k = k" by (rule proj_fix_mono[OF _ k])
+    then have "esem E data (finclude M F) k = csem_at E data (finclude M F) k" by (rule semilawful_csem_conf[OF ES d'])
+    then show ?thesis by (simp add: comp_def gcontent_include_entry content_include_entry)
+  qed
+qed
 
-text \<open>Gating is idempotent: a gated expression covers, so gating it again only raises its entries,
-  which are raised already.  A lawful covering expression is left alone by the plain gate: its
-  entries are saturated, so raising does not change them, and the frame refinement is already
-  implied by the key law.\<close>
+text \<open>Saturating is idempotent.\<close>
+
 
 lemma include_entry_saturated: "eupper e \<sqinter> m \<sqsubseteq> elower e \<Longrightarrow> include_entry m e = e"
   by (simp add: include_entry_def include_sel_def lattice_join_absorb1)
@@ -706,9 +733,6 @@ lemma include_entry_idem: "include_entry m (include_entry m e) = include_entry m
 
 lemma covering_saturate: "covering E \<Longrightarrow> covering (saturate M E)"
   by (force simp: covering_def)
-
-lemma covering_gate: "covering (gate M E)"
-  unfolding gate_def by (simp add: covering_saturate covering_present_at)
 
 lemma finclude_finclude_same: "finclude (m :: 'k semi_factor) (finclude m F) = finclude m F"
 proof -
@@ -727,68 +751,6 @@ proof -
     by (rule join_finclude_absorb[OF below_refl])
   show ?thesis unfolding saturate_def[of M "saturate M E"] saturate_simps mM
     by (simp add: saturate_def include_entry_idem comp_def kd finclude_finclude_same fun_eq_iff)
-qed
-
-theorem gate_idem: "gate M (gate M E) = gate M E"
-proof -
-  have "gate M (gate M E) = saturate M (gate M E)" using covering_gate[of M E] by (simp add: gate_def[of M "gate M E"])
-  also have "\<dots> = gate M E" unfolding gate_def[of M E] by (rule saturate_idem)
-  finally show ?thesis .
-qed
-
-theorem gate_lawful_covering:
-  assumes EL: "lawful E" and cov: "covering E"
-  shows "eguards (gate \<bottom> E) = eguards E" and "evalues (gate \<bottom> E) = evalues E" and "csem (gate \<bottom> E) = csem E"
-    and "conforms data \<Longrightarrow> esem (gate \<bottom> E) data F k = esem E data F k"
-proof -
-  let ?m = "emind E"
-  have g: "gate \<bottom> E = saturate \<bottom> E" using cov by (simp add: gate_def)
-  have "map (include_entry ?m) (eguards E) = eguards E"
-    by (rule map_idI) (rule include_entry_saturated[OF lawful_saturated[OF EL esels_guardI]])
-  then show "eguards (gate \<bottom> E) = eguards E" by (simp add: g)
-  have "map (include_entry ?m) (evalues E) = evalues E"
-    by (rule map_idI) (rule include_entry_saturated[OF lawful_saturated[OF EL esels_valueI]])
-  then show "evalues (gate \<bottom> E) = evalues E" by (simp add: g)
-  show "csem (gate \<bottom> E) = csem E" by (simp add: g)
-  assume d: "conforms data"
-  have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
-  show "esem (gate \<bottom> E) data F k = esem E data F k"
-  proof (cases "proj (kd E F)\<cdot>k = k")
-    case True
-    have kd: "kd E (finclude ?m F) = kd E F" by (rule join_finclude_absorb[OF below_refl])
-    have "esem E data (finclude ?m F) k = esem E data F k"
-      using contents_kd[OF EL amb_finclude slice_finclude kd]
-      by (simp only: semilawful_csem[OF ES d True] semilawful_csem[OF ES d True[folded kd]])
-    then show ?thesis using True by (simp add: g)
-  next
-    case False
-    have "esem E data F k = None" using key_lives[OF EL d] False by blast
-    then show ?thesis using False by (simp add: g)
-  qed
-qed
-
-text \<open>On conforming data the gate is present exactly at the realised keys, with the expression's
-  value under the raised frame.\<close>
-
-lemma gate_esem:
-  assumes ES: "semilawful E" and d: "conforms data"
-  shows "esem (gate M E) data F k = (if keyimg data F (emind E \<squnion> M \<squnion> flod F) k
-      then esem E data (finclude (emind E \<squnion> M) F) k else None)"
-proof (cases "keyimg data F (emind E \<squnion> M \<squnion> flod F) k")
-  case ki: True
-  let ?m = "emind E \<squnion> M"
-  obtain x where kx: "k = proj (?m \<squnion> flod F)\<cdot>(rkey\<cdot>x)" using ki by (auto simp: keyimg_def)
-  have k: "proj (?m \<squnion> flod F)\<cdot>k = k" by (simp add: kx)
-  have g: "group data (emind E) \<top> (finclude ?m F) k \<noteq> {}"
-    using ki unfolding keyimg_group_top[OF k] group_top_finclude[OF lattice_join_ge1] .
-  have kk: "proj (emind E \<squnion> flod (finclude ?m F))\<cdot>k = k" by (simp only: kd_finclude_mind k)
-  show ?thesis by (cases "covering E") (simp_all add: gate_def k ki g kk lattice_join_bot_right)
-next
-  case False
-  have "keyimg data F (emind E \<squnion> M \<squnion> flod F) k" if "esem (gate M E) data F k \<noteq> None"
-    using lawful_key_law[OF lawful_gate[OF ES] d that] by simp
-  then have "esem (gate M E) data F k = None" using False by blast
-  then show ?thesis using False by simp
 qed
 
 text \<open>Covering is necessary, given rich enough data.  A lawful expression present at every
@@ -814,7 +776,7 @@ proof
   assume c: "gcontents data (eguards E) F k = gcontents data' (eguards E) F k \<and>
     contents data (evalues E) F k = contents data' (evalues E) F k"
   have ES: "semilawful E" by (rule lawful_semilawful[OF EL])
-  have "esem E data F k = None" using lawful_key_law[OF EL d(1)] nk by blast
+  have "esem E data F k = None" using lawful_key_law[OF EL d(1) k] nk by blast
   moreover have "esem E data' F k \<noteq> None" using T d(2) rk by (simp add: total_def)
   ultimately show False using c by (simp add: semilawful_csem[OF ES d(1) k] semilawful_csem[OF ES d(2) k])
 qed
@@ -857,8 +819,9 @@ qed
 subsection \<open>Collect\<close>
 
 text \<open>The components are evaluated under the frame itself, each at its own key; their entries are
-  the collected expression's entries, unchanged.  Collecting is semilawful: it is not gated, and a
-  component sees nothing of the others' minimal LODs.  The gate widens it back to the full key.\<close>
+  the collected expression's entries, unchanged.  Collecting is semilawful: each component is
+  present on its own rows, and sees nothing of the others' minimal LODs.  The presence test asks
+  for one row realising the full key.\<close>
 
 text \<open>Cutting a list into consecutive blocks of given lengths.\<close>
 
@@ -1042,9 +1005,6 @@ proof (rule jointly_lawfulI[OF semilawful_filtfor[OF jointly_lawful_semilawful[O
   qed
 qed
 
-lemma jointly_lawful_gate: "semilawful E \<Longrightarrow> jointly_lawful (gate M E)"
-  by (rule lawful_jointly_lawful[OF lawful_gate])
-
 corollary lawful_saturate:
   assumes E: "jointly_lawful E" and t: "S \<in> set (esels E)" "upper_part S = \<top>"
   shows "lawful (saturate M E)"
@@ -1172,6 +1132,16 @@ lemma present_at_keyimg:
   assumes k: "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" and p: "esem (present_at a \<top> E) data F k \<noteq> None"
   shows "keyimg data F (emind E \<squnion> a \<squnion> flod F) k"
   using p keyimg_group_top[OF k] by (auto split: if_splits)
+
+theorem lawful_present_at:
+  assumes ES: "semilawful E"
+  shows "lawful (present_at a \<top> E)"
+proof (rule lawful_semiI[OF semilawful_present_at[OF ES]])
+  fix data F k assume k: "proj (emind (present_at a \<top> E) \<squnion> flod F)\<cdot>k = k"
+    and p: "esem (present_at a \<top> E) data F k \<noteq> None"
+  have k': "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" using k by simp
+  show "keyimg data F (emind (present_at a \<top> E) \<squnion> flod F) k" using present_at_keyimg[OF k' p] by simp
+qed
 
 end
 

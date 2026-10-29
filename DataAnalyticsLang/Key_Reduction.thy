@@ -183,25 +183,8 @@ qed
 
 end
 
-text \<open>The gate without widening: under reducibility by its own minimal LOD, the gate evaluates
-  the expression under the plain frame, at its own key.\<close>
-
-context dataspace
-begin
-
-theorem gate_reduce:
-  assumes E: "semilawful E" and d: "conforms data" and red: "reducible (emind E) E F"
-  shows "esem (gate \<bottom> E) data F k = (if keyimg data F (emind E \<squnion> flod F) k
-      then esem E data F (proj (emind E \<squnion> flod F)\<cdot>k) else None)"
-proof -
-  have ES: "semilawful E" by (fact E)
-  show ?thesis using sem_reduce[OF ES d below_refl red] by (simp add: gate_esem[OF ES d])
-qed
-
-end
-
-text \<open>A collection is reducible when its components are; then \<open>gate_reduce\<close> evaluates the gated
-  collection under the plain frame, each component at its own key.\<close>
+text \<open>A collection is reducible when its components are; then it can be evaluated under the plain
+  frame, each component at its own key.\<close>
 
 context dataspace
 begin

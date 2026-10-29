@@ -149,10 +149,10 @@ fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice,
 | "asem (Col c) = column (col_sec c) (dim_lod (col_dim c)) (col_val c)"
 | "asem (Lit v) = value_at \<bottom> (\<Lambda> _. v)"
 | "asem (Call fn es) = smap (fsym_sem fn_other fn) (collect (map asem es))"
-| "asem (Aggr g e) = aggregate (ag_sem g) (gate (requested e) (asem e))"
+| "asem (Aggr g e) = aggregate (ag_sem g) (present_at (requested e) \<top> (include_dims (requested e) (asem e)))"
 | "asem (GroupBy ds e) = asem e"
 | "asem (For ds C e) = filtfor (lod ds) {|C|} (asem e)"
-| "asem (Where C e) = restrict (row_guard C) (gate \<bottom> (asem e))"
+| "asem (Where C e) = restrict (row_guard C) (present (asem e))"
 
 text \<open>Well-formedness: every call has a number of arguments its symbol admits.\<close>
 
@@ -174,17 +174,18 @@ proof (induct e rule: wf.induct)
   then show ?case by (auto intro!: semilawful_smap semilawful_collect)
 next
   case (5 g e)
-  then show ?case by (simp add: lawful_semilawful lawful_aggregate[OF lawful_gate ag_abel])
+  then show ?case
+    by (simp add: lawful_semilawful lawful_aggregate[OF lawful_present_at[OF semilawful_include_dims] ag_abel])
 next
   case (7 ds C e)
   then show ?case by (simp add: semilawful_filtfor)
 next
   case (8 C e)
-  then show ?case by (simp add: lawful_semilawful[OF lawful_restrict[OF lawful_gate]])
+  then show ?case by (simp add: lawful_semilawful[OF lawful_restrict[OF lawful_present_at]])
 qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd])
 
-corollary lawful_gate_asem: "wf e \<Longrightarrow> lawful (gate \<bottom> (asem e))"
-  by (rule lawful_gate[OF semilawful_asem])
+corollary lawful_present_asem: "wf e \<Longrightarrow> lawful (present (asem e))"
+  by (rule lawful_present_at[OF semilawful_asem])
 
 text \<open>References to dimensions and columns and literals are row level, literals and aggregations
   total level; calls of row-level arguments are row level.\<close>

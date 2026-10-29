@@ -821,9 +821,11 @@ text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed value
   entries' lower parts, its content semantics is \<^emph>\<open>strict\<close> (absent as soon as one of its guards'
   contents is empty), and its presence and values are its content semantics of its contents, at
   every key of its key LOD and every dataset conforming relative to its value entries (the content
-  law).  A \<^emph>\<open>lawful\<close> one is moreover \<^emph>\<open>saturated\<close> (each lower part covers the part of the minimal
-  LOD its upper part keeps, so groups depend on the frame LOD only through the key LOD) and has
-  entries only at the frame's data keys (the key law).\<close>
+  law).  A \<^emph>\<open>lawful\<close> one is moreover present, at the keys of its key LOD, only where the key is
+  realised by a row of the frame (the key law).  What an expression does at other keys is the
+  extension of its table to the whole key space, which no law reads.  Separately, an expression is
+  \<^emph>\<open>saturated\<close> when each lower part covers the part of the minimal LOD its upper part keeps, so
+  that its groups depend on the frame LOD only through the key LOD.\<close>
 
 context dataspace
 begin
@@ -856,8 +858,15 @@ definition semilawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
      (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem_at E data F k)"
 
 definition lawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "lawful E \<longleftrightarrow> semilawful E \<and> (\<forall>S\<in>set (esels E). (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S) \<and>
-     (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow> keyimg data F (kd E F) k)"
+  "lawful E \<longleftrightarrow> semilawful E \<and>
+     (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow>
+       keyimg data F (kd E F) k)"
+
+definition saturated :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
+  "saturated E \<longleftrightarrow> (\<forall>S\<in>set (esels E). (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S)"
+
+lemma saturatedD: "saturated E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
+  unfolding saturated_def by blast
 
 lemma semilawfulI:
   assumes "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
@@ -909,31 +918,31 @@ lemma semilawful_mono:
 
 lemma lawful_semiI:
   assumes "semilawful E"
-    and "\<And>S. S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
-    and "\<And>data F k. fconf (evalues E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
+    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k; esem E data F k \<noteq> None\<rbrakk> \<Longrightarrow>
+      keyimg data F (emind E \<squnion> flod F) k"
   shows "lawful E"
   unfolding lawful_def using assms by blast
 
 lemma lawfulI:
-  assumes "\<And>S. S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
-    and "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
+  assumes "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
     and "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_wf e"
     and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem_at E data F k"
-    and "\<And>data F k. fconf (evalues E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (emind E \<squnion> flod F) k"
+    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k; esem E data F k \<noteq> None\<rbrakk> \<Longrightarrow>
+      keyimg data F (emind E \<squnion> flod F) k"
     and "cstrict E"
   shows "lawful E"
-  by (rule lawful_semiI[OF semilawfulI[OF assms(2-4,6)] assms(1,5)])
+  by (rule lawful_semiI[OF semilawfulI[OF assms(1-3,5)] assms(4)])
 
 lemma lawful_semilawful: "lawful E \<Longrightarrow> semilawful E"
   unfolding lawful_def by blast
 
-lemma lawful_saturated: "lawful E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
+lemma lawful_key_law_conf:
+  "lawful E \<Longrightarrow> fconf (evalues E) data F \<Longrightarrow> proj (kd E F)\<cdot>k = k \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow>
+    keyimg data F (kd E F) k"
   unfolding lawful_def by blast
 
-lemma lawful_key_law_conf: "lawful E \<Longrightarrow> fconf (evalues E) data F \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
-  unfolding lawful_def by blast
-
-lemma lawful_key_law: "lawful E \<Longrightarrow> conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
+lemma lawful_key_law:
+  "lawful E \<Longrightarrow> conforms data \<Longrightarrow> proj (kd E F)\<cdot>k = k \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> keyimg data F (kd E F) k"
   by (rule lawful_key_law_conf[OF _ semilawful_fconf[OF lawful_semilawful]])
 
 lemma lawful_keyed: "lawful E \<Longrightarrow> e \<in> set (evalues E) \<Longrightarrow> keyed_view (eview e)"
@@ -992,9 +1001,9 @@ lemma lawful_jointly_lawful:
   assumes E: "lawful E"
   shows "jointly_lawful E"
 proof (rule jointly_lawfulI[OF lawful_semilawful[OF E]])
-  fix data F k assume d: "fconf (evalues E) data F" and p: "esem E data F k \<noteq> None"
+  fix data F k assume d: "fconf (evalues E) data F" and k: "proj (kd E F)\<cdot>k = k" and p: "esem E data F k \<noteq> None"
   obtain x where x: "x \<in> lower_maximal data" "frows F x" and kx: "k = proj (kd E F)\<cdot>(rkey\<cdot>x)"
-    using lawful_key_law_conf[OF E d p] by (auto simp: keyimg_def)
+    using lawful_key_law_conf[OF E d k p] by (auto simp: keyimg_def)
   show "jointly_present data E F k" unfolding jointly_present_def
   proof (intro exI ballI)
     fix S assume S: "S \<in> set (esels E)"
@@ -1102,11 +1111,11 @@ text \<open>For lawful expressions the frame LOD inside the minimal LOD does not
   the key LOD.\<close>
 
 lemma group_kd:
-  "lawful E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> sel_at S (flod F) = sel_at S (kd E F)"
-  by (rule sat_absorb[symmetric, OF lawful_saturated])
+  "saturated E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> sel_at S (flod F) = sel_at S (kd E F)"
+  by (rule sat_absorb[symmetric, OF saturatedD])
 
 lemma contents_kd:
-  assumes E: "lawful E" and F: "amb F = amb F'" "slice F = slice F'" "kd E F = kd E F'"
+  assumes E: "saturated E" and F: "amb F = amb F'" "slice F = slice F'" "kd E F = kd E F'"
   shows "gcontents data (eguards E) F k = gcontents data (eguards E) F' k"
     and "contents data (evalues E) F k = contents data (evalues E) F' k"
 proof -
@@ -1130,7 +1139,7 @@ text \<open>Pegging the frame to a key does not change that key's contents: the 
   a mask is part of the group already, by saturation; fibers do not see the slice at all.\<close>
 
 lemma peg_group:
-  assumes E: "lawful E" and S: "S \<in> set (esels E)" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
+  assumes E: "saturated E" and S: "S \<in> set (esels E)" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
   shows "group data (lower_part S) (upper_part S) (peg K F) K = group data (lower_part S) (upper_part S) F K"
 proof -
   let ?G = "sel_at S (flod F)" and ?T = "(upper_part S \<sqinter> kd E F)"
@@ -1148,7 +1157,7 @@ proof -
 qed
 
 lemma peg_contents:
-  assumes E: "lawful E" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
+  assumes E: "saturated E" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
   shows "gcontents data (eguards E) (peg K F) K = gcontents data (eguards E) F K"
     and "contents data (evalues E) (peg K F) K = contents data (evalues E) F K"
 proof -
@@ -1162,70 +1171,38 @@ proof -
     by (rule map_cong[OF refl]) (simp add: content_def cgraph_def vfiber_def fiber_def)
 qed
 
-lemma key_lives: "lawful E \<Longrightarrow> conforms data \<Longrightarrow> esem E data F k \<noteq> None \<Longrightarrow> proj (kd E F)\<cdot>k = k"
-  by (auto dest!: lawful_key_law simp: keyimg_def)
-
 text \<open>The effective-LOD law: the frame LOD matters only through the key LOD.\<close>
 
 theorem eff_law:
-  assumes E: "lawful E" and d: "conforms data" and F: "amb F = amb F'" "slice F = slice F'" "kd E F = kd E F'"
-  shows "esem E data F = esem E data F'"
-proof
-  fix k
-  show "esem E data F k = esem E data F' k"
-  proof (cases "proj (kd E F)\<cdot>k = k")
-    case True
-    then have "proj (kd E F')\<cdot>k = k" by (simp add: F(3))
-    then show ?thesis
-      by (rule semilawful_content_law[OF lawful_semilawful[OF E] d d True _ contents_kd[OF E F]])
-  next
-    case False
-    then have "proj (kd E F')\<cdot>k \<noteq> k" by (simp add: F(3))
-    then have "esem E data F' k = None" using key_lives[OF E d, of F' k] by blast
-    moreover have "esem E data F k = None" using False key_lives[OF E d, of F k] by blast
-    ultimately show ?thesis by simp
-  qed
+  assumes E: "semilawful E" "saturated E" and d: "conforms data"
+    and F: "amb F = amb F'" "slice F = slice F'" "kd E F = kd E F'" and k: "proj (kd E F)\<cdot>k = k"
+  shows "esem E data F k = esem E data F' k"
+proof -
+  have "proj (kd E F')\<cdot>k = k" using k by (simp add: F(3))
+  then show ?thesis by (rule semilawful_content_law[OF E(1) d d k _ contents_kd[OF E(2) F]])
 qed
 
 text \<open>The peg law: pegging the frame to a key does not change the value there.\<close>
 
 theorem peg_law:
-  assumes E: "lawful E" and d: "conforms data" and cK: "compact K"
+  assumes E: "semilawful E" "saturated E" and d: "conforms data" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
   shows "esem E data (peg K F) K = esem E data F K"
-proof (cases "proj (kd E F)\<cdot>K = K")
-  case True
-  have "proj (kd E (peg K F))\<cdot>K = K" using True by simp
-  then show ?thesis
-    by (rule semilawful_content_law[OF lawful_semilawful[OF E] d d _ True peg_contents[OF E cK True]])
-next
-  case False
-  then have "proj (kd E (peg K F))\<cdot>K \<noteq> K" by simp
-  then have "esem E data (peg K F) K = None" using key_lives[OF E d, of "peg K F" K] by blast
-  moreover have "esem E data F K = None" using False key_lives[OF E d, of F K] by blast
-  ultimately show ?thesis by simp
+proof -
+  have "proj (kd E (peg K F))\<cdot>K = K" using K by simp
+  then show ?thesis by (rule semilawful_content_law[OF E(1) d d _ K peg_contents[OF E(2) cK K]])
 qed
 
 text \<open>Locality: the semantics at a frame depends on the dataset only through its point section at
   a section covering the frame, the key LOD and what the entries read.\<close>
 
 theorem sem_section:
-  assumes E: "lawful E" and d: "conforms data" and d': "conforms data'"
+  assumes E: "semilawful E" and d: "conforms data" and d': "conforms data'"
     and F: "frame_reads c F" and K: "csupp (kd E F) \<sqsubseteq> c"
     and gr: "\<And>e. e \<in> set (eguards E) \<Longrightarrow> csupp (ekeys e) \<sqsubseteq> c \<and> guard_reads c (eguard e)"
     and cols: "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_reads c e"
-    and sec: "pts_section c data = pts_section c data'"
+    and sec: "pts_section c data = pts_section c data'" and k: "proj (kd E F)\<cdot>k = k"
   shows "esem E data F k = esem E data' F k"
-proof (cases "proj (kd E F)\<cdot>k = k")
-  case True
-  show ?thesis
-    by (rule semilawful_content_law[OF lawful_semilawful[OF E] d d' True True
-          contents_section[OF lawful_semilawful[OF E] F K gr cols sec]])
-next
-  case False
-  then have "esem E data F k = None" "esem E data' F k = None"
-    using key_lives[OF E d] key_lives[OF E d'] by blast+
-  then show ?thesis by simp
-qed
+  by (rule semilawful_content_law[OF E d d' k k contents_section[OF E F K gr cols sec]])
 
 end
 

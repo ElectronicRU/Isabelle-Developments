@@ -126,7 +126,7 @@ definition afiber :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \
 text \<open>\<open>aggregate f E\<close> folds the inner values over the inner keys below each key of the frame.
   The inner keys are those where the inner expression is present: its own domain, so for a lawful
   inner expression they are data keys.  Grouping finer than the frame is the inner expression's own
-  (a gate at the requested dimensions).  The aggregate's keys are the frame's, so it decides no
+  (the requested dimensions included).  The aggregate's keys are the frame's, so it decides no
   detail: its entries are the inner ones released (their lower parts move into their views' key
   parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
 
@@ -148,7 +148,7 @@ proof -
     then have kfix: "proj ?X\<cdot>\<kappa> = \<kappa>" and below: "proj (flod F)\<cdot>\<kappa> = k" and kdef: "esem E data F \<kappa> \<noteq> None"
       by (simp_all add: inner_keys_def)
     obtain x where x: "x \<in> lower_maximal data" "frows F x" and kx: "\<kappa> = rproj ?X x"
-      using lawful_key_law_conf[OF EL d kdef] by (auto simp: keyimg_def)
+      using lawful_key_law_conf[OF EL d kfix kdef] by (auto simp: keyimg_def)
     have "rproj (flod F) x = k" using below unfolding kx by (simp only: proj_le[OF le])
     then show "\<kappa> \<in> {\<kappa> \<in> rproj ?X ` afiber data F (flod F) k. esem E data F \<kappa> \<noteq> None}"
       using x kx kdef by (auto simp: afiber_def)
@@ -511,8 +511,6 @@ proof -
     show "cstrict (aggregate f E)" by (rule cstrict_aggregate[OF f semilawful_cstrict[OF ES]])
     show "entry_wf e" if "e \<in> set ?vs" for e
       using that by (auto intro: entry_wf_release semilawful_wf[OF ES])
-    show "(upper_part S \<sqinter> \<bottom>) \<sqsubseteq> lower_part S" if "S \<in> set (map esel ?gs @ map esel ?vs)" for S
-      using that by (auto simp: lattice_meet_bot_right)
     show "(\<bottom>::'k semi_factor) = fold (\<squnion>) (map lower_part (map esel ?gs @ map esel ?vs)) \<bottom>"
     proof -
       have l: "map lower_part (map esel ?gs @ map esel ?vs) = map (\<lambda>_. \<bottom>) (map esel ?gs @ map esel ?vs)"
