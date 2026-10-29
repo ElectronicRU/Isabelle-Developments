@@ -322,4 +322,42 @@ lemma Present_bottom_plus_Absent: "Present\<cdot>\<bottom> + Absent = \<bottom>"
   unfolding option_pd_bottom plus_option_pd_def
   by (simp add: upper_least_def upper_plus_commute)
 
+subsection \<open>Two-valued results and multiplying by truth values\<close>
+
+text \<open>A plain option is a two-valued result.\<close>
+
+definition of_option :: "'v option \<rightarrow> 'v option_pd" where
+  "of_option = (\<Lambda> z. case z of None \<Rightarrow> Absent | Some v \<Rightarrow> Present\<cdot>v)"
+
+lemma of_option_simps [simp]: "of_option\<cdot>None = Absent" "of_option\<cdot>(Some v) = Present\<cdot>v"
+  by (simp_all add: of_option_def)
+
+lemma of_option_below_iff [simp]: "of_option\<cdot>a \<sqsubseteq> of_option\<cdot>b \<longleftrightarrow> a \<sqsubseteq> b"
+  by (cases a; cases b) simp_all
+
+lemma of_option_eq_iff [simp]: "of_option\<cdot>a = of_option\<cdot>b \<longleftrightarrow> a = b"
+  by (simp add: po_eq_conv)
+
+text \<open>Multiplying a result by a truth value: false makes it absent, true leaves it, and an unknown
+  truth value leaves it possibly absent.  It is monotone in the truth value since the sum is below
+  both summands, and continuous since the truth values are flat.\<close>
+
+definition tr_mult :: "tr \<rightarrow> 'v option_pd \<rightarrow> 'v option_pd" where
+  "tr_mult = (\<Lambda> t x. if t = TT then x else if t = FF then Absent else x + Absent)"
+
+abbreviation tr_mult_syn :: "tr \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd" (infixr \<open>\<odot>\<close> 70) where
+  "t \<odot> x \<equiv> tr_mult\<cdot>t\<cdot>x"
+
+lemma cont_tr_mult1: "cont (\<lambda>t. if t = TT then x else if t = FF then Absent else x + (Absent :: 'v option_pd))"
+proof (rule chfindom_monofun2cont, rule monofunI)
+  fix t u :: tr assume "t \<sqsubseteq> u"
+  then show "(if t = TT then x else if t = FF then Absent else x + Absent) \<sqsubseteq>
+      (if u = TT then x else if u = FF then Absent else x + (Absent :: 'v option_pd))"
+    by (cases t rule: trE; cases u rule: trE)
+      (simp_all add: plus_option_pd_below1 plus_option_pd_below2)
+qed
+
+lemma tr_mult_simps [simp]: "TT \<odot> x = x" "FF \<odot> x = Absent" "\<bottom> \<odot> x = x + Absent"
+  by (simp_all add: tr_mult_def cont2cont_LAM cont_tr_mult1)
+
 end
