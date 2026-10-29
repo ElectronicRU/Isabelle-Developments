@@ -127,8 +127,7 @@ definition "emb = emb oo lower_option_pd oo strictify\<cdot>up"
 definition "prj = fup\<cdot>ID oo lift_option_pd oo prj"
 
 definition "defl (t :: 'a option_pd itself) =
-  defl_fun1 emb prj (\<Lambda> d. (lower_option_pd oo u_drop_bottom oo lift_option_pd) oo d)\<cdot>
-    (defl_top :: ('a option u) upper_pd defl)"
+  unlift_defl (lower_option_pd :: 'a option_pd u \<rightarrow> ('a option u) upper_pd) lift_option_pd"
 
 definition "(liftemb :: 'a option_pd u \<rightarrow> udom u) = u_map\<cdot>emb"
 

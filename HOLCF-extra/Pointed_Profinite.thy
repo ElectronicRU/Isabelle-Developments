@@ -65,22 +65,16 @@ qed
 
 section \<open>Pointed types with a domain as lifting are domains\<close>
 
-text \<open>Dropping the lifted bottom: the deflation of \<open>'a u\<close> fixing everything but \<open>up\<cdot>\<bottom>\<close>.\<close>
+text \<open>\<open>fup\<cdot>(strictify\<cdot>up)\<close> drops the lifted bottom: it fixes everything but \<open>up\<cdot>\<bottom>\<close>.\<close>
 
-definition u_drop_bottom :: "'a::pcpo u \<rightarrow> 'a u" where
-  "u_drop_bottom = fup\<cdot>(strictify\<cdot>up)"
+lemma fup_strictify_up_simps [simp]:
+  "fup\<cdot>(strictify\<cdot>up)\<cdot>(up\<cdot>x) = (if x = \<bottom> then \<bottom> else up\<cdot>x)"
+  by (simp add: strictify_conv_if)
 
-lemma u_drop_bottom_simps [simp]:
-  "u_drop_bottom\<cdot>\<bottom> = \<bottom>" "u_drop_bottom\<cdot>(up\<cdot>x) = (if x = \<bottom> then \<bottom> else up\<cdot>x)"
-  by (simp_all add: u_drop_bottom_def strictify_conv_if)
+lemma fup_strictify_up_idem [simp]: "fup\<cdot>(strictify\<cdot>up)\<cdot>(fup\<cdot>(strictify\<cdot>up)\<cdot>x) = fup\<cdot>(strictify\<cdot>up)\<cdot>x"
+  by (cases x) (simp_all add: strictify_conv_if)
 
-lemma u_drop_bottom_idem [simp]: "u_drop_bottom\<cdot>(u_drop_bottom\<cdot>x) = u_drop_bottom\<cdot>x"
-  by (cases x) simp_all
-
-lemma u_drop_bottom_below: "u_drop_bottom\<cdot>x \<sqsubseteq> x"
-  by (cases x) simp_all
-
-lemma strictify_up_fup_ID: "strictify\<cdot>up oo fup\<cdot>ID = u_drop_bottom"
+lemma strictify_up_fup_ID: "strictify\<cdot>up oo fup\<cdot>ID = fup\<cdot>(strictify\<cdot>up)"
   by (rule cfun_eqI, case_tac x) (simp_all add: strictify_conv_if)
 
 lemma ep_pair_strictify_up: "ep_pair (strictify\<cdot>up) (fup\<cdot>(ID :: 'a::pcpo \<rightarrow> 'a))"
@@ -149,6 +143,12 @@ setup \<open>
   , (\<^const_name>\<open>liftprj\<close>, SOME \<^typ>\<open>udom u \<rightarrow> 'a::pcpo u\<close>) ]
 \<close>
 
+text \<open>The deflation of a pointed type whose lifting is isomorphic to a domain: the domain's top
+  one with the lifted bottom dropped.\<close>
+
+definition unlift_defl :: "('a::pcpo u \<rightarrow> 'b::domain) \<Rightarrow> ('b \<rightarrow> 'a u) \<Rightarrow> udom defl" where
+  "unlift_defl f g = defl_fun1 emb prj (\<Lambda> d. (f oo fup\<cdot>(strictify\<cdot>up) oo g) oo d)\<cdot>(defl_top :: 'b defl)"
+
 text \<open>A pointed type whose lifting is isomorphic to a domain is a domain: embed by strict lifting,
   the isomorphism and the domain's embedding; the deflation is the domain's top one with the
   lifted bottom dropped.\<close>
@@ -158,8 +158,7 @@ lemma domain_class_lift_iso:
   assumes gf: "\<And>x. g\<cdot>(f\<cdot>x) = x" and fg: "\<And>y. f\<cdot>(g\<cdot>y) = y"
     and emb: "(emb :: 'a \<rightarrow> udom) = emb oo f oo strictify\<cdot>up"
     and prj: "(prj :: udom \<rightarrow> 'a) = fup\<cdot>ID oo g oo prj"
-    and defl: "(defl :: 'a itself \<Rightarrow> udom defl) =
-      (\<lambda>_. defl_fun1 emb prj (\<Lambda> d. (f oo u_drop_bottom oo g) oo d)\<cdot>(defl_top :: 'b defl))"
+    and defl: "(defl :: 'a itself \<Rightarrow> udom defl) = (\<lambda>_. unlift_defl f g)"
     and liftemb: "(liftemb :: 'a u \<rightarrow> udom u) = u_map\<cdot>emb"
     and liftprj: "(liftprj :: udom u \<rightarrow> 'a u) = u_map\<cdot>prj"
     and liftdefl: "(liftdefl :: 'a itself \<Rightarrow> udom u defl) = (\<lambda>t. liftdefl_of\<cdot>DEFL('a))"
@@ -171,7 +170,7 @@ proof
   then have "ep_pair ((emb :: 'b \<rightarrow> udom) oo (f oo strictify\<cdot>up)) ((fup\<cdot>ID oo g) oo prj)"
     by (rule ep_pair_comp[OF _ ep_pair_emb_prj])
   then show "ep_pair (emb :: 'a \<rightarrow> udom) prj" unfolding emb prj by (simp only: assoc_oo)
-  let ?c = "f oo u_drop_bottom oo g"
+  let ?c = "f oo fup\<cdot>(strictify\<cdot>up) oo g"
   have cut: "?c\<cdot>y = y \<or> ?c\<cdot>y = \<bottom>" for y
   proof (cases "g\<cdot>y")
     case bottom
@@ -179,7 +178,7 @@ proof
     then show ?thesis using bottom by simp
   next
     case (up x)
-    then show ?thesis using fg[of y] by (auto simp: fg.e_strict)
+    then show ?thesis using fg[of y] by (auto simp: fg.e_strict strictify_conv_if)
   qed
   have dc: "deflation ?c"
   proof
@@ -193,7 +192,7 @@ proof
       = (emb :: 'b \<rightarrow> udom) oo (\<Lambda> d. ?c oo d)\<cdot>(cast\<cdot>defl_top) oo prj"
     by (rule cast_defl_fun1[OF ep_pair_emb_prj F])
   then have "cast\<cdot>DEFL('a) = (emb :: 'b \<rightarrow> udom) oo ?c oo cast\<cdot>(defl_top :: 'b defl) oo prj"
-    unfolding defl by (simp add: assoc_oo)
+    unfolding defl unlift_defl_def by (simp add: assoc_oo)
   also have "\<dots> = emb oo (prj :: udom \<rightarrow> 'a)"
     unfolding emb prj cast_defl_top by (simp add: assoc_oo strictify_up_fup_ID[symmetric] cfcomp1)
   finally show "cast\<cdot>DEFL('a) = emb oo (prj :: udom \<rightarrow> 'a)" .
