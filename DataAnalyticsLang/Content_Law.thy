@@ -680,6 +680,20 @@ qed
 lemma graph_content_conf: "entry_conf e data F \<Longrightarrow> graph (content data e F k) = cgraph data e F k"
   unfolding content_def by (rule graph_gmap[OF cgraph_single_valued_conf])
 
+text \<open>A conforming content maps each fiber row's key part to its section, and nothing else.\<close>
+
+lemma dom_content: "dom (content data e F k) = (\<lambda>y. rproj (ekeys e) y) ` vfiber data e F k"
+  by (simp add: content_def cgraph_def cpair_def image_image)
+
+lemma content_None_iff: "content data e F k q = None \<longleftrightarrow> q \<notin> (\<lambda>y. rproj (ekeys e) y) ` vfiber data e F k"
+  unfolding dom_content[symmetric] by auto
+
+lemma content_row:
+  assumes c: "entry_conf e data F" and y: "y \<in> vfiber data e F k"
+  shows "content data e F k (rproj (ekeys e) y) = Some (y \<downharpoonright> ecols e)"
+  unfolding content_def
+  by (rule gmap_apply[OF cgraph_single_valued_conf[OF c]]) (use y in \<open>force simp: cgraph_def cpair_def\<close>)
+
 subsection \<open>Column supports of frames and sections of datasets\<close>
 
 text \<open>A selection \<^emph>\<open>reads\<close> a section of the row when it is decided there.  A frame reads a

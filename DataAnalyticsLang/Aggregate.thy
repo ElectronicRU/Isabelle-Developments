@@ -246,25 +246,8 @@ text \<open>The fold guard reads the fiber.\<close>
 lemma agg_fiber: "proj (flod F)\<cdot>k = k \<Longrightarrow> group data \<bottom> \<top> F k = afiber data F (flod F) k"
   by (simp add: group_top[of \<bottom>, simplified] afiber_def)
 
-text \<open>An inner group is the outer group through the same upper part, cut down by the inner key's
-  lower part.\<close>
-
-lemma agg_group:
-  assumes y: "rproj (flod F) y = k" and am: "a \<sqsubseteq> m"
-  shows "group data a \<rho> F (rproj (m \<squnion> flod F) y) = {y' \<in> group data \<bottom> \<rho> F k. rproj a y' = rproj a y}"
-proof -
-  let ?X = "m \<squnion> flod F" and ?L = "\<rho> \<sqinter> flod F"
-  have AX: "a \<sqsubseteq> ?X" by (rule below_trans[OF am lattice_join_ge1])
-  have LX: "?L \<sqsubseteq> ?X" by (rule below_trans[OF truncate_below lattice_join_ge2])
-  have kA: "proj a\<cdot>(rproj ?X y) = rproj a y" by (rule proj_le[OF AX])
-  have kL: "proj ?L\<cdot>(rproj ?X y) = proj ?L\<cdot>k"
-  proof -
-    have "proj ?L\<cdot>(rproj ?X y) = rproj ?L y" by (rule proj_le[OF LX])
-    also have "\<dots> = proj ?L\<cdot>(rproj (flod F) y)" by (rule proj_le[OF truncate_below, symmetric])
-    finally show ?thesis by (simp only: y)
-  qed
-  show ?thesis unfolding group_def proj_sup_eq kA kL by (auto simp: proj_bot)
-qed
+text \<open>An inner fiber is the outer fiber through the same upper part, cut down by the inner key's
+  lower part; likewise an inner group.\<close>
 
 lemma agg_fiber_group:
   assumes y: "rproj (flod F) y = k" and am: "a \<sqsubseteq> m"
@@ -282,6 +265,11 @@ proof -
   qed
   show ?thesis unfolding fiber_def proj_sup_eq kA kL by (auto simp: proj_bot)
 qed
+
+lemma agg_group:
+  assumes y: "rproj (flod F) y = k" and am: "a \<sqsubseteq> m"
+  shows "group data a \<rho> F (rproj (m \<squnion> flod F) y) = {y' \<in> group data \<bottom> \<rho> F k. rproj a y' = rproj a y}"
+  by (auto simp: group_fiber agg_fiber_group[OF y am])
 
 text \<open>Inner keys of a fiber correspond to their parts at \<open>m\<close>.\<close>
 
@@ -307,7 +295,42 @@ proof -
   qed
 qed
 
-text \<open>The content of an inner entry at an inner key is read off the released entry's content.\<close>
+text \<open>An inner key \<open>\<kappa>\<close> of a row \<open>y\<close> of the fiber, at the inner minimal LOD \<open>p\<close>: the row's lower
+  part of an inner entry is \<open>p\<close>'s, and the inner fibers and groups at \<open>\<kappa>\<close> are the released ones cut
+  down there.  A released key's parts are its row's.\<close>
+
+lemma agg_inner_row:
+  assumes yZ: "y \<in> afiber data G (flod G) kG" and \<kappa>: "\<kappa> = rproj (m \<squnion> flod G) y" and py: "proj m\<cdot>\<kappa> = p"
+    and am: "a \<sqsubseteq> m"
+  shows "rproj (flod G) y = kG" and "rproj a y = proj a\<cdot>p"
+proof -
+  show "rproj (flod G) y = kG" using yZ by (simp add: afiber_def)
+  have "proj a\<cdot>p = proj a\<cdot>\<kappa>" unfolding py[symmetric] by (rule proj_le[OF am])
+  also have "\<dots> = rproj a y" unfolding \<kappa> by (rule proj_le[OF below_trans[OF am lattice_join_ge1]])
+  finally show "rproj a y = proj a\<cdot>p" by simp
+qed
+
+lemma agg_vfiber_inner:
+  assumes yZ: "y \<in> afiber data G (flod G) kG" and \<kappa>: "\<kappa> = rproj (m \<squnion> flod G) y" and py: "proj m\<cdot>\<kappa> = p"
+    and am: "elower e \<sqsubseteq> m"
+  shows "vfiber data e G \<kappa> = {y' \<in> vfiber data (release e) G kG. rproj (elower e) y' = proj (elower e)\<cdot>p}"
+  unfolding vfiber_def \<kappa> agg_fiber_group[OF agg_inner_row(1)[OF yZ \<kappa> py am] am] agg_inner_row(2)[OF yZ \<kappa> py am]
+  by simp
+
+lemma agg_gfiber_inner:
+  assumes yZ: "y \<in> afiber data G (flod G) kG" and \<kappa>: "\<kappa> = rproj (m \<squnion> flod G) y" and py: "proj m\<cdot>\<kappa> = p"
+    and am: "elower e \<sqsubseteq> m"
+  shows "gfiber data e G \<kappa> = {y' \<in> gfiber data (release e) G kG. rproj (elower e) y' = proj (elower e)\<cdot>p}"
+  unfolding gfiber_def \<kappa> agg_group[OF agg_inner_row(1)[OF yZ \<kappa> py am] am] agg_inner_row(2)[OF yZ \<kappa> py am]
+  by auto
+
+lemma release_key_parts:
+  "proj a\<cdot>(rproj (s \<squnion> a) y) = rproj a y" "proj s\<cdot>(rproj (s \<squnion> a) y) = rproj s y"
+  by (rule proj_le[OF lattice_join_ge2], rule proj_le[OF lattice_join_ge1])
+
+text \<open>The content of an inner entry at an inner key is read off the released entry's content: the
+  sources of an inner key part are the released keys of the inner fiber's rows with that part, and
+  there is at most one, since the inner fiber fixes the lower part.\<close>
 
 lemma agg_content_inner:
   assumes ES: "semilawful E" and e: "e \<in> set (evalues E)" and d: "fconf (evalues E) data G"
@@ -316,64 +339,37 @@ lemma agg_content_inner:
   shows "content data e G \<kappa> = agg_pick e p (content data (release e) G kG)"
 proof
   fix q
-  let ?a = "elower e" and ?s = "ekeys e" and ?m = "emind E"
-  let ?Y = "vfiber data (release e) G kG" and ?X = "content data (release e) G kG"
-  let ?P = "agg_src e p ?X q"
-  have am: "?a \<sqsubseteq> ?m" by (rule lower_below_mind_value[OF ES e])
-  have yA: "rproj ?a y = proj ?a\<cdot>p"
-  proof -
-    have "proj ?a\<cdot>p = proj ?a\<cdot>\<kappa>" unfolding py[symmetric] by (rule proj_le[OF am])
-    also have "\<dots> = rproj ?a y" unfolding \<kappa> by (rule proj_le[OF below_trans[OF am lattice_join_ge1]])
-    finally show ?thesis by simp
-  qed
-  have gy: "rproj (flod G) y = kG" using yZ by (simp add: afiber_def)
-  have fib: "vfiber data e G \<kappa> = {y' \<in> ?Y. rproj ?a y' = proj ?a\<cdot>p}"
-    unfolding vfiber_def \<kappa> agg_fiber_group[OF gy am] yA by simp
-  have cpr: "cpair (release e) y' = (rproj (?s \<squnion> ?a) y', y' \<downharpoonright> ecols e)" for y' by (simp add: cpair_def)
-  have dX: "dom ?X = (\<lambda>y'. rproj (?s \<squnion> ?a) y') ` ?Y" by (simp add: content_def cgraph_def cpr image_image)
-  have pa: "proj ?a\<cdot>(rproj (?s \<squnion> ?a) y') = rproj ?a y'" for y' by (rule proj_le[OF lattice_join_ge2])
-  have ps: "proj ?s\<cdot>(rproj (?s \<squnion> ?a) y') = rproj ?s y'" for y' by (rule proj_le[OF lattice_join_ge1])
-  have wf: "entry_wf e" by (rule semilawful_wf[OF ES e])
+  let ?a = "elower e" and ?s = "ekeys e" and ?X = "content data (release e) G kG"
+  let ?I = "vfiber data e G \<kappa>" and ?P = "agg_src e p ?X q"
+  have fib: "?I = {y' \<in> vfiber data (release e) G kG. rproj ?a y' = proj ?a\<cdot>p}"
+    by (rule agg_vfiber_inner[OF yZ \<kappa> py lower_below_mind_value[OF ES e]])
   have ce: "entry_conf e data G" using d e by (simp add: fconf_def)
   then have ce': "entry_conf (release e) data G" by (simp add: entry_conf_def lattice_join_ac truncate_inf_comp)
-  have svR: "single_valued (cgraph data (release e) G kG)" by (rule cgraph_single_valued_conf[OF ce'])
-  have svE: "single_valued (cgraph data e G \<kappa>)" by (rule cgraph_single_valued_conf[OF ce])
+  have src: "?P q0 \<longleftrightarrow> (\<exists>y'\<in>?I. rproj ?s y' = q \<and> q0 = rproj (?s \<squnion> ?a) y')" for q0
+    unfolding agg_src_def dom_content fib by (auto simp: release_key_parts)
+  have uniq: "rproj (?s \<squnion> ?a) y1 = rproj (?s \<squnion> ?a) y2"
+    if "y1 \<in> ?I" "y2 \<in> ?I" "rproj ?s y1 = rproj ?s y2" for y1 y2
+    using that by (simp add: fib rproj_sup_eq)
   show "content data e G \<kappa> q = agg_pick e p ?X q"
-  proof (cases "\<exists>y'\<in>vfiber data e G \<kappa>. rproj ?s y' = q")
+  proof (cases "\<exists>y'\<in>?I. rproj ?s y' = q")
     case True
-    then obtain y' where y': "y' \<in> vfiber data e G \<kappa>" "rproj ?s y' = q" by blast
-    have yY: "y' \<in> ?Y" and ya: "rproj ?a y' = proj ?a\<cdot>p" using y'(1) fib by auto
-    let ?q0 = "rproj (?s \<squnion> ?a) y'"
-    have src: "?P ?q0" unfolding agg_src_def dX using yY ya y'(2) by (auto simp: pa ps)
-    have uniq: "q1 = ?q0" if q1: "?P q1" for q1
+    then obtain y' where y': "y' \<in> ?I" "rproj ?s y' = q" by blast
+    have s0: "?P (rproj (?s \<squnion> ?a) y')" unfolding src using y' by blast
+    have u: "q1 = rproj (?s \<squnion> ?a) y'" if q1: "?P q1" for q1
     proof -
-      obtain y1 where y1: "y1 \<in> ?Y" "q1 = rproj (?s \<squnion> ?a) y1" using q1 unfolding agg_src_def dX by blast
-      have "rproj ?a y1 = rproj ?a y'" using q1 ya unfolding agg_src_def y1(2) pa by simp
-      moreover have "rproj ?s y1 = rproj ?s y'" using q1 y'(2) unfolding agg_src_def y1(2) ps by simp
-      ultimately show ?thesis unfolding y1(2) by (simp only: rproj_sup_eq)
+      obtain y1 where "y1 \<in> ?I" "rproj ?s y1 = q" "q1 = rproj (?s \<squnion> ?a) y1" using q1 unfolding src by blast
+      then show ?thesis using uniq[of y1 y'] y' by simp
     qed
-    have ex1: "\<exists>!q0. ?P q0" using src uniq by blast
-    have th: "(THE q0. ?P q0) = ?q0" using src uniq by blast
-    have "(?q0, y' \<downharpoonright> ecols e) \<in> cgraph data (release e) G kG"
-      unfolding cgraph_def using yY by (force simp: cpr)
-    then have Xq0: "?X ?q0 = Some (y' \<downharpoonright> ecols e)" unfolding content_def by (rule gmap_apply[OF svR])
-    have "(q, y' \<downharpoonright> ecols e) \<in> cgraph data e G \<kappa>"
-      unfolding cgraph_def using y' by (force simp: cpair_def)
-    then have Cq: "content data e G \<kappa> q = Some (y' \<downharpoonright> ecols e)" unfolding content_def by (rule gmap_apply[OF svE])
-    show ?thesis unfolding agg_pick_def using ex1 th Xq0 Cq by simp
+    have ex1: "\<exists>!q0. ?P q0" using s0 u by blast
+    have th: "(THE q0. ?P q0) = rproj (?s \<squnion> ?a) y'" using s0 u by blast
+    have "?X (rproj (?s \<squnion> ?a) y') = Some (y' \<downharpoonright> ecols e)"
+      using content_row[OF ce', of y'] y'(1) fib by simp
+    then show ?thesis unfolding agg_pick_def using ex1 th content_row[OF ce y'(1)] y'(2) by simp
   next
     case False
-    have Cq: "content data e G \<kappa> q = None"
-      unfolding content_def gmap_def using False by (auto simp: cgraph_def cpair_def)
-    have no: "\<not> (\<exists>q0. ?P q0)"
-    proof
-      assume "\<exists>q0. ?P q0"
-      then obtain q0 y1 where y1: "y1 \<in> ?Y" "q0 = rproj (?s \<squnion> ?a) y1"
-        and s: "proj ?a\<cdot>q0 = proj ?a\<cdot>p" "proj ?s\<cdot>q0 = q" unfolding agg_src_def dX by blast
-      have "y1 \<in> vfiber data e G \<kappa>" "rproj ?s y1 = q" using y1 s fib by (auto simp: pa ps)
-      then show False using False by blast
-    qed
-    show ?thesis unfolding agg_pick_def using no Cq by auto
+    then have "\<not> (\<exists>!q0. ?P q0)" unfolding src by blast
+    moreover have "content data e G \<kappa> q = None" using False by (auto simp: content_None_iff)
+    ultimately show ?thesis unfolding agg_pick_def by simp
   qed
 qed
 
@@ -384,24 +380,8 @@ lemma agg_gcontent_inner:
     and yZ: "y \<in> afiber data G (flod G) kG"
     and \<kappa>: "\<kappa> = rproj (emind E \<squnion> flod G) y" and py: "proj (emind E)\<cdot>\<kappa> = p"
   shows "gcontent data e G \<kappa> = agg_gpick e p (gcontent data (release e) G kG)"
-proof -
-  let ?a = "elower e" and ?s = "ekeys e" and ?m = "emind E"
-  let ?Y = "gfiber data (release e) G kG"
-  have am: "?a \<sqsubseteq> ?m" by (rule lower_below_mind_guard[OF ES e])
-  have yA: "rproj ?a y = proj ?a\<cdot>p"
-  proof -
-    have "proj ?a\<cdot>p = proj ?a\<cdot>\<kappa>" unfolding py[symmetric] by (rule proj_le[OF am])
-    also have "\<dots> = rproj ?a y" unfolding \<kappa> by (rule proj_le[OF below_trans[OF am lattice_join_ge1]])
-    finally show ?thesis by simp
-  qed
-  have gy: "rproj (flod G) y = kG" using yZ by (simp add: afiber_def)
-  have fib: "gfiber data e G \<kappa> = {y' \<in> ?Y. rproj ?a y' = proj ?a\<cdot>p}"
-    unfolding gfiber_def \<kappa> agg_group[OF gy am] yA by auto
-  have pa: "proj ?a\<cdot>(rproj (?s \<squnion> ?a) y') = rproj ?a y'" for y' by (rule proj_le[OF lattice_join_ge2])
-  have ps: "proj ?s\<cdot>(rproj (?s \<squnion> ?a) y') = rproj ?s y'" for y' by (rule proj_le[OF lattice_join_ge1])
-  have "gcontent data (release e) G kG = (\<lambda>y'. rproj (?s \<squnion> ?a) y') ` ?Y" by (simp add: gcontent_def)
-  then show ?thesis unfolding agg_gpick_def gcontent_def fib by (auto simp: pa ps)
-qed
+  unfolding agg_gpick_def gcontent_def agg_gfiber_inner[OF yZ \<kappa> py lower_below_mind_guard[OF ES e]]
+  by (auto simp: release_key_parts)
 
 text \<open>The aggregate is strict: an empty fold guard leaves nothing to fold, and an empty inner
   guard makes every inner content semantics absent.\<close>
