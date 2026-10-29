@@ -1,5 +1,5 @@
 theory Content_Law
-  imports Frame "HOLCF-Library.List_Cpo" "HOLCF-Library.Option_Cpo"
+  imports Frame Option_PD "HOLCF-Library.List_Cpo"
 begin
 
 default_sort type

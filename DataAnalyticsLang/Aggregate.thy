@@ -9,17 +9,6 @@ text \<open>An aggregate folds the entries of an inner expression over each fibe
   gives no entry; it is not \<open>\<bottom>\<close>: a monotone operation with unit \<open>\<bottom>\<close> would be inflationary
   (\<open>x = x \<oplus> \<bottom> \<sqsubseteq> x \<oplus> y\<close>), which rules out sums on flat values.\<close>
 
-abbreviation opt_op :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> 'v option \<Rightarrow> 'v option \<Rightarrow> 'v option" where
-  "opt_op f \<equiv> combine_options (\<lambda>a b. f\<cdot>a\<cdot>b)"
-
-lemma comm_monoid_opt_op:
-  assumes "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
-  shows "comm_monoid (opt_op f) None"
-proof -
-  interpret abel_semigroup "\<lambda>a b. f\<cdot>a\<cdot>b" by (fact assms)
-  show ?thesis by standard (auto simp: combine_options_def assoc commute left_commute split: option.splits)
-qed
-
 definition agg_fold :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('a \<rightharpoonup> 'v) \<Rightarrow> 'a set \<Rightarrow> 'v option" where
   "agg_fold f v A = comm_monoid_set.F (opt_op f) None v A"
 
@@ -80,16 +69,6 @@ qed
 
 text \<open>The fold is continuous in the folded values.\<close>
 
-lemma cont_opt_op:
-  assumes u: "cont u" and w: "cont w"
-  shows "cont (\<lambda>x. opt_op f (u x) (w x))"
-  unfolding combine_options_def
-proof (rule cont2cont_case_option[OF u w])
-  fix a show "cont (\<lambda>x. case w x of None \<Rightarrow> Some a | Some y \<Rightarrow> Some (f\<cdot>a\<cdot>y))"
-    by (rule cont2cont_case_option[OF w]) simp_all
-next
-  fix x show "cont (\<lambda>a. case w x of None \<Rightarrow> Some a | Some y \<Rightarrow> Some (f\<cdot>a\<cdot>y))" by simp
-qed
 
 lemma cont_agg_fold:
   assumes v: "\<And>a. cont (\<lambda>x. v x a)"

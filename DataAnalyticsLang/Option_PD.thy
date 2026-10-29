@@ -491,4 +491,63 @@ proof -
   qed
 qed
 
+subsection \<open>Lifting a commutative semigroup\<close>
+
+text \<open>Adjoining a unit for absence: an option operation, then lifted to results.\<close>
+
+abbreviation opt_op :: "('v::pcpo \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> 'v option \<Rightarrow> 'v option \<Rightarrow> 'v option" where
+  "opt_op f \<equiv> combine_options (\<lambda>a b. f\<cdot>a\<cdot>b)"
+
+lemma comm_monoid_opt_op:
+  assumes "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
+  shows "comm_monoid (opt_op f) None"
+proof -
+  interpret abel_semigroup "\<lambda>a b. f\<cdot>a\<cdot>b" by (fact assms)
+  show ?thesis by standard (auto simp: combine_options_def assoc commute left_commute split: option.splits)
+qed
+
+lemma cont_opt_op:
+  assumes u: "cont u" and w: "cont w"
+  shows "cont (\<lambda>x. opt_op f (u x) (w x))"
+  unfolding combine_options_def
+proof (rule cont2cont_case_option[OF u w])
+  fix a show "cont (\<lambda>x. case w x of None \<Rightarrow> Some a | Some y \<Rightarrow> Some (f\<cdot>a\<cdot>y))"
+    by (rule cont2cont_case_option[OF w]) simp_all
+next
+  fix x show "cont (\<lambda>a. case w x of None \<Rightarrow> Some a | Some y \<Rightarrow> Some (f\<cdot>a\<cdot>y))" by simp
+qed
+
+definition combine_option_pd :: "('v \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd \<Rightarrow> 'v option_pd" where
+  "combine_option_pd f = option_pd_op (\<Lambda> a b. opt_op f a b)"
+
+lemma opt_op_cfun_apply [simp]: "(\<Lambda> a b. opt_op f a b)\<cdot>a\<cdot>b = opt_op f a b"
+proof -
+  have "cont (\<lambda>a. opt_op f a b)" for b by (rule cont_opt_op) simp_all
+  moreover have "cont (\<lambda>b. opt_op f a b)" for a by (rule cont_opt_op) simp_all
+  ultimately show ?thesis by (simp add: cont2cont_LAM)
+qed
+
+lemma combine_option_pd_of_option [simp]:
+  "combine_option_pd f (of_option\<cdot>a) (of_option\<cdot>b) = of_option\<cdot>(opt_op f a b)"
+  by (simp add: combine_option_pd_def)
+
+lemma combine_option_pd_Present [simp]: "combine_option_pd f (Present\<cdot>a) (Present\<cdot>b) = Present\<cdot>(f\<cdot>a\<cdot>b)"
+  using combine_option_pd_of_option[of f "Some a" "Some b"] by simp
+
+lemma cont_combine_option_pd [simp, cont2cont]:
+  "cont g \<Longrightarrow> cont h \<Longrightarrow> cont (\<lambda>x. combine_option_pd f (g x) (h x))"
+  by (simp add: combine_option_pd_def)
+
+lemma combine_option_pd_plus1: "combine_option_pd f (x + y) z = combine_option_pd f x z + combine_option_pd f y z"
+  by (simp add: combine_option_pd_def option_pd_op_plus1)
+
+lemma combine_option_pd_plus2: "combine_option_pd f z (x + y) = combine_option_pd f z x + combine_option_pd f z y"
+  by (simp add: combine_option_pd_def option_pd_op_plus2)
+
+lemma comm_monoid_combine_option_pd:
+  assumes "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
+  shows "comm_monoid (combine_option_pd f) Absent"
+  unfolding combine_option_pd_def
+  by (rule comm_monoid_option_pd_op) (simp add: comm_monoid_opt_op[OF assms])
+
 end
