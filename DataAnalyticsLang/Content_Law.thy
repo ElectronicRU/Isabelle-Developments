@@ -967,66 +967,6 @@ lemma group_below_kd:
   by (rule join_belowI[OF below_trans[OF lower_below_mind lattice_join_ge1]
         below_trans[OF truncate_below lattice_join_ge2]])
 
-text \<open>A weaker presence law.  An expression is \<^emph>\<open>jointly present\<close> at a key when one row lies in
-  the groups of all its selectors: it realises the key at every group LOD and passes every
-  coarsened slice.  A \<^emph>\<open>jointly lawful\<close> expression is semilawful and, at its keys, present only
-  where it is jointly present.  Lawful expressions are jointly lawful; the converse needs a selector
-  reaching the whole frame LOD.\<close>
-
-definition jointly_present ::
-  "'r lower_pd \<Rightarrow> ('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> bool" where
-  "jointly_present data E F k \<longleftrightarrow> (\<exists>y. \<forall>S\<in>set (esels E). y \<in> group data (lower_part S) (upper_part S) F k)"
-
-definition jointly_lawful :: "('k, 'f, 'r, 'v::cpo) expr \<Rightarrow> bool" where
-  "jointly_lawful E \<longleftrightarrow> semilawful E \<and>
-     (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k \<noteq> None \<longrightarrow>
-       jointly_present data E F k)"
-
-lemma jointly_lawfulI:
-  assumes "semilawful E"
-    and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (kd E F)\<cdot>k = k; esem E data F k \<noteq> None\<rbrakk> \<Longrightarrow>
-      jointly_present data E F k"
-  shows "jointly_lawful E"
-  unfolding jointly_lawful_def using assms by blast
-
-lemma jointly_lawful_semilawful: "jointly_lawful E \<Longrightarrow> semilawful E"
-  unfolding jointly_lawful_def by blast
-
-lemma jointly_lawful_present:
-  "\<lbrakk>jointly_lawful E; fconf (evalues E) data F; proj (kd E F)\<cdot>k = k; esem E data F k \<noteq> None\<rbrakk> \<Longrightarrow>
-    jointly_present data E F k"
-  unfolding jointly_lawful_def by blast
-
-lemma lawful_jointly_lawful:
-  assumes E: "lawful E"
-  shows "jointly_lawful E"
-proof (rule jointly_lawfulI[OF lawful_semilawful[OF E]])
-  fix data F k assume d: "fconf (evalues E) data F" and k: "proj (kd E F)\<cdot>k = k" and p: "esem E data F k \<noteq> None"
-  obtain x where x: "x \<in> lower_maximal data" "frows F x" and kx: "k = proj (kd E F)\<cdot>(rkey\<cdot>x)"
-    using lawful_key_law_conf[OF E d k p] by (auto simp: keyimg_def)
-  show "jointly_present data E F k" unfolding jointly_present_def
-  proof (intro exI ballI)
-    fix S assume S: "S \<in> set (esels E)"
-    have "proj (sel_at S (flod F))\<cdot>k = rproj (sel_at S (flod F)) x"
-      unfolding kx by (rule proj_le[OF group_below_kd[OF lawful_semilawful[OF E] S]])
-    then show "x \<in> group data (lower_part S) (upper_part S) F k"
-      using x by (simp add: group_def frows_def holds_coarsen)
-  qed
-qed
-
-text \<open>Raising the frame LOD by \<open>m\<close> above the lower part merges the two in the full group.\<close>
-
-lemma join_finclude_absorb:
-  fixes m :: "'k semi_factor"
-  assumes "a \<sqsubseteq> m" shows "a \<squnion> flod (finclude m F) = m \<squnion> flod F"
-proof -
-  have "a \<sqsubseteq> flod F \<squnion> m" by (rule below_trans[OF assms lattice_join_ge2])
-  then show ?thesis unfolding flod_finclude by (simp only: lattice_join_absorb2 lattice_join_commute)
-qed
-
-lemma group_top_finclude: "a \<sqsubseteq> m \<Longrightarrow> group data a \<top> (finclude m F) k = group data m \<top> F k" for m :: "'k semi_factor"
-  by (simp add: group_def truncate_top join_finclude_absorb)
-
 text \<open>Contents agree when the groups, respectively the fibers, do.\<close>
 
 lemma gcontent_group_cong:
