@@ -1,5 +1,5 @@
 theory Value
-  imports LOD "HOLCF-extra.Domain_Order_Derive"
+  imports LOD "HOLCF-extra.Domain_Order_Derive" "HOLCF-extra.Kleene_Logic"
 begin
 
 section \<open>Transferring the classes along domain isomorphisms\<close>
@@ -452,24 +452,13 @@ abbreviation datum_eq :: "scalar datum \<rightarrow> scalar datum \<rightarrow> 
 
 subsection \<open>Truth\<close>
 
-text \<open>The connectives are strict, so lifted to data they make \<open>NA\<close> and \<open>Null\<close>
-  infectious (\<open>NOT NA = NA\<close>).  @{text truth_d} projects a datum to @{typ tr}, sending every
-  missing value and every non-boolean to \<open>\<bottom>\<close>; it is a homomorphism for the connectives.  A
-  slicer condition holds where @{text truth_d} is @{term TT}.\<close>
-
-definition tr_and :: "tr \<rightarrow> tr \<rightarrow> tr" where
-  "tr_and = (FLIFT a. FLIFT b. Def (a \<and> b))"
-
-definition tr_or :: "tr \<rightarrow> tr \<rightarrow> tr" where
-  "tr_or = (FLIFT a. FLIFT b. Def (a \<or> b))"
-
-lemma tr_and_simps [simp]:
-  "tr_and\<cdot>\<bottom>\<cdot>y = \<bottom>" "tr_and\<cdot>x\<cdot>\<bottom> = \<bottom>" "tr_and\<cdot>(Def a)\<cdot>(Def b) = Def (a \<and> b)"
-  by (simp_all add: tr_and_def) (cases x rule: lift.exhaust; simp)
-
-lemma tr_or_simps [simp]:
-  "tr_or\<cdot>\<bottom>\<cdot>y = \<bottom>" "tr_or\<cdot>x\<cdot>\<bottom> = \<bottom>" "tr_or\<cdot>(Def a)\<cdot>(Def b) = Def (a \<or> b)"
-  by (simp_all add: tr_or_def) (cases x rule: lift.exhaust; simp)
+text \<open>Negation is strict, lifted layer by layer, so \<open>NOT NA = NA\<close>.  Conjunction and disjunction
+  are Kleene's parallel connectives: a false conjunct makes a conjunction false whatever the others
+  are, missing or undefined, and dually a true disjunct a disjunction true.  Otherwise an undefined
+  argument makes them undefined, \<open>NA\<close> dominates \<open>Null\<close> as for every lifted operator, and else
+  they are the connectives on truth values.  @{text truth_d} projects a datum to @{typ tr}, sending
+  every missing value and every non-boolean to \<open>\<bottom>\<close>; it is a homomorphism onto the parallel
+  connectives on @{typ tr}.  A slicer condition holds where @{text truth_d} is @{term TT}.\<close>
 
 fixrec sbool :: "scalar \<rightarrow> tr" where
   "b \<noteq> \<bottom> \<Longrightarrow> sbool\<cdot>(SBool\<cdot>b) = b"
@@ -480,12 +469,6 @@ lemma sbool_strict [simp]: "sbool\<cdot>\<bottom> = \<bottom>"
 fixrec snot :: "scalar \<rightarrow> scalar" where
   "a \<noteq> \<bottom> \<Longrightarrow> snot\<cdot>(SBool\<cdot>a) = SBool\<cdot>(neg\<cdot>a)"
 
-fixrec sand :: "scalar \<rightarrow> scalar \<rightarrow> scalar" where
-  "a \<noteq> \<bottom> \<Longrightarrow> b \<noteq> \<bottom> \<Longrightarrow> sand\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_and\<cdot>a\<cdot>b)"
-
-fixrec sor :: "scalar \<rightarrow> scalar \<rightarrow> scalar" where
-  "a \<noteq> \<bottom> \<Longrightarrow> b \<noteq> \<bottom> \<Longrightarrow> sor\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_or\<cdot>a\<cdot>b)"
-
 text \<open>Unconditional constructor equations; ill-typed applications give \<open>\<bottom>\<close>.\<close>
 
 lemma sbool_simps [simp]: "sbool\<cdot>(SBool\<cdot>b) = b" "sbool\<cdot>(SInt\<cdot>n) = \<bottom>"
@@ -494,21 +477,8 @@ lemma sbool_simps [simp]: "sbool\<cdot>(SBool\<cdot>b) = b" "sbool\<cdot>(SInt\<
 lemma snot_simps [simp]: "snot\<cdot>(SBool\<cdot>a) = SBool\<cdot>(neg\<cdot>a)" "snot\<cdot>(SInt\<cdot>n) = \<bottom>"
   by (cases "a = \<bottom>"; simp; fixrec_simp) (cases "n = \<bottom>"; fixrec_simp)
 
-lemma sand_simps [simp]:
-  "sand\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_and\<cdot>a\<cdot>b)"
-  "sand\<cdot>(SInt\<cdot>m)\<cdot>y = \<bottom>" "sand\<cdot>x\<cdot>(SInt\<cdot>n) = \<bottom>"
-    apply (cases "a = \<bottom>"; cases "b = \<bottom>"; simp; fixrec_simp)
-   apply (cases "m = \<bottom>"; fixrec_simp)
-  apply (cases x; cases "n = \<bottom>"; fixrec_simp)
-  done
-
-lemma sor_simps [simp]:
-  "sor\<cdot>(SBool\<cdot>a)\<cdot>(SBool\<cdot>b) = SBool\<cdot>(tr_or\<cdot>a\<cdot>b)"
-  "sor\<cdot>(SInt\<cdot>m)\<cdot>y = \<bottom>" "sor\<cdot>x\<cdot>(SInt\<cdot>n) = \<bottom>"
-    apply (cases "a = \<bottom>"; cases "b = \<bottom>"; simp; fixrec_simp)
-   apply (cases "m = \<bottom>"; fixrec_simp)
-  apply (cases x; cases "n = \<bottom>"; fixrec_simp)
-  done
+lemma snot_strict [simp]: "snot\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
 
 definition truth :: "scalar with_na \<rightarrow> tr" where
   "truth = sbool oo from_na"
@@ -516,29 +486,154 @@ definition truth :: "scalar with_na \<rightarrow> tr" where
 definition truth_d :: "scalar datum \<rightarrow> tr" where
   "truth_d = sbool oo plain"
 
-lemma scalar_connectives_strict [simp]:
-  "snot\<cdot>\<bottom> = \<bottom>" "sand\<cdot>\<bottom>\<cdot>y = \<bottom>" "sand\<cdot>x\<cdot>\<bottom> = \<bottom>" "sor\<cdot>\<bottom>\<cdot>y = \<bottom>" "sor\<cdot>x\<cdot>\<bottom> = \<bottom>"
-      apply fixrec_simp
-     apply fixrec_simp
-    apply (cases x; fixrec_simp)
-   apply fixrec_simp
-  apply (cases x; fixrec_simp)
-  done
-
-lemma sbool_connectives:
-  "sbool\<cdot>(snot\<cdot>s) = neg\<cdot>(sbool\<cdot>s)"
-  "sbool\<cdot>(sand\<cdot>s\<cdot>t) = tr_and\<cdot>(sbool\<cdot>s)\<cdot>(sbool\<cdot>t)"
-  "sbool\<cdot>(sor\<cdot>s\<cdot>t) = tr_or\<cdot>(sbool\<cdot>s)\<cdot>(sbool\<cdot>t)"
-  by (cases s; simp; cases t; simp)+
+lemma sbool_snot: "sbool\<cdot>(snot\<cdot>s) = neg\<cdot>(sbool\<cdot>s)"
+  by (cases s; simp)
 
 lemma truth_d_not: "truth_d\<cdot>(dlift1\<cdot>snot\<cdot>x) = neg\<cdot>(truth_d\<cdot>x)"
-  by (simp add: truth_d_def plain_dlift1 sbool_connectives)
+  by (simp add: truth_d_def plain_dlift1 sbool_snot)
 
-lemma truth_d_and: "truth_d\<cdot>(dlift2\<cdot>sand\<cdot>x\<cdot>y) = tr_and\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
-  by (simp add: truth_d_def plain_dlift2 sbool_connectives)
+definition d_bool :: "tr \<rightarrow> scalar datum" where
+  "d_bool = na_emb oo Known oo SBool"
 
-lemma truth_d_or: "truth_d\<cdot>(dlift2\<cdot>sor\<cdot>x\<cdot>y) = tr_or\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
-  by (simp add: truth_d_def plain_dlift2 sbool_connectives)
+lemma truth_d_bool [simp]: "truth_d\<cdot>(d_bool\<cdot>t) = t"
+  by (cases t rule: trE) (simp_all add: d_bool_def truth_d_def)
+
+text \<open>The parallel connectives see a datum only through its kind: a truth value, \<open>NA\<close>, or
+  \<open>Null\<close>; the not-null root and the non-booleans have none.\<close>
+
+datatype truth_kind = KTrue | KFalse | KNA | KNull
+
+lemma kind_cases [case_names bottom KTrue KFalse KNA KNull]:
+  obtains "x = \<bottom>" | "x = Def KTrue" | "x = Def KFalse" | "x = Def KNA" | "x = Def KNull"
+  by (cases x rule: lift.exhaust) (auto, metis truth_kind.exhaust)
+
+definition kind_scalar :: "scalar \<rightarrow> truth_kind lift" where
+  "kind_scalar = (\<Lambda> s. (FLIFT b. Def (if b then KTrue else KFalse))\<cdot>(sbool\<cdot>s))"
+
+lemma kind_scalar_simps [simp]:
+  "kind_scalar\<cdot>\<bottom> = \<bottom>" "kind_scalar\<cdot>(SBool\<cdot>TT) = Def KTrue" "kind_scalar\<cdot>(SBool\<cdot>FF) = Def KFalse"
+  "kind_scalar\<cdot>(SInt\<cdot>n) = \<bottom>"
+  by (simp_all add: kind_scalar_def TT_def FF_def)
+
+fixrec kind_null :: "scalar with_null \<rightarrow> truth_kind lift" where
+  "kind_null\<cdot>Null = Def KNull"
+| "s \<noteq> \<bottom> \<Longrightarrow> kind_null\<cdot>(Known\<cdot>s) = kind_scalar\<cdot>s"
+
+lemma kind_null_strict [simp]: "kind_null\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+lemma kind_null_Known [simp]: "kind_null\<cdot>(Known\<cdot>s) = kind_scalar\<cdot>s"
+  by (cases "s = \<bottom>") simp_all
+
+fixrec kind :: "scalar datum \<rightarrow> truth_kind lift" where
+  "kind\<cdot>NA = Def KNA"
+| "kind\<cdot>(Val\<cdot>x) = kind_null\<cdot>x"
+
+lemma kind_strict [simp]: "kind\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+
+definition from_kind :: "truth_kind lift \<rightarrow> scalar datum" where
+  "from_kind = (FLIFT k. case k of KTrue \<Rightarrow> d_bool\<cdot>TT | KFalse \<Rightarrow> d_bool\<cdot>FF | KNA \<Rightarrow> NA | KNull \<Rightarrow> Val\<cdot>Null)"
+
+lemma from_kind_simps [simp]:
+  "from_kind\<cdot>\<bottom> = \<bottom>" "from_kind\<cdot>(Def KTrue) = d_bool\<cdot>TT" "from_kind\<cdot>(Def KFalse) = d_bool\<cdot>FF"
+  "from_kind\<cdot>(Def KNA) = NA" "from_kind\<cdot>(Def KNull) = Val\<cdot>Null"
+  by (simp_all add: from_kind_def)
+
+lemma kind_from_kind [simp]: "kind\<cdot>(from_kind\<cdot>k) = k"
+  by (cases k rule: kind_cases) (simp_all add: d_bool_def)
+
+definition ktruth :: "truth_kind lift \<rightarrow> tr" where
+  "ktruth = (FLIFT k. case k of KTrue \<Rightarrow> TT | KFalse \<Rightarrow> FF | KNA \<Rightarrow> \<bottom> | KNull \<Rightarrow> \<bottom>)"
+
+lemma ktruth_simps [simp]:
+  "ktruth\<cdot>\<bottom> = \<bottom>" "ktruth\<cdot>(Def KTrue) = TT" "ktruth\<cdot>(Def KFalse) = FF"
+  "ktruth\<cdot>(Def KNA) = \<bottom>" "ktruth\<cdot>(Def KNull) = \<bottom>"
+  by (simp_all add: ktruth_def)
+
+lemma ktruth_kind_scalar: "ktruth\<cdot>(kind_scalar\<cdot>s) = sbool\<cdot>s"
+proof (cases s)
+  case (SBool b) then show ?thesis by (cases b rule: trE) simp_all
+qed simp_all
+
+lemma kind_null_not_KNA: "kind_null\<cdot>y \<noteq> Def KNA"
+proof (cases y)
+  case (Known s) then show ?thesis
+  proof (cases s)
+    case (SBool b) then show ?thesis using Known by (cases b rule: trE) simp_all
+  qed (simp_all add: Known)
+qed simp_all
+
+lemma truth_d_kind: "truth_d\<cdot>x = ktruth\<cdot>(kind\<cdot>x)"
+proof (cases x)
+  case (Val y) then show ?thesis
+    by (cases y) (simp_all add: truth_d_def ktruth_kind_scalar)
+qed (simp_all add: truth_d_def)
+
+definition kand :: "truth_kind lift \<rightarrow> truth_kind lift \<rightarrow> truth_kind lift" where
+  "kand = (\<Lambda> x y. if x = Def KFalse \<or> y = Def KFalse then Def KFalse else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
+     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
+     else Def KTrue)"
+
+definition kor :: "truth_kind lift \<rightarrow> truth_kind lift \<rightarrow> truth_kind lift" where
+  "kor = (\<Lambda> x y. if x = Def KTrue \<or> y = Def KTrue then Def KTrue else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
+     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
+     else Def KFalse)"
+
+lemma kand_apply: "kand\<cdot>x\<cdot>y = (if x = Def KFalse \<or> y = Def KFalse then Def KFalse else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
+     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
+     else Def KTrue)"
+  unfolding kand_def by (rule beta_chfin2; rule monofunI; auto simp: flat_below_iff)
+
+lemma kor_apply: "kor\<cdot>x\<cdot>y = (if x = Def KTrue \<or> y = Def KTrue then Def KTrue else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
+     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
+     else Def KFalse)"
+  unfolding kor_def by (rule beta_chfin2; rule monofunI; auto simp: flat_below_iff)
+
+lemma ktruth_kand: "ktruth\<cdot>(kand\<cdot>a\<cdot>b) = pand\<cdot>(ktruth\<cdot>a)\<cdot>(ktruth\<cdot>b)"
+  and ktruth_kor: "ktruth\<cdot>(kor\<cdot>a\<cdot>b) = por\<cdot>(ktruth\<cdot>a)\<cdot>(ktruth\<cdot>b)"
+  by (cases a rule: kind_cases; cases b rule: kind_cases; simp add: kand_apply kor_apply)+
+
+definition d_and :: "scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum" where
+  "d_and = (\<Lambda> x y. from_kind\<cdot>(kand\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y)))"
+
+definition d_or :: "scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum" where
+  "d_or = (\<Lambda> x y. from_kind\<cdot>(kor\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y)))"
+
+lemma d_and_apply: "d_and\<cdot>x\<cdot>y = from_kind\<cdot>(kand\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y))"
+  and d_or_apply: "d_or\<cdot>x\<cdot>y = from_kind\<cdot>(kor\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y))"
+  by (simp_all add: d_and_def d_or_def)
+
+lemma truth_d_and: "truth_d\<cdot>(d_and\<cdot>x\<cdot>y) = pand\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
+  and truth_d_or: "truth_d\<cdot>(d_or\<cdot>x\<cdot>y) = por\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
+  by (simp_all add: d_and_apply d_or_apply truth_d_kind ktruth_kand ktruth_kor)
+
+text \<open>Forgetting \<open>NA\<close> forgets the kind \<open>NA\<close>, so the parallel connectives are NA-blind.\<close>
+
+definition ksquash :: "truth_kind lift \<rightarrow> truth_kind lift" where
+  "ksquash = (FLIFT k. if k = KNA then \<bottom> else Def k)"
+
+lemma ksquash_simps [simp]: "ksquash\<cdot>\<bottom> = \<bottom>" "ksquash\<cdot>(Def k) = (if k = KNA then \<bottom> else Def k)"
+  by (simp_all add: ksquash_def)
+
+lemma ksquash_id: "k \<noteq> Def KNA \<Longrightarrow> ksquash\<cdot>k = k"
+  by (cases k rule: kind_cases) simp_all
+
+lemma kind_squash: "kind\<cdot>(squash\<cdot>x) = ksquash\<cdot>(kind\<cdot>x)"
+proof (cases x)
+  case (Val y) then show ?thesis using ksquash_id[OF kind_null_not_KNA[of y]] by (cases "y = \<bottom>") simp_all
+qed simp_all
+
+lemma squash_from_kind: "squash\<cdot>(from_kind\<cdot>k) = from_kind\<cdot>(ksquash\<cdot>k)"
+  by (cases k rule: kind_cases) (simp_all add: d_bool_def)
+
+lemma kand_ksquash: "kand\<cdot>(ksquash\<cdot>a)\<cdot>(ksquash\<cdot>b) = ksquash\<cdot>(kand\<cdot>a\<cdot>b)"
+  and kor_ksquash: "kor\<cdot>(ksquash\<cdot>a)\<cdot>(ksquash\<cdot>b) = ksquash\<cdot>(kor\<cdot>a\<cdot>b)"
+  by (cases a rule: kind_cases; cases b rule: kind_cases; simp add: kand_apply kor_apply)+
+
+lemma na_blind2_d_and: "na_blind2 d_and" and na_blind2_d_or: "na_blind2 d_or"
+  unfolding na_blind2_def d_and_apply d_or_apply kind_squash squash_from_kind kand_ksquash kor_ksquash
+  by simp_all
 
 section \<open>The not-null level of keys\<close>
 

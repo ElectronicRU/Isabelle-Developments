@@ -1,6 +1,63 @@
-theory Kleene_Exists
+theory Kleene_Logic
   imports HOLCF
 begin
+
+default_sort type
+
+section \<open>Parallel connectives\<close>
+
+text \<open>Kleene's strong connectives on @{typ tr}: falsity decides a conjunction and truth a
+  disjunction, whatever the other side, so they are parallel rather than sequential.\<close>
+
+lemma cont2cont_chfin2:
+  fixes f :: "'a::chfin \<Rightarrow> 'b::chfin \<Rightarrow> 'c::cpo"
+  assumes "\<And>x. monofun (f x)" and "\<And>y. monofun (\<lambda>x. f x y)"
+  shows "cont (\<lambda>x. \<Lambda> y. f x y)"
+  by (intro cont2cont_LAM chfindom_monofun2cont assms)
+
+lemma beta_chfin2:
+  fixes f :: "'a::chfin \<Rightarrow> 'b::chfin \<Rightarrow> 'c::cpo"
+  assumes "\<And>x. monofun (f x)" and "\<And>y. monofun (\<lambda>x. f x y)"
+  shows "(\<Lambda> x y. f x y)\<cdot>a\<cdot>b = f a b"
+  by (simp add: cont2cont_chfin2 assms chfindom_monofun2cont)
+
+definition pand :: "tr \<rightarrow> tr \<rightarrow> tr" where
+  "pand = (\<Lambda> x y. if x = FF \<or> y = FF then FF else if x = TT \<and> y = TT then TT else \<bottom>)"
+
+definition por :: "tr \<rightarrow> tr \<rightarrow> tr" where
+  "por = (\<Lambda> x y. if x = TT \<or> y = TT then TT else if x = FF \<and> y = FF then FF else \<bottom>)"
+
+lemma pand_apply: "pand\<cdot>x\<cdot>y = (if x = FF \<or> y = FF then FF else if x = TT \<and> y = TT then TT else \<bottom>)"
+  unfolding pand_def by (rule beta_chfin2; rule monofunI; auto simp: flat_below_iff)
+
+lemma por_apply: "por\<cdot>x\<cdot>y = (if x = TT \<or> y = TT then TT else if x = FF \<and> y = FF then FF else \<bottom>)"
+  unfolding por_def by (rule beta_chfin2; rule monofunI; auto simp: flat_below_iff)
+
+lemma pand_simps [simp]:
+  "pand\<cdot>FF\<cdot>y = FF" "pand\<cdot>x\<cdot>FF = FF" "pand\<cdot>TT\<cdot>y = y" "pand\<cdot>x\<cdot>TT = x" "pand\<cdot>\<bottom>\<cdot>\<bottom> = \<bottom>"
+  by (simp_all add: pand_apply) (metis Exh_tr)+
+
+lemma por_simps [simp]:
+  "por\<cdot>TT\<cdot>y = TT" "por\<cdot>x\<cdot>TT = TT" "por\<cdot>FF\<cdot>y = y" "por\<cdot>x\<cdot>FF = x" "por\<cdot>\<bottom>\<cdot>\<bottom> = \<bottom>"
+  by (simp_all add: por_apply) (metis Exh_tr)+
+
+lemma pand_TT_iff: "pand\<cdot>x\<cdot>y = TT \<longleftrightarrow> x = TT \<and> y = TT"
+  and pand_FF_iff: "pand\<cdot>x\<cdot>y = FF \<longleftrightarrow> x = FF \<or> y = FF"
+  and por_TT_iff: "por\<cdot>x\<cdot>y = TT \<longleftrightarrow> x = TT \<or> y = TT"
+  and por_FF_iff: "por\<cdot>x\<cdot>y = FF \<longleftrightarrow> x = FF \<and> y = FF"
+  by (auto simp: pand_apply por_apply)
+
+lemma pand_commute: "pand\<cdot>x\<cdot>y = pand\<cdot>y\<cdot>x"
+  and por_commute: "por\<cdot>x\<cdot>y = por\<cdot>y\<cdot>x"
+  by (auto simp: pand_apply por_apply)
+
+lemma pand_assoc: "pand\<cdot>(pand\<cdot>x\<cdot>y)\<cdot>z = pand\<cdot>x\<cdot>(pand\<cdot>y\<cdot>z)"
+  and por_assoc: "por\<cdot>(por\<cdot>x\<cdot>y)\<cdot>z = por\<cdot>x\<cdot>(por\<cdot>y\<cdot>z)"
+  by (cases x rule: trE; cases y rule: trE; cases z rule: trE; simp)+
+
+lemma neg_pand: "neg\<cdot>(pand\<cdot>x\<cdot>y) = por\<cdot>(neg\<cdot>x)\<cdot>(neg\<cdot>y)"
+  and neg_por: "neg\<cdot>(por\<cdot>x\<cdot>y) = pand\<cdot>(neg\<cdot>x)\<cdot>(neg\<cdot>y)"
+  by (cases x rule: trE; cases y rule: trE; simp)+
 
 section \<open>The Kleene existential over an up-set\<close>
 
@@ -71,6 +128,10 @@ lemma kleene_ex_above: "FF_upward P \<Longrightarrow> P a \<sqsubseteq> kleene_e
 
 lemma lub_tr_eq: "chain (Y :: nat \<Rightarrow> tr) \<Longrightarrow> \<exists>i. (\<Squnion>i. Y i) = Y i"
   using chfin maxinch_is_thelub by blast
+
+lemma FF_upward_pand: "FF_upward P \<Longrightarrow> FF_upward Q \<Longrightarrow> FF_upward (\<lambda>x. pand\<cdot>(P x)\<cdot>(Q x))"
+  and FF_upward_por: "FF_upward P \<Longrightarrow> FF_upward Q \<Longrightarrow> FF_upward (\<lambda>x. por\<cdot>(P x)\<cdot>(Q x))"
+  unfolding FF_upward_def pand_FF_iff por_FF_iff by blast+
 
 theorem cont_kleene_ex:
   assumes F: "cont F" and up: "\<And>y. FF_upward (F y)"

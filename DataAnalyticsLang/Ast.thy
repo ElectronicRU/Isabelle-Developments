@@ -30,26 +30,23 @@ datatype ('d, 'c, 'fn, 'ag) ast =
 
 section \<open>The known function symbols\<close>
 
-text \<open>Booleans as data, and the n-ary connectives: strict, so every missing argument is
-  infectious.  The empty conjunction is true, the empty disjunction false.\<close>
-
-definition d_bool :: "tr \<rightarrow> scalar datum" where
-  "d_bool = na_emb oo Known oo SBool"
+text \<open>The n-ary connectives fold the parallel ones: a false conjunct decides a conjunction, a true
+  disjunct a disjunction.  The empty conjunction is true, the empty disjunction false.\<close>
 
 text \<open>Calls take the list of their arguments' values.  Continuous functions on lists are given by
   recursion, and arguments of a fixed arity are matched by length, which is rigid.\<close>
 
 primrec ands :: "scalar datum list \<Rightarrow> scalar datum" where
   "ands [] = d_bool\<cdot>TT"
-| "ands (x # xs) = dlift2\<cdot>sand\<cdot>x\<cdot>(ands xs)"
+| "ands (x # xs) = d_and\<cdot>x\<cdot>(ands xs)"
 
 primrec ors :: "scalar datum list \<Rightarrow> scalar datum" where
   "ors [] = d_bool\<cdot>FF"
-| "ors (x # xs) = dlift2\<cdot>sor\<cdot>x\<cdot>(ors xs)"
+| "ors (x # xs) = d_or\<cdot>x\<cdot>(ors xs)"
 
 lemma cont_ands: "cont ands" and cont_ors: "cont ors"
-  by (rule list_contI[where g = "\<lambda>x xs y. dlift2\<cdot>sand\<cdot>x\<cdot>y"], simp_all)
-    (rule list_contI[where g = "\<lambda>x xs y. dlift2\<cdot>sor\<cdot>x\<cdot>y"], simp_all)
+  by (rule list_contI[where g = "\<lambda>x xs y. d_and\<cdot>x\<cdot>y"], simp_all)
+    (rule list_contI[where g = "\<lambda>x xs y. d_or\<cdot>x\<cdot>y"], simp_all)
 
 definition d_ands :: "scalar datum list \<rightarrow> scalar datum" where
   "d_ands = (\<Lambda> xs. ands xs)"
@@ -57,8 +54,8 @@ definition d_ands :: "scalar datum list \<rightarrow> scalar datum" where
 definition d_ors :: "scalar datum list \<rightarrow> scalar datum" where
   "d_ors = (\<Lambda> xs. ors xs)"
 
-lemma d_ands_simps [simp]: "d_ands\<cdot>[] = d_bool\<cdot>TT" "d_ands\<cdot>(x # xs) = dlift2\<cdot>sand\<cdot>x\<cdot>(d_ands\<cdot>xs)"
-  and d_ors_simps [simp]: "d_ors\<cdot>[] = d_bool\<cdot>FF" "d_ors\<cdot>(x # xs) = dlift2\<cdot>sor\<cdot>x\<cdot>(d_ors\<cdot>xs)"
+lemma d_ands_simps [simp]: "d_ands\<cdot>[] = d_bool\<cdot>TT" "d_ands\<cdot>(x # xs) = d_and\<cdot>x\<cdot>(d_ands\<cdot>xs)"
+  and d_ors_simps [simp]: "d_ors\<cdot>[] = d_bool\<cdot>FF" "d_ors\<cdot>(x # xs) = d_or\<cdot>x\<cdot>(d_ors\<cdot>xs)"
   by (simp_all add: d_ands_def d_ors_def cont_ands cont_ors)
 
 definition arg1 :: "('a::cpo \<rightarrow> 'b::pcpo) \<Rightarrow> 'a list \<rightarrow> 'b" where
@@ -96,33 +93,18 @@ primrec fsym_arity :: "('fn \<Rightarrow> nat \<Rightarrow> bool) \<Rightarrow> 
 | "fsym_arity other FIsNA n \<longleftrightarrow> n = 1"
 | "fsym_arity other (FOther fn) n \<longleftrightarrow> other fn n"
 
-lemma truth_d_bool [simp]: "truth_d\<cdot>(d_bool\<cdot>t) = t"
-  by (cases t rule: trE) (simp_all add: d_bool_def truth_d_def)
-
-text \<open>Truth of the connectives: a conjunction is true where all conjuncts are; a disjunction
-  where all disjuncts are defined and one is true.  Both are defined where all arguments are.\<close>
-
-lemma tr_and_TT_iff: "tr_and\<cdot>x\<cdot>y = TT \<longleftrightarrow> x = TT \<and> y = TT"
-  by (cases x rule: trE; cases y rule: trE) (simp_all add: TT_def FF_def)
-
-lemma tr_and_bot_iff: "tr_and\<cdot>x\<cdot>y = \<bottom> \<longleftrightarrow> x = \<bottom> \<or> y = \<bottom>"
-  by (cases x rule: trE; cases y rule: trE) (simp_all add: TT_def FF_def)
-
-lemma tr_or_TT_iff: "tr_or\<cdot>x\<cdot>y = TT \<longleftrightarrow> x \<noteq> \<bottom> \<and> y \<noteq> \<bottom> \<and> (x = TT \<or> y = TT)"
-  by (cases x rule: trE; cases y rule: trE) (simp_all add: TT_def FF_def)
-
-lemma tr_or_bot_iff: "tr_or\<cdot>x\<cdot>y = \<bottom> \<longleftrightarrow> x = \<bottom> \<or> y = \<bottom>"
-  by (cases x rule: trE; cases y rule: trE) (simp_all add: TT_def FF_def)
+text \<open>Truth of the connectives: a conjunction is true where all conjuncts are and false where
+  one is; a disjunction is true where one disjunct is and false where all are.\<close>
 
 lemma truth_d_ands:
   "truth_d\<cdot>(d_ands\<cdot>xs) = TT \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x = TT)"
-  "truth_d\<cdot>(d_ands\<cdot>xs) \<noteq> \<bottom> \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>)"
-  by (induct xs) (simp_all add: truth_d_and[simplified] tr_and_TT_iff tr_and_bot_iff)
+  "truth_d\<cdot>(d_ands\<cdot>xs) = FF \<longleftrightarrow> (\<exists>x\<in>set xs. truth_d\<cdot>x = FF)"
+  by (induct xs) (simp_all add: truth_d_and pand_TT_iff pand_FF_iff)
 
 lemma truth_d_ors:
-  "truth_d\<cdot>(d_ors\<cdot>xs) = TT \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>) \<and> (\<exists>x\<in>set xs. truth_d\<cdot>x = TT)"
-  "truth_d\<cdot>(d_ors\<cdot>xs) \<noteq> \<bottom> \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x \<noteq> \<bottom>)"
-  by (induct xs) (auto simp: truth_d_or[simplified] tr_or_TT_iff tr_or_bot_iff)
+  "truth_d\<cdot>(d_ors\<cdot>xs) = TT \<longleftrightarrow> (\<exists>x\<in>set xs. truth_d\<cdot>x = TT)"
+  "truth_d\<cdot>(d_ors\<cdot>xs) = FF \<longleftrightarrow> (\<forall>x\<in>set xs. truth_d\<cdot>x = FF)"
+  by (induct xs) (simp_all add: truth_d_or por_TT_iff por_FF_iff)
 
 section \<open>Dimensions and the key reading\<close>
 
@@ -249,7 +231,7 @@ text \<open>Coarsening a condition to an LOD drops what reads outside it, as in 
   conjunctions keep their surviving conjuncts (and vanish when none survives), disjunctions
   vanish as soon as one disjunct does, anything else survives whole or not at all.  Dropping
   only ever replaces a part in positive position by truth, so it weakens: what was true stays
-  true, what was defined stays defined.  Negation is not looked into; normal forms push it to
+  true, and what is false after coarsening was false before.  Negation is not looked into; normal forms push it to
   the literals first.\<close>
 
 fun crs :: "'k semi_factor \<Rightarrow> ('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('d, 'c, 'fn, 'ag) ast option" where
@@ -346,15 +328,15 @@ qed (auto simp: reads_in_meet)
 lemma kval_call [simp]: "kval (Call fn es)\<cdot>k = fsym_sem fn_other fn\<cdot>(map (\<lambda>e. kval e\<cdot>k) es)"
   by (simp add: tuple_cfun_apply comp_def)
 
-text \<open>Coarsening weakens: true stays true, defined stays defined.\<close>
+text \<open>Coarsening weakens: true stays true, and false after coarsening was false before.\<close>
 
 lemma crs_weakens:
   "crs A e = Some e' \<Longrightarrow> (truth_d\<cdot>(kval e\<cdot>k) = TT \<longrightarrow> truth_d\<cdot>(kval e'\<cdot>k) = TT) \<and>
-     (truth_d\<cdot>(kval e\<cdot>k) \<noteq> \<bottom> \<longrightarrow> truth_d\<cdot>(kval e'\<cdot>k) \<noteq> \<bottom>)"
+     (truth_d\<cdot>(kval e'\<cdot>k) = FF \<longrightarrow> truth_d\<cdot>(kval e\<cdot>k) = FF)"
 proof (induct A e arbitrary: e' rule: crs.induct)
   case (1 A es)
   have IH: "(truth_d\<cdot>(kval c\<cdot>k) = TT \<longrightarrow> truth_d\<cdot>(kval c'\<cdot>k) = TT) \<and>
-      (truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom> \<longrightarrow> truth_d\<cdot>(kval c'\<cdot>k) \<noteq> \<bottom>)" if "c \<in> set es" "crs A c = Some c'" for c c'
+      (truth_d\<cdot>(kval c'\<cdot>k) = FF \<longrightarrow> truth_d\<cdot>(kval c\<cdot>k) = FF)" if "c \<in> set es" "crs A c = Some c'" for c c'
     using 1(1)[OF that] .
   obtain es' where e': "e' = Call FAnd es'" and es': "set es' = {c'. \<exists>c\<in>set es. crs A c = Some c'}"
     using 1(3) set_kept[of "crs A" es] by (auto split: if_splits)
@@ -362,29 +344,23 @@ proof (induct A e arbitrary: e' rule: crs.induct)
 next
   case (2 A es)
   have IH: "(truth_d\<cdot>(kval c\<cdot>k) = TT \<longrightarrow> truth_d\<cdot>(kval c'\<cdot>k) = TT) \<and>
-      (truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom> \<longrightarrow> truth_d\<cdot>(kval c'\<cdot>k) \<noteq> \<bottom>)" if "c \<in> set es" "crs A c = Some c'" for c c'
+      (truth_d\<cdot>(kval c'\<cdot>k) = FF \<longrightarrow> truth_d\<cdot>(kval c\<cdot>k) = FF)" if "c \<in> set es" "crs A c = Some c'" for c c'
     using 2(1)[OF that] .
   have all: "\<exists>c'. crs A c = Some c'" if "c \<in> set es" for c
     using 2(3) that by (auto split: if_splits) (metis image_eqI option.exhaust)
   obtain es' where e': "e' = Call FOr es'" and es': "set es' = {c'. \<exists>c\<in>set es. crs A c = Some c'}"
     using 2(3) set_all_some[of "crs A" es] by (auto split: if_splits)
-  have defd: "\<forall>c'\<in>set es'. truth_d\<cdot>(kval c'\<cdot>k) \<noteq> \<bottom>" if "\<forall>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>"
-    using that IH unfolding es' by blast
-  have T: "truth_d\<cdot>(kval (Call FOr xs)\<cdot>k) = TT \<longleftrightarrow>
-      (\<forall>c\<in>set xs. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>) \<and> (\<exists>c\<in>set xs. truth_d\<cdot>(kval c\<cdot>k) = TT)"
-    and D: "truth_d\<cdot>(kval (Call FOr xs)\<cdot>k) \<noteq> \<bottom> \<longleftrightarrow> (\<forall>c\<in>set xs. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>)" for xs
+  have T: "truth_d\<cdot>(kval (Call FOr xs)\<cdot>k) = TT \<longleftrightarrow> (\<exists>c\<in>set xs. truth_d\<cdot>(kval c\<cdot>k) = TT)"
+    and F: "truth_d\<cdot>(kval (Call FOr xs)\<cdot>k) = FF \<longleftrightarrow> (\<forall>c\<in>set xs. truth_d\<cdot>(kval c\<cdot>k) = FF)" for xs
     unfolding kval_call fsym_sem.simps by (simp_all add: truth_d_ors)
-  show ?case unfolding e' T D
+  show ?case unfolding e' T F
   proof (rule conjI; rule impI)
-    assume "(\<forall>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>) \<and> (\<exists>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) = TT)"
-    then have d: "\<forall>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>" and "\<exists>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) = TT" by blast+
-    then obtain c c' where c: "c \<in> set es" "truth_d\<cdot>(kval c\<cdot>k) = TT" and c': "crs A c = Some c'" using all by blast
-    have "c' \<in> set es'" using c(1) c' unfolding es' by blast
-    then show "(\<forall>c\<in>set es'. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>) \<and> (\<exists>c\<in>set es'. truth_d\<cdot>(kval c\<cdot>k) = TT)"
-      using defd[OF d] IH[OF c(1) c'] c(2) by blast
+    assume "\<exists>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) = TT"
+    then obtain c c' where "c \<in> set es" "truth_d\<cdot>(kval c\<cdot>k) = TT" "crs A c = Some c'" using all by blast
+    then show "\<exists>c\<in>set es'. truth_d\<cdot>(kval c\<cdot>k) = TT" using IH unfolding es' by blast
   next
-    show "\<forall>c\<in>set es'. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>" if "\<forall>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) \<noteq> \<bottom>"
-      by (rule defd[OF that])
+    assume "\<forall>c\<in>set es'. truth_d\<cdot>(kval c\<cdot>k) = FF"
+    then show "\<forall>c\<in>set es. truth_d\<cdot>(kval c\<cdot>k) = FF" using IH all unfolding es' by blast
   qed
 qed (auto split: if_splits)
 
