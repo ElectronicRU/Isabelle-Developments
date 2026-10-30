@@ -7,15 +7,11 @@ section \<open>Aggregation\<close>
 text \<open>An aggregate folds the entries of an inner expression over each fiber of the frame's LOD
   with a commutative semigroup operation.  The fold adjoins a unit for the empty fiber, which
   gives no entry; it is not \<open>\<bottom>\<close>: a monotone operation with unit \<open>\<bottom>\<close> would be inflationary
-  (\<open>x = x \<oplus> \<bottom> \<sqsubseteq> x \<oplus> y\<close>), which rules out sums on flat values.  Absent members are the unit,
-  so the fold reads the members that may be present.  Finitely many are folded; of infinitely
-  many nothing is known but presence: the fold is a present value of which nothing is known when
-  some member is definitely present, and otherwise the least result.\<close>
+  (\<open>x = x \<oplus> \<bottom> \<sqsubseteq> x \<oplus> y\<close>), which rules out sums on flat values.  Only finite folds are
+  supported: on infinitely many members the fold is the unit.\<close>
 
 definition agg_fold :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('a \<Rightarrow> 'v option_pd) \<Rightarrow> 'a set \<Rightarrow> 'v option_pd" where
-  "agg_fold f v A = (if finite {a \<in> A. v a \<noteq> Absent}
-     then comm_monoid_set.F (\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y) Absent v {a \<in> A. v a \<noteq> Absent}
-     else if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v a then Present\<cdot>\<bottom> else \<bottom>)"
+  "agg_fold f v A = comm_monoid_set.F (\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y) Absent v A"
 
 context
   fixes f :: "'v::bifinite \<rightarrow> 'v \<rightarrow> 'v"
@@ -25,94 +21,35 @@ begin
 interpretation agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
   unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd[OF f])
 
-lemma agg_fold_finite: "finite A \<Longrightarrow> agg_fold f v A = agg.F v A"
-  unfolding agg_fold_def by (simp add: agg.mono_neutral_right[of A "{a \<in> A. v a \<noteq> Absent}" v])
-
 lemma agg_fold_empty: "agg_fold f v {} = Absent"
-  by (simp add: agg_fold_finite)
+  by (simp add: agg_fold_def)
 
 lemma agg_fold_singleton: "agg_fold f v {a} = v a"
-  by (simp add: agg_fold_finite)
-
-lemma agg_F_Absent_iff: "finite B \<Longrightarrow> (\<And>b. b \<in> B \<Longrightarrow> v b \<noteq> Absent) \<Longrightarrow> agg.F v B = Absent \<longleftrightarrow> B = {}"
-  by (induct B rule: finite_induct) (simp_all add: combine_option_pd_Absent_iff)
-
-lemma agg_fold_Absent_iff: "agg_fold f v A = Absent \<longleftrightarrow> (\<forall>a\<in>A. v a = Absent)"
-proof (cases "finite {a \<in> A. v a \<noteq> Absent}")
-  case True
-  have "agg.F v {a \<in> A. v a \<noteq> Absent} = Absent \<longleftrightarrow> {a \<in> A. v a \<noteq> Absent} = {}"
-    by (rule agg_F_Absent_iff[OF True]) simp
-  then show ?thesis unfolding agg_fold_def using True by auto
-next
-  case False
-  then have "{a \<in> A. v a \<noteq> Absent} \<noteq> {}" by (metis finite.emptyI)
-  then have "\<not> (\<forall>a\<in>A. v a = Absent)" by blast
-  then show ?thesis unfolding agg_fold_def using False by auto
-qed
+  by (simp add: agg_fold_def)
 
 lemma agg_fold_nonempty: "agg_fold f v A \<noteq> Absent \<Longrightarrow> A \<noteq> {}"
-  by (auto simp: agg_fold_Absent_iff)
+  by (auto simp: agg_fold_empty)
 
 lemma agg_fold_absent: "(\<And>a. a \<in> A \<Longrightarrow> v a = Absent) \<Longrightarrow> agg_fold f v A = Absent"
-  by (simp add: agg_fold_Absent_iff)
+  unfolding agg_fold_def by (rule agg.neutral) simp
 
 lemma agg_fold_cong: "A = B \<Longrightarrow> (\<And>a. a \<in> B \<Longrightarrow> v a = w a) \<Longrightarrow> agg_fold f v A = agg_fold f w B"
-proof -
-  assume AB: "A = B" and vw: "\<And>a. a \<in> B \<Longrightarrow> v a = w a"
-  have s: "{a \<in> A. v a \<noteq> Absent} = {a \<in> B. w a \<noteq> Absent}" using AB vw by auto
-  have F: "agg.F v {a \<in> B. w a \<noteq> Absent} = agg.F w {a \<in> B. w a \<noteq> Absent}" by (rule agg.cong) (simp_all add: vw)
-  have e: "(\<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v a) = (\<exists>a\<in>B. Present\<cdot>\<bottom> \<sqsubseteq> w a)" using AB vw by auto
-  show ?thesis unfolding agg_fold_def s F e ..
-qed
+  unfolding agg_fold_def by (simp cong: agg.cong)
 
-text \<open>The fold is continuous in the folded values when their absence is rigid: then the members
-  that may be present stay the same along a chain, and presence of a member is decided by a
-  compact value.\<close>
-
-lemma cont_agg_fallback:
-  assumes v: "\<And>a. cont (\<lambda>x. v x a)"
-  shows "cont (\<lambda>x. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v x a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
-proof (rule contI2)
-  show m: "monofun (\<lambda>x. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v x a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
-    by (rule monofunI) (auto intro: below_trans[OF _ cont2monofunE[OF v]])
-  fix Y :: "nat \<Rightarrow> 'b" assume Y: "chain Y"
-  show "(if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (\<Squnion>i. Y i) a then Present\<cdot>\<bottom> else \<bottom>)
-      \<sqsubseteq> (\<Squnion>i. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
-  proof (cases "\<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (\<Squnion>i. Y i) a")
-    case True
-    then obtain a where a: "a \<in> A" and b: "Present\<cdot>\<bottom> \<sqsubseteq> (\<Squnion>i. v (Y i) a)" by (auto simp: cont2contlubE[OF v Y])
-    then obtain i where i: "Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a"
-      using compact_below_lub_iff[OF compact_Present_bottom ch2ch_cont[OF v Y]] by blast
-    have ub: "(if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else \<bottom>)
-        \<sqsubseteq> (\<Squnion>i. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
-      by (rule is_ub_thelub[OF ch2ch_monofun[OF m Y]])
-    have p: "(if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else \<bottom>) = (Present\<cdot>\<bottom> :: 'v option_pd)"
-      using a i by auto
-    have "Present\<cdot>\<bottom> \<sqsubseteq> (\<Squnion>i. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
-      using ub unfolding p .
-    then show ?thesis by (subst if_P[OF True])
-  qed simp
-qed
+text \<open>The fold is continuous in the folded values.\<close>
 
 lemma cont_agg_fold:
-  assumes v: "\<And>a. cont (\<lambda>x. v x a)" and r: "\<And>a. rigid (\<lambda>x. v x a = Absent)"
+  assumes v: "\<And>a. cont (\<lambda>x. v x a)"
   shows "cont (\<lambda>x. agg_fold f (v x) A)"
-proof -
-  have q: "rigid (\<lambda>x. {a \<in> A. v x a \<noteq> Absent})" by (rule rigidI) (simp add: rigidD[OF r])
-  have h: "cont (\<lambda>x. if finite B then agg.F (v x) B
-      else if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v x a then Present\<cdot>\<bottom> else \<bottom>)" for B
-  proof (cases "finite B")
-    case True
-    have "cont (\<lambda>x. agg.F (v x) B)" using True
-    proof (induct B rule: finite_induct)
-      case (insert a B)
-      show ?case unfolding agg.insert[OF insert(1,2)]
-        by (rule cont2cont_APP[OF cont2cont_APP[OF cont_const v] insert(3)])
-    qed simp
-    then show ?thesis using True by simp
-  qed (simp add: cont_agg_fallback[OF v])
-  show ?thesis unfolding agg_fold_def by (rule cont_rigid_arg[OF h q])
-qed
+proof (cases "finite A")
+  case True
+  then show ?thesis unfolding agg_fold_def
+  proof (induct A rule: finite_induct)
+    case (insert a B)
+    show ?case unfolding agg.insert[OF insert(1,2)]
+      by (rule cont2cont_APP[OF cont2cont_APP[OF cont_const v] insert(3)])
+  qed simp
+qed (simp add: agg_fold_def)
 
 end
 
@@ -122,14 +59,7 @@ lemma agg_fold_bij:
 proof -
   interpret agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
     unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd[OF f])
-  let ?A = "{a \<in> A. v (h a) \<noteq> Absent}" and ?B = "{b \<in> B. v b \<noteq> Absent}"
-  have hAB: "h ` A = B" by (rule bij_betw_imp_surj_on[OF h])
-  have b: "bij_betw h ?A ?B"
-    by (rule bij_betw_subset[OF h]) (use hAB in auto)
-  have fin: "finite ?A \<longleftrightarrow> finite ?B" by (rule bij_betw_finite[OF b])
-  have F: "agg.F (v \<circ> h) ?A = agg.F v ?B" unfolding comp_def by (rule agg.reindex_bij_betw[OF b])
-  have e: "(\<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (h a)) = (\<exists>b\<in>B. Present\<cdot>\<bottom> \<sqsubseteq> v b)" using hAB by auto
-  show ?thesis unfolding agg_fold_def comp_apply using fin F e by (simp add: comp_def)
+  show ?thesis unfolding agg_fold_def comp_def by (rule agg.reindex_bij_betw[OF h])
 qed
 
 context dataspace
@@ -143,7 +73,7 @@ definition afiber :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \
 text \<open>\<open>aggregate f E\<close> folds the inner values over the inner keys below each key of the frame:
   the keys at the inner key LOD of the rows below the key.  Each inner value is multiplied by the
   truth of its group being populated by the frame's filters: an inner key no row of which passes
-  contributes the fold's unit, and one whose filter is undecided is a maybe member, for which the
+  is left out, and one whose filter is undecided is a maybe member, for which the
   fold takes both the folds with and without it.  Where the
   inner expression is absent the fold sees its unit.  Grouping finer than the frame is the inner
   expression's own (its \<open>GROUP BY\<close> dimensions included).  The aggregate's keys are the frame's, so
@@ -151,7 +81,7 @@ text \<open>\<open>aggregate f E\<close> folds the inner values over the inner k
   views' key parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
 
 definition inner_keys :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
-  "inner_keys E data F k = rproj (kd E F) ` afiber data F (flod F) k"
+  "inner_keys E data F k = {\<kappa> \<in> rproj (kd E F) ` afiber data F (flod F) k. populated data (emind E) \<top> F \<kappa> \<noteq> FF}"
 
 text \<open>An inner entry, seen from outside the aggregate, is \<^emph>\<open>released\<close>: its lower part, which the
   inner key fixes, moves into its view's key part, so the outer content is keyed by the inner keys
@@ -225,31 +155,21 @@ lemma cont_agg_inner: "cont (\<lambda>Xs. agg_inner es Xs p)"
   unfolding agg_inner_def by (rule cont_map2) (simp add: cont_agg_pick[unfolded eta_cfun])
 
 text \<open>The content semantics folds the inner content semantics, multiplied by the fold guard, over
-  the keys where the fold guard is defined, reading the inner contents at each off the outer
+  the keys where the fold guard is defined and not false, reading the inner contents at each off the outer
   ones.\<close>
 
 definition agg_csem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option_pd" where
   "agg_csem f E Gs Xs = agg_fold f (\<lambda>p. the (hd Gs p) \<odot> csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p))
-     (dom (hd Gs))"
+     {p \<in> dom (hd Gs). the (hd Gs p) \<noteq> FF}"
 
-text \<open>It is continuous in the value contents: the fold's index set is the fold guard's domain, and
-  the fold is continuous in the values.\<close>
-
-lemma rigid_agg_member:
-  assumes E: "crigid E"
-  shows "rigid (\<lambda>Xs. the (hd Gs p) \<odot> csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p) = Absent)"
-proof (rule rigidI)
-  fix Xs Ys :: "('k \<Rightarrow> 'r option) list" assume "Xs \<sqsubseteq> Ys"
-  then show "(the (hd Gs p) \<odot> csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p) = Absent) =
-      (the (hd Gs p) \<odot> csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Ys p) = Absent)"
-    by (simp only: tr_mult_Absent_iff rigidD[OF rigid_comp[OF crigidD[OF E] cont2mono[OF cont_agg_inner]]])
-qed
+text \<open>It is continuous in the value contents: the fold's index set is decided by the fold guard,
+  and the fold is continuous in the members.\<close>
 
 lemma cont_agg_csem:
-  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and E: "crigid E"
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
   shows "cont (agg_csem f E Gs)"
   unfolding agg_csem_def[abs_def]
-  by (rule cont_agg_fold[OF f _ rigid_agg_member[OF E]]) (simp add: cont_compose[OF _ cont_agg_inner])
+  by (rule cont_agg_fold[OF f]) (simp add: cont_compose[OF _ cont_agg_inner])
 
 lemma map2_map: "map2 g xs (map h xs) = map (\<lambda>x. g x (h x)) xs"
   by (induct xs) simp_all
@@ -270,18 +190,8 @@ lemma aggregate_simps [simp]:
   by (simp_all add: aggregate_def)
 
 lemma aggregate_csem:
-  "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b) \<Longrightarrow> crigid E \<Longrightarrow> csem (aggregate f E) Gs\<cdot>Xs = agg_csem f E Gs Xs"
+  "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b) \<Longrightarrow> csem (aggregate f E) Gs\<cdot>Xs = agg_csem f E Gs Xs"
   by (simp add: cont_agg_csem)
-
-lemma crigid_aggregate:
-  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and E: "crigid E"
-  shows "crigid (aggregate f E)"
-  unfolding crigid_def
-proof (intro allI rigidI)
-  fix Gs and Xs Ys :: "('k \<Rightarrow> 'r option) list" assume "Xs \<sqsubseteq> Ys"
-  then show "(csem (aggregate f E) Gs\<cdot>Xs = Absent) = (csem (aggregate f E) Gs\<cdot>Ys = Absent)"
-    by (simp only: aggregate_csem[OF f E] agg_csem_def agg_fold_Absent_iff[OF f] rigidD[OF rigid_agg_member[OF E]])
-qed
 
 subsection \<open>Lawfulness\<close>
 
@@ -440,7 +350,7 @@ proof (induct Gs gs rule: list_induct2)
 qed simp
 
 lemma cstrict_aggregate:
-  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and E: "cstrict E" and R: "crigid E"
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and E: "cstrict E"
   shows "cstrict (aggregate f E)"
 proof (rule cstrictI)
   fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
@@ -450,11 +360,12 @@ proof (rule cstrictI)
     by (auto simp: length_Suc_conv)
   have lx': "length Xs = length (evalues E)" using lx by simp
   let ?\<Phi> = "\<lambda>p. csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p)"
-  have c': "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) (dom G) \<noteq> Absent" using c unfolding aggregate_csem[OF f R] agg_csem_def Gs list.sel .
-  have ne: "\<exists>p\<in>dom G. the (G p) \<odot> ?\<Phi> p \<noteq> Absent"
+  have c': "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) {p \<in> dom G. the (G p) \<noteq> FF} \<noteq> Absent" using c unfolding aggregate_csem[OF f] agg_csem_def Gs list.sel .
+  have ne: "\<exists>p\<in>{p \<in> dom G. the (G p) \<noteq> FF}. the (G p) \<odot> ?\<Phi> p \<noteq> Absent"
   proof (rule ccontr)
-    assume "\<not> (\<exists>p\<in>dom G. the (G p) \<odot> ?\<Phi> p \<noteq> Absent)"
-    then have "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) (dom G) = Absent" by (intro agg_fold_absent[OF f]) blast
+    assume "\<not> (\<exists>p\<in>{p \<in> dom G. the (G p) \<noteq> FF}. the (G p) \<odot> ?\<Phi> p \<noteq> Absent)"
+    then have "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) {p \<in> dom G. the (G p) \<noteq> FF} = Absent"
+      by (intro agg_fold_absent[OF f]) blast
     then show False using c' by contradiction
   qed
   then obtain p t where p: "G p = Some t" and pt: "t \<odot> ?\<Phi> p \<noteq> Absent" by (auto simp: dom_def)
@@ -475,7 +386,7 @@ lemma fconf_release: "fconf (map release es) data F \<longleftrightarrow> fconf 
   by (simp add: fconf_def entry_conf_def lattice_join_ac)
 
 theorem lawful_aggregate:
-  assumes ES: "semilawful E" and R: "crigid E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
+  assumes ES: "semilawful E" and f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)"
   shows "lawful (aggregate f E)"
 proof -
   let ?m = "emind E"
@@ -484,7 +395,7 @@ proof -
   note bij = agg_keys_bij[of ?m]
   show ?thesis
   proof (rule lawfulI, simp_all only: aggregate_simps)
-    show "cstrict (aggregate f E)" by (rule cstrict_aggregate[OF f semilawful_cstrict[OF ES] R])
+    show "cstrict (aggregate f E)" by (rule cstrict_aggregate[OF f semilawful_cstrict[OF ES]])
     show "entry_wf e" if "e \<in> set ?vs" for e
       using that by (auto intro: entry_wf_release semilawful_wf[OF ES])
     show "(\<bottom>::'k semi_factor) = fold (\<squnion>) (map lower_part (map esel ?gs @ map esel ?vs)) \<bottom>"
@@ -497,15 +408,9 @@ proof -
       if d0: "fconf ?vs data F" and
         c: "agg_fold f (\<lambda>\<kappa>. populated data ?m \<top> F \<kappa> \<odot> esem E data F \<kappa>) (inner_keys E data F k) \<noteq> Absent" for data F k
     proof -
-      have "\<exists>\<kappa>\<in>inner_keys E data F k. populated data ?m \<top> F \<kappa> \<odot> esem E data F \<kappa> \<noteq> Absent"
-      proof (rule ccontr)
-        assume "\<not> (\<exists>\<kappa>\<in>inner_keys E data F k. populated data ?m \<top> F \<kappa> \<odot> esem E data F \<kappa> \<noteq> Absent)"
-        then have "agg_fold f (\<lambda>\<kappa>. populated data ?m \<top> F \<kappa> \<odot> esem E data F \<kappa>) (inner_keys E data F k) = Absent"
-          by (intro agg_fold_absent[OF f]) blast
-        then show False using c by contradiction
-      qed
+      have "inner_keys E data F k \<noteq> {}" using agg_fold_nonempty[OF f c] .
       then obtain \<kappa> y0 where y0: "y0 \<in> afiber data F (flod F) k" "\<kappa> = rproj (?m \<squnion> flod F) y0"
-        and pk: "populated data ?m \<top> F \<kappa> \<noteq> FF" by (auto simp: inner_keys_def dest: tr_mult_not_Absent)
+        and pk: "populated data ?m \<top> F \<kappa> \<noteq> FF" by (auto simp: inner_keys_def)
       then obtain y where y: "y \<in> fiber data ?m \<top> F \<kappa>" "frows F\<cdot>y \<noteq> FF"
         by (auto simp: populated_def kleene_bex_not_FF)
       have \<kappa>\<kappa>: "proj (?m \<squnion> flod F)\<cdot>\<kappa> = \<kappa>" by (simp only: y0(2) proj_idem)
@@ -565,16 +470,34 @@ proof -
         have "proj (kd E F)\<cdot>\<kappa> = \<kappa>" by (simp only: y(2) proj_idem)
         then show ?thesis by (simp only: g c semilawful_csem_conf[OF ES d])
       qed
-      have D: "inner_keys E data F k = ?K" by (simp only: inner_keys_def)
-      have "agg_fold f (\<lambda>\<kappa>. ?t \<kappa> \<odot> ?v \<kappa>) ?K = agg_fold f ((\<lambda>p. the (?H p) \<odot> ?\<Phi> p) \<circ> ?\<pi>) ?K"
+      let ?I = "{\<kappa> \<in> ?K. ?t \<kappa> \<noteq> FF}" and ?J = "{p \<in> dom ?H. the (?H p) \<noteq> FF}"
+      have A: "bij_betw ?\<pi> ?I ?J"
+      proof (rule bij_betw_subset[OF bij])
+        show "?I \<subseteq> ?K" by blast
+        show "?\<pi> ` ?I = ?J"
+        proof (rule set_eqI, rule iffI)
+          fix p assume "p \<in> ?\<pi> ` ?I"
+          then obtain \<kappa> where \<kappa>: "\<kappa> \<in> ?K" "?t \<kappa> \<noteq> FF" "p = ?\<pi> \<kappa>" by blast
+          have "p \<in> dom ?H" unfolding dH \<kappa>(3) using bij_betw_imp_surj_on[OF bij] \<kappa>(1) by blast
+          then show "p \<in> ?J" using \<kappa> tH[OF \<kappa>(1)] by simp
+        next
+          fix p assume p: "p \<in> ?J"
+          then have "p \<in> ?\<pi> ` ?K" unfolding bij_betw_imp_surj_on[OF bij] dH[symmetric] by blast
+          then obtain \<kappa> where \<kappa>: "\<kappa> \<in> ?K" "p = ?\<pi> \<kappa>" by blast
+          then show "p \<in> ?\<pi> ` ?I" using p tH[OF \<kappa>(1)] by auto
+        qed
+      qed
+      have D: "inner_keys E data F k = ?I" by (simp only: inner_keys_def)
+      have "agg_fold f (\<lambda>\<kappa>. ?t \<kappa> \<odot> ?v \<kappa>) ?I = agg_fold f ((\<lambda>p. the (?H p) \<odot> ?\<Phi> p) \<circ> ?\<pi>) ?I"
       proof (rule agg_fold_cong[OF f refl])
-        fix \<kappa> assume \<kappa>: "\<kappa> \<in> ?K"
+        fix \<kappa> assume "\<kappa> \<in> ?I"
+        then have \<kappa>: "\<kappa> \<in> ?K" by blast
         show "?t \<kappa> \<odot> ?v \<kappa> = ((\<lambda>p. the (?H p) \<odot> ?\<Phi> p) \<circ> ?\<pi>) \<kappa>" by (simp only: comp_apply tH[OF \<kappa>] pt[OF \<kappa>])
       qed
-      also have "\<dots> = agg_fold f (\<lambda>p. the (?H p) \<odot> ?\<Phi> p) (dom ?H)" unfolding dH by (rule agg_fold_bij[OF f bij])
+      also have "\<dots> = agg_fold f (\<lambda>p. the (?H p) \<odot> ?\<Phi> p) ?J" by (rule agg_fold_bij[OF f A])
       finally have "agg_fold f (\<lambda>\<kappa>. ?t \<kappa> \<odot> ?v \<kappa>) (inner_keys E data F k) = agg_csem f E (gcontents data ?gs F k) ?X"
         unfolding agg_csem_def tl D .
-      then show ?thesis by (simp only: beta_cfun[OF cont_agg_csem[OF f R]])
+      then show ?thesis by (simp only: beta_cfun[OF cont_agg_csem[OF f]])
     qed
   qed
 qed

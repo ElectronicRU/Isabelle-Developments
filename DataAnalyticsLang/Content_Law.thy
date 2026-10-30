@@ -848,16 +848,6 @@ lemma cstrictD:
      csem E Gs\<cdot>Xs = Absent"
   unfolding cstrict_def by blast
 
-text \<open>Absence is \<^emph>\<open>rigid\<close> in the values: refining the value contents never decides presence,
-  which comes from the guards and the contents' key parts alone.  This makes folds over infinite
-  index sets continuous.\<close>
-
-definition crigid :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
-  "crigid E \<longleftrightarrow> (\<forall>Gs. rigid (\<lambda>Xs. csem E Gs\<cdot>Xs = Absent))"
-
-lemma crigidD: "crigid E \<Longrightarrow> rigid (\<lambda>Xs. csem E Gs\<cdot>Xs = Absent)"
-  unfolding crigid_def by blast
-
 definition semilawful :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom> \<and> (\<forall>e\<in>set (evalues E). entry_wf e) \<and>
      cstrict E \<and>
