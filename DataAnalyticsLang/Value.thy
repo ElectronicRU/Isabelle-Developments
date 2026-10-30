@@ -100,16 +100,11 @@ instance sseq :: ("{domain, separated_sum, locally_finitely_detailed}") locally_
 section \<open>Values\<close>
 
 text \<open>Bottom is a data-quality lapse or divergence: a dangling foreign key, a failed cast, a
-  short row.  Missing values that are not lapses live at three levels.
-  \<^item> \<^emph>\<open>Data\<close> (records and record-level expressions), @{text "'v datum"}: \<open>NA\<close> (not
-    applicable; joins through it give \<open>NA\<close>), \<open>Val\<cdot>Null\<close> (present but unknown; joins
-    through it give \<open>\<bottom>\<close>), or a known value.  Source nulls map to one of the two per column.
-  \<^item> \<^emph>\<open>Keys\<close> (dimensions), @{text "'v with_na"}: nulls become \<open>NA\<close>, which can be pinned
-    (@{text to_key}).
-  \<^item> \<^emph>\<open>Measures\<close>, @{text "'v with_null"}: \<open>NA\<close> becomes \<open>\<bottom>\<close>, i.e.\ no entry
-    (@{text from_na}); aggregations treat \<open>\<bottom>\<close> and \<open>NA\<close> alike.
-  A record-level function is \<^emph>\<open>NA-blind\<close> when it commutes with @{text squash}, the
-  projection forgetting \<open>NA\<close>; lifted operators are, coalescing is not.\<close>
+  short row.  Keys (dimensions) and data (records and record-level expressions) share one type,
+  @{text "'v with_null"}: \<open>Null\<close> (present, but unknown or empty), the lazy root \<open>Known\<cdot>\<bottom>\<close>
+  (not null, the value to be filled later), or a known value.  \<open>Null\<close> is a key value like any
+  other, so it can be pinned.  The absence of a value at a key is not a value: it lives in the
+  results, as @{text Absent}.\<close>
 
 subsection \<open>Scalars\<close>
 
@@ -142,22 +137,28 @@ lemma locally_finitely_detailed_defl_scalar_map [domain_category_map]:
 instance scalar :: locally_finitely_detailed
   by (domain_category_instance map_ID: scalar_map_ID)
 
-subsection \<open>Measures: values with nulls\<close>
+subsection \<open>Values with nulls\<close>
 
-domain ('v::"domain") with_null = Null | Known 'v
+text \<open>The lazy root \<open>Known\<cdot>\<bottom>\<close> gives the not-null level of detail.\<close>
+
+domain ('a::"domain") with_null = Null | Known (lazy 'a)
 
 lemma bounded_complete_defl_with_null_map [domain_category_map]:
   "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (with_null_map\<cdot>v)"
   by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
 
+lemma filter_sum_defl_with_null_map [domain_category_map]:
+  "filter_sum_defl v \<Longrightarrow> filter_sum_defl (with_null_map\<cdot>v)"
+  by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
+
 lemma separated_sum_defl_with_null_map [domain_category_map]:
-  "separated_sum_defl v \<Longrightarrow> separated_sum_defl (with_null_map\<cdot>v)"
+  "deflation v \<Longrightarrow> separated_sum_defl (with_null_map\<cdot>v)"
   by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
 
 instance with_null :: ("{domain, bounded_complete}") bounded_complete
   by (domain_category_instance map_ID: with_null_map_ID)
 
-instance with_null :: ("{domain, separated_sum}") separated_sum
+instance with_null :: ("domain") separated_sum
   by (domain_category_instance map_ID: with_null_map_ID)
 
 lemma distributive_defl_with_null_map [domain_category_map]:
@@ -169,250 +170,64 @@ instance with_null :: ("{domain, distributive_cpo}") distributive_cpo
   by (domain_category_instance map_ID: with_null_map_ID)
 
 lemma locally_finitely_detailed_defl_with_null_map [domain_category_map]:
-  "locally_finitely_detailed_defl (v :: 'a::{domain, distributive_cpo, separated_sum} \<rightarrow> 'a) \<Longrightarrow>
-    locally_finitely_detailed_defl (with_null_map\<cdot>v)"
+  "locally_finitely_detailed_defl v \<Longrightarrow> locally_finitely_detailed_defl (with_null_map\<cdot>v)"
   by (domain_category_map_rule map_def: with_null_map_def iso_rews: with_null.iso_rews)
 
-instance with_null :: ("{domain, separated_sum, locally_finitely_detailed}") locally_finitely_detailed
+instance with_null :: ("{domain, locally_finitely_detailed}") locally_finitely_detailed
   by (domain_category_instance map_ID: with_null_map_ID)
 
-subsection \<open>Keys: values with NA\<close>
+type_synonym 'v datum = "'v with_null"
 
-text \<open>The lazy root \<open>Val\<cdot>\<bottom>\<close> is ``not \<open>NA\<close>, value not observed'': it gives the not-null
-  level of detail.  Keys from data are maximal and never take that value.\<close>
+section \<open>Coercions\<close>
 
-domain ('a::"domain") with_na = NA | Val (lazy 'a)
+text \<open>The plain value of a datum: \<open>Null\<close> becomes \<open>\<bottom>\<close>.\<close>
 
-lemma bounded_complete_defl_with_na_map [domain_category_map]:
-  "bounded_complete_defl v \<Longrightarrow> bounded_complete_defl (with_na_map\<cdot>v)"
-  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
+fixrec plain :: "'v::domain with_null \<rightarrow> 'v" where
+  "plain\<cdot>Null = \<bottom>"
+| "plain\<cdot>(Known\<cdot>x) = x"
 
-lemma filter_sum_defl_with_na_map [domain_category_map]:
-  "filter_sum_defl v \<Longrightarrow> filter_sum_defl (with_na_map\<cdot>v)"
-  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
-
-lemma separated_sum_defl_with_na_map [domain_category_map]:
-  "deflation v \<Longrightarrow> separated_sum_defl (with_na_map\<cdot>v)"
-  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
-
-instance with_na :: ("{domain, bounded_complete}") bounded_complete
-  by (domain_category_instance map_ID: with_na_map_ID)
-
-instance with_na :: ("domain") separated_sum
-  by (domain_category_instance map_ID: with_na_map_ID)
-
-lemma distributive_defl_with_na_map [domain_category_map]:
-  "distributive_defl (v :: 'a::{domain, bounded_complete} \<rightarrow> 'a) \<Longrightarrow>
-    distributive_defl (with_na_map\<cdot>v)"
-  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
-
-instance with_na :: ("{domain, distributive_cpo}") distributive_cpo
-  by (domain_category_instance map_ID: with_na_map_ID)
-
-lemma locally_finitely_detailed_defl_with_na_map [domain_category_map]:
-  "locally_finitely_detailed_defl v \<Longrightarrow> locally_finitely_detailed_defl (with_na_map\<cdot>v)"
-  by (domain_category_map_rule map_def: with_na_map_def iso_rews: with_na.iso_rews)
-
-instance with_na :: ("{domain, locally_finitely_detailed}") locally_finitely_detailed
-  by (domain_category_instance map_ID: with_na_map_ID)
-
-subsection \<open>Data\<close>
-
-text \<open>A datum is \<open>NA\<close>, \<open>Val\<cdot>Null\<close>, or a known value.\<close>
-
-type_synonym 'v datum = "'v with_null with_na"
-
-section \<open>Coercions between the levels\<close>
-
-text \<open>Binding through \<open>NA\<close>: \<open>NA\<close> propagates, a value is passed on.  A join through a
-  relation that may be inapplicable is a bind.\<close>
-
-fixrec na_bind :: "('a::domain \<rightarrow> 'b::domain with_na) \<rightarrow> 'a with_na \<rightarrow> 'b with_na" where
-  "na_bind\<cdot>f\<cdot>NA = NA"
-| "na_bind\<cdot>f\<cdot>(Val\<cdot>x) = f\<cdot>x"
-
-lemma na_bind_strict [simp]: "na_bind\<cdot>f\<cdot>\<bottom> = \<bottom>"
+lemma plain_strict [simp]: "plain\<cdot>\<bottom> = \<bottom>"
   by fixrec_simp
-
-text \<open>Measures: \<open>NA\<close> becomes \<open>\<bottom>\<close> (no entry).\<close>
-
-fixrec from_na :: "'a::domain with_na \<rightarrow> 'a" where
-  "from_na\<cdot>NA = \<bottom>"
-| "from_na\<cdot>(Val\<cdot>x) = x"
-
-lemma from_na_strict [simp]: "from_na\<cdot>\<bottom> = \<bottom>"
-  by fixrec_simp
-
-text \<open>Measures embed back strictly: @{text na_emb} and @{const from_na} form an
-  embedding-projection pair.  Their composition @{text squash} is the projection that forgets
-  \<open>NA\<close> (and the not-null root, which data never takes).\<close>
-
-definition na_emb :: "'a::domain \<rightarrow> 'a with_na" where
-  "na_emb = strictify\<cdot>Val"
-
-lemma na_emb_strict [simp]: "na_emb\<cdot>\<bottom> = \<bottom>"
-  by (simp add: na_emb_def)
-
-lemma na_emb_defined [simp]: "x \<noteq> \<bottom> \<Longrightarrow> na_emb\<cdot>x = Val\<cdot>x"
-  by (simp add: na_emb_def strictify_conv_if)
-
-lemma ep_pair_na: "ep_pair na_emb from_na"
-proof
-  fix x :: 'a show "from_na\<cdot>(na_emb\<cdot>x) = x" by (cases "x = \<bottom>") simp_all
-next
-  fix y :: "'a with_na" show "na_emb\<cdot>(from_na\<cdot>y) \<sqsubseteq> y"
-    by (cases y) (simp_all add: na_emb_def strictify_conv_if)
-qed
-
-lemma from_na_na_emb [simp]: "from_na\<cdot>(na_emb\<cdot>x) = x"
-  by (rule ep_pair.e_inverse[OF ep_pair_na])
-
-definition squash :: "'a::domain with_na \<rightarrow> 'a with_na" where
-  "squash = na_emb oo from_na"
-
-lemma squash_simps [simp]: "squash\<cdot>\<bottom> = \<bottom>" "squash\<cdot>NA = \<bottom>" "squash\<cdot>(Val\<cdot>x) = na_emb\<cdot>x"
-  by (simp_all add: squash_def)
-
-lemma squash_na_emb [simp]: "squash\<cdot>(na_emb\<cdot>x) = na_emb\<cdot>x"
-  unfolding squash_def by (simp add: ep_pair.e_inverse[OF ep_pair_na])
-
-lemma deflation_squash: "deflation squash"
-  unfolding squash_def by (rule ep_pair.deflation_e_p[OF ep_pair_na])
-
-lemma from_na_squash [simp]: "from_na\<cdot>(squash\<cdot>x) = from_na\<cdot>x"
-  unfolding squash_def by (simp add: ep_pair.e_inverse[OF ep_pair_na])
-
-text \<open>Keys: nulls become \<open>NA\<close>.\<close>
-
-fixrec null_na :: "'v::domain with_null \<rightarrow> 'v with_na" where
-  "null_na\<cdot>Null = NA"
-| "v \<noteq> \<bottom> \<Longrightarrow> null_na\<cdot>(Known\<cdot>v) = Val\<cdot>v"
-
-lemma null_na_strict [simp]: "null_na\<cdot>\<bottom> = \<bottom>"
-  by fixrec_simp
-
-definition to_key :: "'v::domain datum \<rightarrow> 'v with_na" where
-  "to_key = na_bind\<cdot>null_na"
-
-text \<open>Measures project to plain values, \<open>Null\<close> becoming \<open>\<bottom>\<close>.  @{const Known} is strict,
-  so it is the embedding itself.\<close>
-
-fixrec from_null :: "'v::domain with_null \<rightarrow> 'v" where
-  "from_null\<cdot>Null = \<bottom>"
-| "v \<noteq> \<bottom> \<Longrightarrow> from_null\<cdot>(Known\<cdot>v) = v"
-
-lemma from_null_strict [simp]: "from_null\<cdot>\<bottom> = \<bottom>"
-  by fixrec_simp
-
-lemma ep_pair_null: "ep_pair (Known :: 'v::domain \<rightarrow> 'v with_null) from_null"
-proof
-  fix x :: 'v show "from_null\<cdot>(Known\<cdot>x) = x" by (cases "x = \<bottom>") simp_all
-next
-  fix y :: "'v with_null" show "Known\<cdot>(from_null\<cdot>y) \<sqsubseteq> y" by (cases y) simp_all
-qed
-
-lemma from_null_Known [simp]: "from_null\<cdot>(Known\<cdot>x) = x"
-  by (rule ep_pair.e_inverse[OF ep_pair_null])
-
-text \<open>The plain value of a datum: every missing value becomes \<open>\<bottom>\<close>.\<close>
-
-definition plain :: "'v::domain datum \<rightarrow> 'v" where
-  "plain = from_null oo from_na"
-
-lemma plain_simps [simp]:
-  "plain\<cdot>\<bottom> = \<bottom>" "plain\<cdot>NA = \<bottom>" "plain\<cdot>(Val\<cdot>x) = from_null\<cdot>x"
-  by (simp_all add: plain_def)
-
-lemma plain_na_emb [simp]: "plain\<cdot>(na_emb\<cdot>x) = from_null\<cdot>x"
-  by (simp add: plain_def)
 
 section \<open>Record-level operators\<close>
 
-text \<open>Operators are lifted layer by layer, each layer's missing value infectious.  The outer
-  layer is checked first, so \<open>NA\<close> wins over \<open>Null\<close>; NA-blindness forces that choice.\<close>
-
-fixrec na_lift2 :: "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a with_na \<rightarrow> 'b with_na \<rightarrow> 'c with_na"
-  where
-  "na_lift2\<cdot>f\<cdot>NA\<cdot>NA = NA"
-| "na_lift2\<cdot>f\<cdot>NA\<cdot>(Val\<cdot>y) = NA"
-| "na_lift2\<cdot>f\<cdot>(Val\<cdot>x)\<cdot>NA = NA"
-| "na_lift2\<cdot>f\<cdot>(Val\<cdot>x)\<cdot>(Val\<cdot>y) = na_emb\<cdot>(f\<cdot>x\<cdot>y)"
+text \<open>Operators are lifted with \<open>Null\<close> infectious, as in SQL.  On known arguments the result
+  is known, even when the operator diverges: a placeholder stays a placeholder.\<close>
 
 fixrec null_lift2 ::
   "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a with_null \<rightarrow> 'b with_null \<rightarrow> 'c with_null"
   where
   "null_lift2\<cdot>f\<cdot>Null\<cdot>Null = Null"
-| "y \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>Null\<cdot>(Known\<cdot>y) = Null"
-| "x \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>Null = Null"
-| "x \<noteq> \<bottom> \<Longrightarrow> y \<noteq> \<bottom> \<Longrightarrow> null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>(Known\<cdot>y) = Known\<cdot>(f\<cdot>x\<cdot>y)"
-
-fixrec na_lift1 :: "('a::domain \<rightarrow> 'b::domain) \<rightarrow> 'a with_na \<rightarrow> 'b with_na" where
-  "na_lift1\<cdot>f\<cdot>NA = NA"
-| "na_lift1\<cdot>f\<cdot>(Val\<cdot>x) = na_emb\<cdot>(f\<cdot>x)"
+| "null_lift2\<cdot>f\<cdot>Null\<cdot>(Known\<cdot>y) = Null"
+| "null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>Null = Null"
+| "null_lift2\<cdot>f\<cdot>(Known\<cdot>x)\<cdot>(Known\<cdot>y) = Known\<cdot>(f\<cdot>x\<cdot>y)"
 
 fixrec null_lift1 :: "('a::domain \<rightarrow> 'b::domain) \<rightarrow> 'a with_null \<rightarrow> 'b with_null" where
   "null_lift1\<cdot>f\<cdot>Null = Null"
-| "x \<noteq> \<bottom> \<Longrightarrow> null_lift1\<cdot>f\<cdot>(Known\<cdot>x) = Known\<cdot>(f\<cdot>x)"
+| "null_lift1\<cdot>f\<cdot>(Known\<cdot>x) = Known\<cdot>(f\<cdot>x)"
 
 abbreviation dlift1 :: "('a::domain \<rightarrow> 'b::domain) \<rightarrow> 'a datum \<rightarrow> 'b datum" where
-  "dlift1 \<equiv> na_lift1 oo null_lift1"
+  "dlift1 \<equiv> null_lift1"
 
-lemma na_lift1_strict [simp]: "na_lift1\<cdot>f\<cdot>\<bottom> = \<bottom>"
-  by fixrec_simp
+abbreviation dlift2 :: "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a datum \<rightarrow> 'b datum \<rightarrow> 'c datum" where
+  "dlift2 \<equiv> null_lift2"
 
 lemma null_lift1_strict [simp]: "null_lift1\<cdot>f\<cdot>\<bottom> = \<bottom>"
   by fixrec_simp
 
-abbreviation dlift2 :: "('a::domain \<rightarrow> 'b::domain \<rightarrow> 'c::domain) \<rightarrow> 'a datum \<rightarrow> 'b datum \<rightarrow> 'c datum" where
-  "dlift2 \<equiv> na_lift2 oo null_lift2"
-
-lemma na_lift2_strict [simp]: "na_lift2\<cdot>f\<cdot>\<bottom>\<cdot>y = \<bottom>" "na_lift2\<cdot>f\<cdot>x\<cdot>\<bottom> = \<bottom>"
-  by fixrec_simp (cases x; fixrec_simp)
-
 lemma null_lift2_strict [simp]: "null_lift2\<cdot>f\<cdot>\<bottom>\<cdot>y = \<bottom>" "null_lift2\<cdot>f\<cdot>x\<cdot>\<bottom> = \<bottom>"
   by fixrec_simp (cases x; fixrec_simp)
-
-text \<open>A record-level function is NA-blind when swapping \<open>NA\<close> for \<open>\<bottom>\<close> in its inputs does
-  the same to its output.\<close>
-
-definition na_blind1 :: "('a::domain with_na \<rightarrow> 'b::domain with_na) \<Rightarrow> bool" where
-  "na_blind1 g \<longleftrightarrow> (\<forall>x. g\<cdot>(squash\<cdot>x) = squash\<cdot>(g\<cdot>x))"
-
-definition na_blind2 ::
-  "('a::domain with_na \<rightarrow> 'b::domain with_na \<rightarrow> 'c::domain with_na) \<Rightarrow> bool" where
-  "na_blind2 g \<longleftrightarrow> (\<forall>x y. g\<cdot>(squash\<cdot>x)\<cdot>(squash\<cdot>y) = squash\<cdot>(g\<cdot>x\<cdot>y))"
-
-lemma na_blind2_na_lift2:
-  assumes l: "\<And>y. f\<cdot>\<bottom>\<cdot>y = \<bottom>" and r: "\<And>x. f\<cdot>x\<cdot>\<bottom> = \<bottom>"
-  shows "na_blind2 (na_lift2\<cdot>f)"
-  unfolding na_blind2_def
-proof (intro allI)
-  fix x y show "na_lift2\<cdot>f\<cdot>(squash\<cdot>x)\<cdot>(squash\<cdot>y) = squash\<cdot>(na_lift2\<cdot>f\<cdot>x\<cdot>y)"
-    by (cases x; cases y) (auto simp: l r strictify_conv_if na_emb_def)
-qed
-
-text \<open>The inner layer is strict, so every lifted record-level operator is NA-blind.\<close>
-
-lemma na_blind2_dlift2: "na_blind2 (dlift2\<cdot>f)"
-  by (simp add: na_blind2_na_lift2)
 
 text \<open>On plain values, a lifted strict operator is the operator itself.\<close>
 
 lemma plain_dlift1:
-  assumes "f\<cdot>\<bottom> = \<bottom>" shows "plain\<cdot>(na_lift1\<cdot>(null_lift1\<cdot>f)\<cdot>x) = f\<cdot>(plain\<cdot>x)"
-proof (cases x)
-  case (Val a) then show ?thesis using assms by (cases a) simp_all
-qed (simp_all add: assms)
+  assumes "f\<cdot>\<bottom> = \<bottom>" shows "plain\<cdot>(dlift1\<cdot>f\<cdot>x) = f\<cdot>(plain\<cdot>x)"
+  by (cases x) (simp_all add: assms)
 
 lemma plain_dlift2:
   assumes "\<And>y. f\<cdot>\<bottom>\<cdot>y = \<bottom>" "\<And>x. f\<cdot>x\<cdot>\<bottom> = \<bottom>"
-  shows "plain\<cdot>(na_lift2\<cdot>(null_lift2\<cdot>f)\<cdot>x\<cdot>y) = f\<cdot>(plain\<cdot>x)\<cdot>(plain\<cdot>y)"
-proof (cases x)
-  case x: (Val a) show ?thesis
-  proof (cases y)
-    case y: (Val b) show ?thesis unfolding x y using assms by (cases a; cases b) simp_all
-  qed (simp_all add: x assms)
-qed (cases y; simp add: assms)+
+  shows "plain\<cdot>(dlift2\<cdot>f\<cdot>x\<cdot>y) = f\<cdot>(plain\<cdot>x)\<cdot>(plain\<cdot>y)"
+  by (cases x; cases y) (simp_all add: assms)
 
 subsection \<open>Equality\<close>
 
@@ -452,12 +267,11 @@ abbreviation datum_eq :: "scalar datum \<rightarrow> scalar datum \<rightarrow> 
 
 subsection \<open>Truth\<close>
 
-text \<open>Negation is strict, lifted layer by layer, so \<open>NOT NA = NA\<close>.  Conjunction and disjunction
-  are Kleene's parallel connectives: a false conjunct makes a conjunction false whatever the others
-  are, missing or undefined, and dually a true disjunct a disjunction true.  Otherwise an undefined
-  argument makes them undefined, \<open>NA\<close> dominates \<open>Null\<close> as for every lifted operator, and else
-  they are the connectives on truth values.  @{text truth_d} projects a datum to @{typ tr}, sending
-  every missing value and every non-boolean to \<open>\<bottom>\<close>; it is a homomorphism onto the parallel
+text \<open>A condition's truth is three-valued, and \<open>Null\<close> is an unknown truth value.  Negation is
+  lifted, so \<open>NOT NULL = NULL\<close>.  Conjunction and disjunction are Kleene's, as in SQL: a false
+  conjunct makes a conjunction false whatever the others are, null or undefined, and dually a true
+  disjunct a disjunction true.  @{text truth_d} projects a datum to @{typ tr}, sending \<open>Null\<close>,
+  the placeholder and every non-boolean to \<open>\<bottom>\<close>; it is a homomorphism onto the parallel
   connectives on @{typ tr}.  A slicer condition holds where @{text truth_d} is @{term TT}.\<close>
 
 fixrec sbool :: "scalar \<rightarrow> tr" where
@@ -480,206 +294,123 @@ lemma snot_simps [simp]: "snot\<cdot>(SBool\<cdot>a) = SBool\<cdot>(neg\<cdot>a)
 lemma snot_strict [simp]: "snot\<cdot>\<bottom> = \<bottom>"
   by fixrec_simp
 
-definition truth :: "scalar with_na \<rightarrow> tr" where
-  "truth = sbool oo from_na"
-
 definition truth_d :: "scalar datum \<rightarrow> tr" where
   "truth_d = sbool oo plain"
+
+lemma truth_d_simps [simp]: "truth_d\<cdot>\<bottom> = \<bottom>" "truth_d\<cdot>Null = \<bottom>" "truth_d\<cdot>(Known\<cdot>s) = sbool\<cdot>s"
+  by (simp_all add: truth_d_def)
 
 lemma sbool_snot: "sbool\<cdot>(snot\<cdot>s) = neg\<cdot>(sbool\<cdot>s)"
   by (cases s; simp)
 
 lemma truth_d_not: "truth_d\<cdot>(dlift1\<cdot>snot\<cdot>x) = neg\<cdot>(truth_d\<cdot>x)"
-  by (simp add: truth_d_def plain_dlift1 sbool_snot)
+  by (cases x) (simp_all add: sbool_snot)
 
 definition d_bool :: "tr \<rightarrow> scalar datum" where
-  "d_bool = na_emb oo Known oo SBool"
+  "d_bool = Known oo SBool"
 
 lemma truth_d_bool [simp]: "truth_d\<cdot>(d_bool\<cdot>t) = t"
-  by (cases t rule: trE) (simp_all add: d_bool_def truth_d_def)
+  by (simp add: d_bool_def)
 
-text \<open>The parallel connectives see a datum only through its kind: a truth value, \<open>NA\<close>, or
-  \<open>Null\<close>; the not-null root and the non-booleans have none.\<close>
+fixrec is_null :: "'a::domain with_null \<rightarrow> tr" where
+  "is_null\<cdot>Null = TT"
+| "is_null\<cdot>(Known\<cdot>x) = FF"
 
-datatype truth_kind = KTrue | KFalse | KNA | KNull
-
-lemma kind_cases [case_names bottom KTrue KFalse KNA KNull]:
-  obtains "x = \<bottom>" | "x = Def KTrue" | "x = Def KFalse" | "x = Def KNA" | "x = Def KNull"
-  by (cases x rule: lift.exhaust) (auto, metis truth_kind.exhaust)
-
-definition kind_scalar :: "scalar \<rightarrow> truth_kind lift" where
-  "kind_scalar = (\<Lambda> s. (FLIFT b. Def (if b then KTrue else KFalse))\<cdot>(sbool\<cdot>s))"
-
-lemma kind_scalar_simps [simp]:
-  "kind_scalar\<cdot>\<bottom> = \<bottom>" "kind_scalar\<cdot>(SBool\<cdot>TT) = Def KTrue" "kind_scalar\<cdot>(SBool\<cdot>FF) = Def KFalse"
-  "kind_scalar\<cdot>(SInt\<cdot>n) = \<bottom>"
-  by (simp_all add: kind_scalar_def TT_def FF_def)
-
-fixrec kind_null :: "scalar with_null \<rightarrow> truth_kind lift" where
-  "kind_null\<cdot>Null = Def KNull"
-| "s \<noteq> \<bottom> \<Longrightarrow> kind_null\<cdot>(Known\<cdot>s) = kind_scalar\<cdot>s"
-
-lemma kind_null_strict [simp]: "kind_null\<cdot>\<bottom> = \<bottom>"
+lemma is_null_strict [simp]: "is_null\<cdot>\<bottom> = \<bottom>"
   by fixrec_simp
 
-lemma kind_null_Known [simp]: "kind_null\<cdot>(Known\<cdot>s) = kind_scalar\<cdot>s"
-  by (cases "s = \<bottom>") simp_all
+text \<open>The connectives read a datum only through whether it is null and its truth.  A boolean
+  datum is \<open>\<bottom>\<close>, \<open>Null\<close>, true, false, or known but of unknown truth: the placeholder, or a
+  non-boolean.\<close>
 
-fixrec kind :: "scalar datum \<rightarrow> truth_kind lift" where
-  "kind\<cdot>NA = Def KNA"
-| "kind\<cdot>(Val\<cdot>x) = kind_null\<cdot>x"
-
-lemma kind_strict [simp]: "kind\<cdot>\<bottom> = \<bottom>"
-  by fixrec_simp
-
-definition from_kind :: "truth_kind lift \<rightarrow> scalar datum" where
-  "from_kind = (FLIFT k. case k of KTrue \<Rightarrow> d_bool\<cdot>TT | KFalse \<Rightarrow> d_bool\<cdot>FF | KNA \<Rightarrow> NA | KNull \<Rightarrow> Val\<cdot>Null)"
-
-lemma from_kind_simps [simp]:
-  "from_kind\<cdot>\<bottom> = \<bottom>" "from_kind\<cdot>(Def KTrue) = d_bool\<cdot>TT" "from_kind\<cdot>(Def KFalse) = d_bool\<cdot>FF"
-  "from_kind\<cdot>(Def KNA) = NA" "from_kind\<cdot>(Def KNull) = Val\<cdot>Null"
-  by (simp_all add: from_kind_def)
-
-lemma kind_from_kind [simp]: "kind\<cdot>(from_kind\<cdot>k) = k"
-  by (cases k rule: kind_cases) (simp_all add: d_bool_def)
-
-definition ktruth :: "truth_kind lift \<rightarrow> tr" where
-  "ktruth = (FLIFT k. case k of KTrue \<Rightarrow> TT | KFalse \<Rightarrow> FF | KNA \<Rightarrow> \<bottom> | KNull \<Rightarrow> \<bottom>)"
-
-lemma ktruth_simps [simp]:
-  "ktruth\<cdot>\<bottom> = \<bottom>" "ktruth\<cdot>(Def KTrue) = TT" "ktruth\<cdot>(Def KFalse) = FF"
-  "ktruth\<cdot>(Def KNA) = \<bottom>" "ktruth\<cdot>(Def KNull) = \<bottom>"
-  by (simp_all add: ktruth_def)
-
-lemma ktruth_kind_scalar: "ktruth\<cdot>(kind_scalar\<cdot>s) = sbool\<cdot>s"
-proof (cases s)
-  case (SBool b) then show ?thesis by (cases b rule: trE) simp_all
-qed simp_all
-
-lemma kind_null_not_KNA: "kind_null\<cdot>y \<noteq> Def KNA"
-proof (cases y)
-  case (Known s) then show ?thesis
-  proof (cases s)
-    case (SBool b) then show ?thesis using Known by (cases b rule: trE) simp_all
-  qed (simp_all add: Known)
-qed simp_all
-
-lemma truth_d_kind: "truth_d\<cdot>x = ktruth\<cdot>(kind\<cdot>x)"
+lemma datum_truth_cases [case_names bottom Null TT FF unknown]:
+  obtains "x = \<bottom>" | "x = Null" | "x = d_bool\<cdot>TT" | "x = d_bool\<cdot>FF" | "is_null\<cdot>x = FF" "truth_d\<cdot>x = \<bottom>"
 proof (cases x)
-  case (Val y) then show ?thesis
-    by (cases y) (simp_all add: truth_d_def ktruth_kind_scalar)
-qed (simp_all add: truth_d_def)
+  case (Known s) then show ?thesis using that
+  proof (cases s)
+    case (SBool b) then show ?thesis using Known that by (cases b rule: trE) (simp_all add: d_bool_def)
+  qed simp_all
+qed (use that in simp_all)
 
-definition kand :: "truth_kind lift \<rightarrow> truth_kind lift \<rightarrow> truth_kind lift" where
-  "kand = (\<Lambda> x y. if x = Def KFalse \<or> y = Def KFalse then Def KFalse else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
-     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
-     else Def KTrue)"
-
-definition kor :: "truth_kind lift \<rightarrow> truth_kind lift \<rightarrow> truth_kind lift" where
-  "kor = (\<Lambda> x y. if x = Def KTrue \<or> y = Def KTrue then Def KTrue else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
-     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
-     else Def KFalse)"
-
-lemma kand_apply: "kand\<cdot>x\<cdot>y = (if x = Def KFalse \<or> y = Def KFalse then Def KFalse else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
-     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
-     else Def KTrue)"
-  unfolding kand_def by (rule beta_chfin2; rule monofunI; auto simp: flat_below_iff)
-
-lemma kor_apply: "kor\<cdot>x\<cdot>y = (if x = Def KTrue \<or> y = Def KTrue then Def KTrue else if x = \<bottom> \<or> y = \<bottom> then \<bottom>
-     else if x = Def KNA \<or> y = Def KNA then Def KNA else if x = Def KNull \<or> y = Def KNull then Def KNull
-     else Def KFalse)"
-  unfolding kor_def by (rule beta_chfin2; rule monofunI; auto simp: flat_below_iff)
-
-lemma ktruth_kand: "ktruth\<cdot>(kand\<cdot>a\<cdot>b) = pand\<cdot>(ktruth\<cdot>a)\<cdot>(ktruth\<cdot>b)"
-  and ktruth_kor: "ktruth\<cdot>(kor\<cdot>a\<cdot>b) = por\<cdot>(ktruth\<cdot>a)\<cdot>(ktruth\<cdot>b)"
-  by (cases a rule: kind_cases; cases b rule: kind_cases; simp add: kand_apply kor_apply)+
+text \<open>A conjunction is null where every conjunct is null or true and one is null; otherwise it
+  is known, with the parallel conjunction of the truths, or undefined.\<close>
 
 definition d_and :: "scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum" where
-  "d_and = (\<Lambda> x y. from_kind\<cdot>(kand\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y)))"
+  "d_and = (\<Lambda> x y. If pand\<cdot>(pand\<cdot>(por\<cdot>(is_null\<cdot>x)\<cdot>(truth_d\<cdot>x))\<cdot>(por\<cdot>(is_null\<cdot>y)\<cdot>(truth_d\<cdot>y)))\<cdot>
+     (por\<cdot>(is_null\<cdot>x)\<cdot>(is_null\<cdot>y)) then Null else Known\<cdot>(SBool\<cdot>(pand\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y))))"
 
 definition d_or :: "scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum" where
-  "d_or = (\<Lambda> x y. from_kind\<cdot>(kor\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y)))"
+  "d_or = (\<Lambda> x y. If pand\<cdot>(pand\<cdot>(por\<cdot>(is_null\<cdot>x)\<cdot>(neg\<cdot>(truth_d\<cdot>x)))\<cdot>(por\<cdot>(is_null\<cdot>y)\<cdot>(neg\<cdot>(truth_d\<cdot>y))))\<cdot>
+     (por\<cdot>(is_null\<cdot>x)\<cdot>(is_null\<cdot>y)) then Null else Known\<cdot>(SBool\<cdot>(por\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y))))"
 
-lemma d_and_apply: "d_and\<cdot>x\<cdot>y = from_kind\<cdot>(kand\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y))"
-  and d_or_apply: "d_or\<cdot>x\<cdot>y = from_kind\<cdot>(kor\<cdot>(kind\<cdot>x)\<cdot>(kind\<cdot>y))"
+lemma d_and_apply: "d_and\<cdot>x\<cdot>y = (If pand\<cdot>(pand\<cdot>(por\<cdot>(is_null\<cdot>x)\<cdot>(truth_d\<cdot>x))\<cdot>(por\<cdot>(is_null\<cdot>y)\<cdot>(truth_d\<cdot>y)))\<cdot>
+     (por\<cdot>(is_null\<cdot>x)\<cdot>(is_null\<cdot>y)) then Null else Known\<cdot>(SBool\<cdot>(pand\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y))))"
+  and d_or_apply: "d_or\<cdot>x\<cdot>y = (If pand\<cdot>(pand\<cdot>(por\<cdot>(is_null\<cdot>x)\<cdot>(neg\<cdot>(truth_d\<cdot>x)))\<cdot>(por\<cdot>(is_null\<cdot>y)\<cdot>(neg\<cdot>(truth_d\<cdot>y))))\<cdot>
+     (por\<cdot>(is_null\<cdot>x)\<cdot>(is_null\<cdot>y)) then Null else Known\<cdot>(SBool\<cdot>(por\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y))))"
   by (simp_all add: d_and_def d_or_def)
 
 lemma truth_d_and: "truth_d\<cdot>(d_and\<cdot>x\<cdot>y) = pand\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
   and truth_d_or: "truth_d\<cdot>(d_or\<cdot>x\<cdot>y) = por\<cdot>(truth_d\<cdot>x)\<cdot>(truth_d\<cdot>y)"
-  by (simp_all add: d_and_apply d_or_apply truth_d_kind ktruth_kand ktruth_kor)
+  by (cases x rule: datum_truth_cases; cases y rule: datum_truth_cases; simp add: d_and_apply d_or_apply d_bool_def)+
 
-text \<open>Forgetting \<open>NA\<close> forgets the kind \<open>NA\<close>, so the parallel connectives are NA-blind.\<close>
+text \<open>SQL's tables, on the definite values.\<close>
 
-definition ksquash :: "truth_kind lift \<rightarrow> truth_kind lift" where
-  "ksquash = (FLIFT k. if k = KNA then \<bottom> else Def k)"
+lemma d_and_FF: "d_and\<cdot>(d_bool\<cdot>FF)\<cdot>y = d_bool\<cdot>FF" "d_and\<cdot>x\<cdot>(d_bool\<cdot>FF) = d_bool\<cdot>FF"
+  by (cases y rule: datum_truth_cases; simp add: d_and_apply d_bool_def)
+    (cases x rule: datum_truth_cases; simp add: d_and_apply d_bool_def)
 
-lemma ksquash_simps [simp]: "ksquash\<cdot>\<bottom> = \<bottom>" "ksquash\<cdot>(Def k) = (if k = KNA then \<bottom> else Def k)"
-  by (simp_all add: ksquash_def)
+lemma d_and_simps:
+  "d_and\<cdot>(d_bool\<cdot>TT)\<cdot>(d_bool\<cdot>TT) = d_bool\<cdot>TT"
+  "d_and\<cdot>(d_bool\<cdot>TT)\<cdot>Null = Null" "d_and\<cdot>Null\<cdot>(d_bool\<cdot>TT) = Null" "d_and\<cdot>Null\<cdot>Null = Null"
+  by (simp_all add: d_and_apply d_bool_def)
 
-lemma ksquash_id: "k \<noteq> Def KNA \<Longrightarrow> ksquash\<cdot>k = k"
-  by (cases k rule: kind_cases) simp_all
+lemma d_or_TT: "d_or\<cdot>(d_bool\<cdot>TT)\<cdot>y = d_bool\<cdot>TT" "d_or\<cdot>x\<cdot>(d_bool\<cdot>TT) = d_bool\<cdot>TT"
+  by (cases y rule: datum_truth_cases; simp add: d_or_apply d_bool_def)
+    (cases x rule: datum_truth_cases; simp add: d_or_apply d_bool_def)
 
-lemma kind_squash: "kind\<cdot>(squash\<cdot>x) = ksquash\<cdot>(kind\<cdot>x)"
-proof (cases x)
-  case (Val y) then show ?thesis using ksquash_id[OF kind_null_not_KNA[of y]] by (cases "y = \<bottom>") simp_all
-qed simp_all
-
-lemma squash_from_kind: "squash\<cdot>(from_kind\<cdot>k) = from_kind\<cdot>(ksquash\<cdot>k)"
-  by (cases k rule: kind_cases) (simp_all add: d_bool_def)
-
-lemma kand_ksquash: "kand\<cdot>(ksquash\<cdot>a)\<cdot>(ksquash\<cdot>b) = ksquash\<cdot>(kand\<cdot>a\<cdot>b)"
-  and kor_ksquash: "kor\<cdot>(ksquash\<cdot>a)\<cdot>(ksquash\<cdot>b) = ksquash\<cdot>(kor\<cdot>a\<cdot>b)"
-  by (cases a rule: kind_cases; cases b rule: kind_cases; simp add: kand_apply kor_apply)+
-
-lemma na_blind2_d_and: "na_blind2 d_and" and na_blind2_d_or: "na_blind2 d_or"
-  unfolding na_blind2_def d_and_apply d_or_apply kind_squash squash_from_kind kand_ksquash kor_ksquash
-  by simp_all
+lemma d_or_simps:
+  "d_or\<cdot>(d_bool\<cdot>FF)\<cdot>(d_bool\<cdot>FF) = d_bool\<cdot>FF"
+  "d_or\<cdot>(d_bool\<cdot>FF)\<cdot>Null = Null" "d_or\<cdot>Null\<cdot>(d_bool\<cdot>FF) = Null" "d_or\<cdot>Null\<cdot>Null = Null"
+  by (simp_all add: d_or_apply d_bool_def)
 
 section \<open>The not-null level of keys\<close>
 
-text \<open>The atoms of @{typ "'a with_na"} are \<open>NA\<close> and \<open>Val\<cdot>\<bottom>\<close>, so its discriminator is the
-  projection @{text not_null}, which observes only whether a key is \<open>NA\<close>.  It is a finitary
-  semi-factor, i.e.\ a level of detail, and @{text is_na} factors through it.\<close>
+text \<open>The atoms of @{typ "'a with_null"} are \<open>Null\<close> and \<open>Known\<cdot>\<bottom>\<close>, so its discriminator is the
+  projection @{text not_null}, which observes only whether a key is \<open>Null\<close>.  It is a finitary
+  semi-factor, i.e.\ a level of detail, and @{text is_null} factors through it.\<close>
 
-fixrec is_na :: "'a::domain with_na \<rightarrow> tr" where
-  "is_na\<cdot>NA = TT"
-| "is_na\<cdot>(Val\<cdot>x) = FF"
-
-lemma is_na_strict [simp]: "is_na\<cdot>\<bottom> = \<bottom>"
-  by fixrec_simp
-
-fixrec not_null :: "'a::domain with_na \<rightarrow> 'a with_na" where
-  "not_null\<cdot>NA = NA"
-| "not_null\<cdot>(Val\<cdot>x) = Val\<cdot>\<bottom>"
+fixrec not_null :: "'a::domain with_null \<rightarrow> 'a with_null" where
+  "not_null\<cdot>Null = Null"
+| "not_null\<cdot>(Known\<cdot>x) = Known\<cdot>\<bottom>"
 
 lemma not_null_strict [simp]: "not_null\<cdot>\<bottom> = \<bottom>"
   by fixrec_simp
 
-lemma atom_NA: "atom NA"
+lemma atom_Null: "atom Null"
   by (rule atomI) (simp, case_tac z, simp_all)
 
-lemma atom_Val_bottom: "atom (Val\<cdot>\<bottom>)"
+lemma atom_Known_bottom: "atom (Known\<cdot>\<bottom>)"
   by (rule atomI) (simp, case_tac z, simp_all)
 
-lemma discriminator_with_na:
-  "discriminator\<cdot>x = not_null\<cdot>(x :: 'a::{domain, bounded_complete} with_na)"
+lemma discriminator_with_null:
+  "discriminator\<cdot>x = not_null\<cdot>(x :: 'a::{domain, bounded_complete} with_null)"
 proof (cases x)
   case bottom then show ?thesis by simp
 next
-  case NA then show ?thesis by (simp add: discriminator_eq[OF atom_NA below_refl])
+  case Null then show ?thesis by (simp add: discriminator_eq[OF atom_Null below_refl])
 next
-  case (Val v)
-  have "Val\<cdot>\<bottom> \<sqsubseteq> x" unfolding Val by (rule monofun_cfun_arg) simp
-  then show ?thesis unfolding Val by (simp add: discriminator_eq[OF atom_Val_bottom])
+  case (Known v)
+  have "Known\<cdot>\<bottom> \<sqsubseteq> x" unfolding Known by (rule monofun_cfun_arg) simp
+  then show ?thesis unfolding Known by (simp add: discriminator_eq[OF atom_Known_bottom])
 qed
 
 lemma not_null_level:
-  "semi_factor_defl (not_null :: 'a::{domain, distributive_cpo} with_na \<rightarrow> 'a with_na)"
-  "finitary (not_null :: 'a::{domain, distributive_cpo} with_na \<rightarrow> 'a with_na)"
+  "semi_factor_defl (not_null :: 'a::{domain, distributive_cpo} with_null \<rightarrow> 'a with_null)"
+  "finitary (not_null :: 'a::{domain, distributive_cpo} with_null \<rightarrow> 'a with_null)"
   using discriminator_semi_factor discriminator_finitary
-  by (simp_all add: cfun_eqI[OF discriminator_with_na, symmetric])
+  by (simp_all add: cfun_eqI[OF discriminator_with_null, symmetric])
 
-lemma is_na_not_null: "is_na\<cdot>(not_null\<cdot>x) = is_na\<cdot>x"
+lemma is_null_not_null: "is_null\<cdot>(not_null\<cdot>x) = is_null\<cdot>x"
   by (cases x) simp_all
 
 end

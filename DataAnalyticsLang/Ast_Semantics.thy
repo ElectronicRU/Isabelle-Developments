@@ -70,7 +70,7 @@ text \<open>The symbol tables: dimensions and tabled function symbols as in the 
 
 locale ast_space = key_language dim_lod dim_val key_dims fn_other + keyed_schema rules keying
   for dim_lod :: "'d \<Rightarrow> 'k::{domain, lod_domain} semi_factor"
-    and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar with_na" and key_dims :: "'k \<Rightarrow> 'd list"
+    and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar datum" and key_dims :: "'k \<Rightarrow> 'd list"
     and fn_other :: "'fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum"
     and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying" +
   fixes col_sec :: "'c \<Rightarrow> 'r semi_factor" and col_dim :: "'c \<Rightarrow> 'd" and col_val :: "'c \<Rightarrow> 'r \<rightarrow> scalar datum"
@@ -90,7 +90,7 @@ text \<open>Row-level expressions read the parts of their views directly: dimens
   semantics, until the latter gives continuous functions of the view parts itself.)\<close>
 
 fun pval :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> 'r \<times> 'k \<rightarrow> scalar datum" where
-  "pval (Dim d) = key_datum oo dim_val d oo csnd"
+  "pval (Dim d) = dim_val d oo csnd"
 | "pval (Col c) = col_val c oo cfst"
 | "pval (Lit v) = (\<Lambda> _. v)"
 | "pval (Call fn es) = fsym_sem fn_other fn oo tuple_cfun (map pval es)"
@@ -132,7 +132,7 @@ qed (simp_all add: keyed_view_key keyed_view_columns[OF col_fd] keyed_view_bot)
 
 
 fun asem :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice, 'r, scalar datum) expr" where
-  "asem (Dim d) = value_at (dim_lod d) (key_datum oo dim_val d)"
+  "asem (Dim d) = value_at (dim_lod d) (dim_val d)"
 | "asem (Col c) = column (col_sec c) (dim_lod (col_dim c)) (col_val c)"
 | "asem (Lit v) = value_at \<bottom> (\<Lambda> _. v)"
 | "asem (Call fn es) = smap (fup\<cdot>(fsym_sem fn_other fn)) (tuple (map asem es))"

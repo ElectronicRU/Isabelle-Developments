@@ -8,15 +8,15 @@ text \<open>The abstract syntax of the expression language, after name resolutio
   dimensions and to table columns, literals, calls of function symbols, aggregations, requested
   grouping (\<open>GROUP BY\<close>), explicit cuts (\<open>FOR\<close>) and filters (\<open>WHERE\<close>).  Values are concrete:
   literals and expressions are data (@{typ "scalar datum"}), dimensions are keys
-  (@{typ "scalar with_na"}).  The conditions of cuts are boolean expressions on dimensions, which
+  (@{typ "scalar datum"} too).  The conditions of cuts are boolean expressions on dimensions, which
   serve as slices; filters are row-level boolean expressions, which may read columns.
   Not yet covered: \<open>DISTINCT\<close>, \<open>ISOLATE\<close>, \<open>TOTAL\<close>, and the dimension kind (which needs
   staging).\<close>
 
-text \<open>Function symbols: the connectives, equality and the \<open>NA\<close> test are known to the language,
+text \<open>Function symbols: the connectives, equality and the \<open>NULL\<close> test are known to the language,
   for normal forms, coarsening and pins; other symbols are interpreted by a table.\<close>
 
-datatype 'fn fsym = FAnd | FOr | FNot | FEq | FIsNA | FOther 'fn
+datatype 'fn fsym = FAnd | FOr | FNot | FEq | FIsNull | FOther 'fn
 
 datatype ('d, 'c, 'fn, 'ag) ast =
   Dim 'd
@@ -74,15 +74,15 @@ lemma arg2_beta [simp]: "arg2 f\<cdot>xs = (if length xs = 2 then f\<cdot>(hd xs
 definition d_eq :: "scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum" where
   "d_eq = dlift2\<cdot>(\<Lambda> x y. SBool\<cdot>(scalar_eq\<cdot>x\<cdot>y))"
 
-definition d_is_na :: "scalar datum \<rightarrow> scalar datum" where
-  "d_is_na = (\<Lambda> x. d_bool\<cdot>(is_na\<cdot>x))"
+definition d_is_null :: "scalar datum \<rightarrow> scalar datum" where
+  "d_is_null = (\<Lambda> x. d_bool\<cdot>(is_null\<cdot>x))"
 
 primrec fsym_sem :: "('fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum) \<Rightarrow> 'fn fsym \<Rightarrow> scalar datum list \<rightarrow> scalar datum" where
   "fsym_sem other FAnd = d_ands"
 | "fsym_sem other FOr = d_ors"
 | "fsym_sem other FNot = arg1 (dlift1\<cdot>snot)"
 | "fsym_sem other FEq = arg2 d_eq"
-| "fsym_sem other FIsNA = arg1 d_is_na"
+| "fsym_sem other FIsNull = arg1 d_is_null"
 | "fsym_sem other (FOther fn) = other fn"
 
 primrec fsym_arity :: "('fn \<Rightarrow> nat \<Rightarrow> bool) \<Rightarrow> 'fn fsym \<Rightarrow> nat \<Rightarrow> bool" where
@@ -90,7 +90,7 @@ primrec fsym_arity :: "('fn \<Rightarrow> nat \<Rightarrow> bool) \<Rightarrow> 
 | "fsym_arity other FOr n \<longleftrightarrow> True"
 | "fsym_arity other FNot n \<longleftrightarrow> n = 1"
 | "fsym_arity other FEq n \<longleftrightarrow> n = 2"
-| "fsym_arity other FIsNA n \<longleftrightarrow> n = 1"
+| "fsym_arity other FIsNull n \<longleftrightarrow> n = 1"
 | "fsym_arity other (FOther fn) n \<longleftrightarrow> other fn n"
 
 text \<open>Truth of the connectives: a conjunction is true where all conjuncts are and false where
@@ -122,16 +122,9 @@ primrec tuple_cfun :: "('r::cpo \<rightarrow> 'v::cpo) list \<Rightarrow> 'r \<r
 lemma tuple_cfun_apply: "tuple_cfun gs\<cdot>y = map (\<lambda>g. g\<cdot>y) gs"
   by (induct gs) simp_all
 
-definition key_datum :: "scalar with_na \<rightarrow> scalar datum" where
-  "key_datum = na_bind\<cdot>(Val oo Known)"
-
-lemma key_datum_simps [simp]:
-  "key_datum\<cdot>\<bottom> = \<bottom>" "key_datum\<cdot>NA = NA" "key_datum\<cdot>(Val\<cdot>x) = Val\<cdot>(Known\<cdot>x)"
-  by (simp_all add: key_datum_def)
-
 locale key_language =
   fixes dim_lod :: "'d \<Rightarrow> 'k::lod_domain semi_factor"
-    and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar with_na"
+    and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar datum"
     and key_dims :: "'k \<Rightarrow> 'd list"
     and fn_other :: "'fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum"
   assumes dim_compact: "compact (dim_lod d)"
@@ -192,7 +185,7 @@ fun kdims :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> 'd list" where
 | "kdims _ = []"
 
 fun kval :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> 'k \<rightarrow> scalar datum" where
-  "kval (Dim d) = key_datum oo dim_val d"
+  "kval (Dim d) = dim_val d"
 | "kval (Lit v) = (\<Lambda> _. v)"
 | "kval (Call fn es) = fsym_sem fn_other fn oo tuple_cfun (map kval es)"
 | "kval _ = \<bottom>"
@@ -375,8 +368,8 @@ end
 section \<open>Conditions as slices\<close>
 
 text \<open>A slice is a finite set of conditions, read as their conjunction; it is written at the
-  join of their dimensions' LODs.  Pins conjoin a test per dimension the key lists: \<open>IS NA\<close>,
-  \<open>NOT IS NA\<close>, or equality with the key's value, as the value is \<open>NA\<close>, the not-null root, or a
+  join of their dimensions' LODs.  Pins conjoin a test per dimension the key lists: \<open>IS NULL\<close>,
+  \<open>NOT IS NULL\<close>, or equality with the key's value, as the value is \<open>Null\<close>, the not-null root, or a
   scalar.\<close>
 
 type_synonym ('d, 'c, 'fn, 'ag) slice = "('d, 'c, 'fn, 'ag) ast fset"
@@ -441,9 +434,9 @@ qed
 
 definition pin_test :: "'k \<Rightarrow> 'd \<Rightarrow> ('d, 'c, 'fn, 'ag) ast list" where
   "pin_test K d = (if dim_val d\<cdot>K = \<bottom> then []
-     else if dim_val d\<cdot>K = NA then [Call FIsNA [Dim d]]
-     else if dim_val d\<cdot>K = Val\<cdot>\<bottom> then [Call FNot [Call FIsNA [Dim d]]]
-     else [Call FEq [Dim d, Lit (key_datum\<cdot>(dim_val d\<cdot>K))]])"
+     else if dim_val d\<cdot>K = Null then [Call FIsNull [Dim d]]
+     else if dim_val d\<cdot>K = Known\<cdot>\<bottom> then [Call FNot [Call FIsNull [Dim d]]]
+     else [Call FEq [Dim d, Lit (dim_val d\<cdot>K)]])"
 
 definition slice_pin :: "'k \<Rightarrow> ('d, 'c, 'fn, 'ag) slice" where
   "slice_pin K = fset_of_list (concat (map (pin_test K) (key_dims K)))"
@@ -532,27 +525,27 @@ end
 
 subsection \<open>Pins\<close>
 
-text \<open>Scalars are flat, so a defined scalar is maximal; so are \<open>NA\<close> and a key value
-  \<open>Val\<cdot>s\<close> for a defined scalar \<open>s\<close>.  The upsets of key values are therefore exactly what the
+text \<open>Scalars are flat, so a defined scalar is maximal; so are \<open>Null\<close> and a key value
+  \<open>Known\<cdot>s\<close> for a defined scalar \<open>s\<close>.  The upsets of key values are therefore exactly what the
   three tests select.\<close>
 
 lemma scalar_maximal: "s \<noteq> \<bottom> \<Longrightarrow> s \<sqsubseteq> x \<Longrightarrow> x = (s :: scalar)"
   by (cases s; cases x) (auto simp: flat_below_iff)
 
-lemma truth_d_is_na: "truth_d\<cdot>(d_is_na\<cdot>(key_datum\<cdot>w)) = is_na\<cdot>w"
-  by (cases w) (simp_all add: d_is_na_def)
+lemma truth_d_is_null: "truth_d\<cdot>(d_is_null\<cdot>w) = is_null\<cdot>w"
+  by (simp add: d_is_null_def)
 
 lemma truth_d_eq_key:
   assumes "s \<noteq> \<bottom>"
-  shows "truth_d\<cdot>(d_eq\<cdot>(key_datum\<cdot>w)\<cdot>(key_datum\<cdot>(Val\<cdot>s))) = TT \<longleftrightarrow> w = Val\<cdot>s"
+  shows "truth_d\<cdot>(d_eq\<cdot>w\<cdot>(Known\<cdot>s)) = TT \<longleftrightarrow> w = Known\<cdot>s"
 proof -
   have strict: "(\<Lambda> x y. SBool\<cdot>(scalar_eq\<cdot>x\<cdot>y))\<cdot>\<bottom>\<cdot>y = \<bottom>" "(\<Lambda> x y. SBool\<cdot>(scalar_eq\<cdot>x\<cdot>y))\<cdot>x\<cdot>\<bottom> = \<bottom>" for x y
     by simp_all
   have "truth_d\<cdot>(d_eq\<cdot>a\<cdot>b) = scalar_eq\<cdot>(plain\<cdot>a)\<cdot>(plain\<cdot>b)" for a b
     unfolding d_eq_def truth_d_def by (simp add: plain_dlift2[OF strict])
-  moreover have "scalar_eq\<cdot>(plain\<cdot>(key_datum\<cdot>w))\<cdot>s = TT \<longleftrightarrow> w = Val\<cdot>s"
+  moreover have "scalar_eq\<cdot>(plain\<cdot>w)\<cdot>s = TT \<longleftrightarrow> w = Known\<cdot>s"
   proof (cases w)
-    case (Val x)
+    case (Known x)
     then show ?thesis using assms by (cases "x = \<bottom>") (simp_all add: scalar_eq_defined TT_def)
   qed simp_all
   ultimately show ?thesis by simp
@@ -570,23 +563,23 @@ proof -
     case bottom
     then show ?thesis by (simp add: pin_test_def)
   next
-    case NA
-    have "is_na\<cdot>?w = TT \<longleftrightarrow> ?w = NA" by (cases ?w) simp_all
-    moreover have "NA \<sqsubseteq> ?w \<longleftrightarrow> ?w = NA" by (cases ?w) simp_all
-    ultimately show ?thesis using NA by (simp add: pin_test_def kholds_def truth_d_is_na)
+    case Null
+    have "is_null\<cdot>?w = TT \<longleftrightarrow> ?w = Null" by (cases ?w) simp_all
+    moreover have "Null \<sqsubseteq> ?w \<longleftrightarrow> ?w = Null" by (cases ?w) simp_all
+    ultimately show ?thesis using Null by (simp add: pin_test_def kholds_def truth_d_is_null)
   next
-    case (Val s)
+    case (Known s)
     show ?thesis
     proof (cases "s = \<bottom>")
       case True
-      have "neg\<cdot>(is_na\<cdot>?w) = TT \<longleftrightarrow> Val\<cdot>\<bottom> \<sqsubseteq> ?w" by (cases ?w) simp_all
-      then show ?thesis using Val True
-        by (simp add: pin_test_def kholds_def truth_d_is_na truth_d_not[simplified])
+      have "neg\<cdot>(is_null\<cdot>?w) = TT \<longleftrightarrow> Known\<cdot>\<bottom> \<sqsubseteq> ?w" by (cases ?w) simp_all
+      then show ?thesis using Known True
+        by (simp add: pin_test_def kholds_def truth_d_is_null truth_d_not[simplified])
     next
       case False
-      have "Val\<cdot>s \<sqsubseteq> ?w \<longleftrightarrow> ?w = Val\<cdot>s"
+      have "Known\<cdot>s \<sqsubseteq> ?w \<longleftrightarrow> ?w = Known\<cdot>s"
         by (cases ?w) (auto dest: scalar_maximal[OF False])
-      then show ?thesis using Val False
+      then show ?thesis using Known False
         by (simp add: pin_test_def kholds_def truth_d_eq_key[OF False, simplified])
     qed
   qed
