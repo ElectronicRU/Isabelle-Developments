@@ -653,4 +653,197 @@ proof -
     using option_pd_op_of_option[of "strict_opt2 f" "Some v" "Some w"] by (simp add: lift2_option_pd_apply)
 qed (simp_all add: lift2_option_pd_apply option_pd_op_Absent1 option_pd_op_Absent2)
 
+
+subsection \<open>Absence is decided by absence\<close>
+
+text \<open>A result is absent only when the operations' arguments force it: mapping keeps absence, a
+  strict operation is absent exactly where one argument is, the unit-lax one where both are.  The
+  proofs go through the outcomes: the absent unit is below a powerdomain element exactly when all
+  of its outcomes are absent.\<close>
+
+lemma option_u_cases3:
+  assumes "P \<bottom>" and "P (up\<cdot>None)" and "\<And>x. P (up\<cdot>(Some x))"
+  shows "P z"
+proof (cases z)
+  case (up w)
+  then show ?thesis using assms by (cases w) simp_all
+qed (simp add: assms)
+
+lemma upper_map_None_below:
+  assumes h: "\<And>x. up\<cdot>None \<sqsubseteq> h\<cdot>x \<Longrightarrow> up\<cdot>None \<sqsubseteq> x" and U: "{up\<cdot>None}\<sharp> \<sqsubseteq> upper_map\<cdot>h\<cdot>S"
+  shows "{up\<cdot>None}\<sharp> \<sqsubseteq> S"
+proof -
+  have "\<not> {up\<cdot>None}\<sharp> \<sqsubseteq> upper_map\<cdot>h\<cdot>S \<or> {up\<cdot>None}\<sharp> \<sqsubseteq> S"
+  proof (induct S rule: upper_pd_induct)
+    case (upper_unit x)
+    show ?case using h[of x] by auto
+  next
+    case (upper_plus S T)
+    then show ?case by (auto intro: upper_plus_greatest)
+  qed simp
+  then show ?thesis using U by blast
+qed
+
+lemma Absent_below_iff: "Absent \<sqsubseteq> x \<longleftrightarrow> x = Absent"
+  using Absent_maximal by auto
+
+lemma Present_neq_Absent [simp]: "Present\<cdot>v \<noteq> Absent" "Absent \<noteq> Present\<cdot>v"
+  using Present_not_below_Absent[of v] by (metis below_refl)+
+
+lemma bottom_neq_Absent [simp]: "(\<bottom> :: 'v option_pd) \<noteq> Absent" "Absent \<noteq> (\<bottom> :: 'v option_pd)"
+proof -
+  have "\<bottom> \<sqsubseteq> Present\<cdot>(\<bottom> :: 'v)" by (rule minimal)
+  then have "(\<bottom> :: 'v option_pd) = Absent \<Longrightarrow> False" by (metis Absent_maximal Present_neq_Absent(1))
+  then show "(\<bottom> :: 'v option_pd) \<noteq> Absent" "Absent \<noteq> (\<bottom> :: 'v option_pd)" by auto
+qed
+
+lemma compact_Present_bottom: "compact (Present\<cdot>\<bottom>)"
+  by (rule typedef_compact[OF type_definition_option_pd below_option_pd_def]) simp_all
+
+lemma Absent_below_Rep: "{up\<cdot>None}\<sharp> \<sqsubseteq> Rep_option_pd x \<longleftrightarrow> x = Absent"
+  using Absent_below_iff[of x] by (simp add: below_option_pd_def)
+
+lemma map_option_pd_Absent_iff [simp]: "map_option_pd g\<cdot>x = Absent \<longleftrightarrow> x = Absent"
+proof
+  assume "map_option_pd g\<cdot>x = Absent"
+  then have m: "{up\<cdot>None}\<sharp> \<sqsubseteq> upper_map\<cdot>(u_map\<cdot>(option_map g))\<cdot>(Rep_option_pd x)"
+    by (simp add: Rep_option_pd_inject[symmetric])
+  have "{up\<cdot>None}\<sharp> \<sqsubseteq> Rep_option_pd x"
+  proof (rule upper_map_None_below[OF _ m])
+    fix z assume "up\<cdot>None \<sqsubseteq> u_map\<cdot>(option_map g)\<cdot>z"
+    then show "up\<cdot>None \<sqsubseteq> z" by (cases z; simp)
+  qed
+  then show "x = Absent" by (simp only: Absent_below_Rep)
+qed simp
+
+lemma tr_mult_Absent_iff: "t \<odot> x = Absent \<longleftrightarrow> t = FF \<or> x = Absent"
+proof (cases t rule: trE)
+  case bottom
+  have "x + Absent = Absent \<Longrightarrow> x = Absent"
+    using plus_option_pd_below1[of x Absent] by (metis Absent_maximal)
+  then show ?thesis using bottom by auto
+qed simp_all
+
+lemma upper_bin_strict_None:
+  assumes U: "{up\<cdot>None}\<sharp> \<sqsubseteq> upper_bin\<cdot>(lift_up2 (strict_opt2 f))\<cdot>S\<cdot>T"
+  shows "{up\<cdot>None}\<sharp> \<sqsubseteq> S \<or> {up\<cdot>None}\<sharp> \<sqsubseteq> T"
+proof -
+  let ?U = "{up\<cdot>None}\<sharp>"
+  have "\<forall>T. \<not> ?U \<sqsubseteq> upper_bin\<cdot>(lift_up2 (strict_opt2 f))\<cdot>S\<cdot>T \<or> ?U \<sqsubseteq> S \<or> ?U \<sqsubseteq> T"
+  proof (induct S rule: upper_pd_induct)
+    case (upper_unit s)
+    show ?case
+    proof (intro allI)
+      fix T
+      have "?U \<sqsubseteq> T" if m0: "?U \<sqsubseteq> upper_bin\<cdot>(lift_up2 (strict_opt2 f))\<cdot>{s}\<sharp>\<cdot>T" and s: "\<not> up\<cdot>None \<sqsubseteq> s"
+      proof (rule upper_map_None_below)
+        show "?U \<sqsubseteq> upper_map\<cdot>(lift_up2 (strict_opt2 f)\<cdot>s)\<cdot>T" using m0 by (simp add: upper_bin_unit1)
+        fix z assume z: "up\<cdot>None \<sqsubseteq> lift_up2 (strict_opt2 f)\<cdot>s\<cdot>z"
+        show "up\<cdot>None \<sqsubseteq> z"
+        proof (cases s)
+          case (up a)
+          then show ?thesis using z s by (cases a; cases z; simp) (rename_tac w, case_tac w, simp_all)
+        qed (use z in simp)
+      qed
+      then show "\<not> ?U \<sqsubseteq> upper_bin\<cdot>(lift_up2 (strict_opt2 f))\<cdot>{s}\<sharp>\<cdot>T \<or> ?U \<sqsubseteq> {s}\<sharp> \<or> ?U \<sqsubseteq> T"
+        by auto
+    qed
+  next
+    case (upper_plus S1 S2)
+    then show ?case by (auto intro: upper_plus_greatest)
+  qed simp
+  then show ?thesis using U by blast
+qed
+
+lemma lift2_option_pd_Absent_iff: "lift2_option_pd f\<cdot>x\<cdot>y = Absent \<longleftrightarrow> x = Absent \<or> y = Absent"
+proof
+  assume "lift2_option_pd f\<cdot>x\<cdot>y = Absent"
+  then have "{up\<cdot>None}\<sharp> \<sqsubseteq> upper_bin\<cdot>(lift_up2 (strict_opt2 f))\<cdot>(Rep_option_pd x)\<cdot>(Rep_option_pd y)"
+    by (simp add: lift2_option_pd_apply Rep_option_pd_inject[symmetric])
+  then have "{up\<cdot>None}\<sharp> \<sqsubseteq> Rep_option_pd x \<or> {up\<cdot>None}\<sharp> \<sqsubseteq> Rep_option_pd y" by (rule upper_bin_strict_None)
+  then show "x = Absent \<or> y = Absent" by (simp only: Absent_below_Rep)
+qed auto
+
+lemma upper_bin_lax_None:
+  assumes U: "{up\<cdot>None}\<sharp> \<sqsubseteq> upper_bin\<cdot>(lift_up2 (\<Lambda> a b. opt_op f a b))\<cdot>S\<cdot>T"
+  shows "{up\<cdot>None}\<sharp> \<sqsubseteq> S \<and> {up\<cdot>None}\<sharp> \<sqsubseteq> T"
+proof -
+  let ?U = "{up\<cdot>None}\<sharp>" and ?h = "lift_up2 (\<Lambda> a b. opt_op f a b)"
+  have "\<forall>T. \<not> ?U \<sqsubseteq> upper_bin\<cdot>?h\<cdot>S\<cdot>T \<or> (?U \<sqsubseteq> S \<and> ?U \<sqsubseteq> T)"
+  proof (induct S rule: upper_pd_induct)
+    case (upper_unit s)
+    show ?case
+    proof (intro allI)
+      fix T
+      have "?U \<sqsubseteq> {s}\<sharp> \<and> ?U \<sqsubseteq> T" if m0: "?U \<sqsubseteq> upper_bin\<cdot>?h\<cdot>{s}\<sharp>\<cdot>T"
+      proof -
+      have m: "?U \<sqsubseteq> upper_map\<cdot>(?h\<cdot>s)\<cdot>T" using m0 by (simp add: upper_bin_unit1)
+      have T: "?U \<sqsubseteq> T" if "\<And>z. up\<cdot>None \<sqsubseteq> ?h\<cdot>s\<cdot>z \<Longrightarrow> up\<cdot>None \<sqsubseteq> z"
+        by (rule upper_map_None_below[OF that m])
+      show "?U \<sqsubseteq> {s}\<sharp> \<and> ?U \<sqsubseteq> T"
+      proof (cases s)
+        case bottom
+        have "?U \<sqsubseteq> T" proof (rule T)
+          fix z assume a: "up\<cdot>None \<sqsubseteq> ?h\<cdot>s\<cdot>z"
+          have "up\<cdot>None \<sqsubseteq> ?h\<cdot>s\<cdot>z \<longrightarrow> up\<cdot>None \<sqsubseteq> z" by (rule option_u_cases3[of _ z]) (simp_all add: bottom)
+          with a show "up\<cdot>None \<sqsubseteq> z" by blast
+        qed
+        then have "T = ?U" by (rule upper_unit_None_maximal)
+        then show ?thesis using m bottom by simp
+      next
+        case (up a)
+        show ?thesis
+        proof (cases a)
+          case None
+          have "?U \<sqsubseteq> T" proof (rule T)
+          fix z assume a: "up\<cdot>None \<sqsubseteq> ?h\<cdot>s\<cdot>z"
+          have "up\<cdot>None \<sqsubseteq> ?h\<cdot>s\<cdot>z \<longrightarrow> up\<cdot>None \<sqsubseteq> z" by (rule option_u_cases3[of _ z]) (simp_all add: up None)
+          with a show "up\<cdot>None \<sqsubseteq> z" by blast
+        qed
+          then show ?thesis using up None by simp
+        next
+          case (Some v)
+          have "?U \<sqsubseteq> T" proof (rule T)
+          fix z assume a: "up\<cdot>None \<sqsubseteq> ?h\<cdot>s\<cdot>z"
+          have "up\<cdot>None \<sqsubseteq> ?h\<cdot>s\<cdot>z \<longrightarrow> up\<cdot>None \<sqsubseteq> z" by (rule option_u_cases3[of _ z]) (simp_all add: up Some)
+          with a show "up\<cdot>None \<sqsubseteq> z" by blast
+        qed
+          then have "T = ?U" by (rule upper_unit_None_maximal)
+          then show ?thesis using m up Some by simp
+        qed
+      qed
+      qed
+      then show "\<not> ?U \<sqsubseteq> upper_bin\<cdot>?h\<cdot>{s}\<sharp>\<cdot>T \<or> (?U \<sqsubseteq> {s}\<sharp> \<and> ?U \<sqsubseteq> T)" by blast
+    qed
+  next
+    case (upper_plus S1 S2)
+    show ?case
+    proof (intro allI)
+      fix T
+      show "\<not> ?U \<sqsubseteq> upper_bin\<cdot>?h\<cdot>(S1 \<union>\<sharp> S2)\<cdot>T \<or> (?U \<sqsubseteq> S1 \<union>\<sharp> S2 \<and> ?U \<sqsubseteq> T)"
+      proof (cases "?U \<sqsubseteq> upper_bin\<cdot>?h\<cdot>(S1 \<union>\<sharp> S2)\<cdot>T")
+        case True
+        then have b1: "?U \<sqsubseteq> upper_bin\<cdot>?h\<cdot>S1\<cdot>T" and b2: "?U \<sqsubseteq> upper_bin\<cdot>?h\<cdot>S2\<cdot>T" by simp_all
+        have "?U \<sqsubseteq> S1" "?U \<sqsubseteq> T" using spec[OF upper_plus(1), of T] b1 by blast+
+        moreover have "?U \<sqsubseteq> S2" using spec[OF upper_plus(2), of T] b2 by blast
+        ultimately show ?thesis by (simp add: upper_plus_greatest)
+      qed simp
+    qed
+  qed simp
+  then show ?thesis using U by blast
+qed
+
+lemma combine_option_pd_Absent_iff: "combine_option_pd f\<cdot>x\<cdot>y = Absent \<longleftrightarrow> x = Absent \<and> y = Absent"
+proof
+  assume "combine_option_pd f\<cdot>x\<cdot>y = Absent"
+  then have "{up\<cdot>None}\<sharp> \<sqsubseteq> upper_bin\<cdot>(lift_up2 (\<Lambda> a b. opt_op f a b))\<cdot>(Rep_option_pd x)\<cdot>(Rep_option_pd y)"
+    by (simp add: combine_option_pd_apply Rep_option_pd_inject[symmetric])
+  then have "{up\<cdot>None}\<sharp> \<sqsubseteq> Rep_option_pd x \<and> {up\<cdot>None}\<sharp> \<sqsubseteq> Rep_option_pd y" by (rule upper_bin_lax_None)
+  then show "x = Absent \<and> y = Absent" by (simp only: Absent_below_Rep)
+next
+  assume "x = Absent \<and> y = Absent"
+  then show "combine_option_pd f\<cdot>x\<cdot>y = Absent"
+    using combine_option_pd_of_option[of f None None] by simp
+qed
+
 end

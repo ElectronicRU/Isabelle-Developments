@@ -229,14 +229,14 @@ theorem semilawful_value_at: "semilawful (value_at c g)"
 subsection \<open>\<open>RESTRICT\<close>\<close>
 
 text \<open>Restricting conjoins a test, three-valued, to the ambient filter.  Only guards see the frame's
-  filters: the test is conjoined to each guard, and value entries are left alone.\<close>
+  filters: the test is conjoined to each row guard, and value entries are left alone.\<close>
 
-definition restrict_entry :: "'r guard \<Rightarrow> ('k, 'r guard) entry \<Rightarrow> ('k, 'r guard) entry" where
-  "restrict_entry \<gamma> e = e\<lparr>epay := gand \<gamma> (eguard e)\<rparr>"
+definition restrict_entry :: "'r guard \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry" where
+  "restrict_entry \<gamma> e = e\<lparr>epay := (gand \<gamma> (eguard e), ekguard e)\<rparr>"
 
 lemma restrict_entry_simps [simp]:
   "esel (restrict_entry \<gamma> e) = esel e" "ekeys (restrict_entry \<gamma> e) = ekeys e"
-  "eguard (restrict_entry \<gamma> e) = gand \<gamma> (eguard e)"
+  "eguard (restrict_entry \<gamma> e) = gand \<gamma> (eguard e)" "ekguard (restrict_entry \<gamma> e) = ekguard e"
   by (simp_all add: restrict_entry_def)
 
 definition restrict :: "'r guard \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
@@ -255,7 +255,7 @@ lemma fiber_frestrict: "fiber data a \<rho> (frestrict \<phi> F) k = fiber data 
 
 lemma gcontent_frestrict:
   "gcontent data e (frestrict \<gamma> F) k = gcontent data (restrict_entry \<gamma> e) F k"
-  by (simp add: fun_eq_iff gcontent_def gfiber_def gtruth_def fiber_frestrict fguard_frestrict gand_assoc)
+  by (simp add: fun_eq_iff gcontent_def gfiber_def gtruth_def fiber_frestrict gand_assoc)
 
 lemma content_frestrict: "content data e (frestrict \<phi> F) k = content data e F k"
   by (simp add: content_def cgraph_def vfiber_def fiber_frestrict)
@@ -302,19 +302,19 @@ qed
 subsection \<open>\<open>FOR\<close> and \<open>FIXED\<close>\<close>
 
 text \<open>\<open>E FOR \<tau> G\<close>: the inner expression under the frame with LOD and slice truncated to \<open>\<tau>\<close>
-  and \<open>G\<close> conjoined, at the truncated key.  Its upper parts meet \<open>\<tau>\<close>; each guard is conjoined
+  and \<open>G\<close> conjoined, at the truncated key.  Its upper parts meet \<open>\<tau>\<close>; each key guard is conjoined
   with \<open>G\<close> coarsened to the guard's upper part.  It is not gated: the result is broadcast over the
   dropped detail.  \<open>FIXED D\<close> is \<open>FOR D\<close> without a filter.\<close>
 
-definition for_entry :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'r guard) entry \<Rightarrow> ('k, 'r guard) entry" where
-  "for_entry \<tau> G e = e\<lparr>esel := trunc_sel \<tau> (esel e), epay := gand (guard_holds (coarsen (eupper e) G)) (eguard e)\<rparr>"
+definition for_entry :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry" where
+  "for_entry \<tau> G e = e\<lparr>esel := trunc_sel \<tau> (esel e), epay := (eguard e, gand (sopen (coarsen (eupper e) G)) (ekguard e))\<rparr>"
 
 definition for_value :: "'k semi_factor \<Rightarrow> ('k, 'r semi_factor) entry \<Rightarrow> ('k, 'r semi_factor) entry" where
   "for_value \<tau> e = e\<lparr>esel := trunc_sel \<tau> (esel e)\<rparr>"
 
 lemma for_entry_simps [simp]:
   "esel (for_entry \<tau> G e) = trunc_sel \<tau> (esel e)" "ekeys (for_entry \<tau> G e) = ekeys e"
-  "eguard (for_entry \<tau> G e) = gand (guard_holds (coarsen (eupper e) G)) (eguard e)"
+  "eguard (for_entry \<tau> G e) = eguard e" "ekguard (for_entry \<tau> G e) = gand (sopen (coarsen (eupper e) G)) (ekguard e)"
   by (simp_all add: for_entry_def)
 
 lemma for_value_simps [simp]:
@@ -358,13 +358,11 @@ lemma fiber_ffor:
   shows "fiber data a \<rho> (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = fiber data a (\<rho> \<sqinter> \<tau>) F k"
   unfolding fiber_def ffor_key[OF am] ..
 
-lemma fguard_ffor: "fguard \<rho> (ffor \<tau> G F) = gand (fguard (\<rho> \<sqinter> \<tau>) F) (guard_holds (coarsen \<rho> G))"
-  by (simp add: fguard_def coarsen_conj coarsen_coarsen guard_holds_conj gand_assoc)
-
 lemma gcontent_ffor:
   assumes "elower e \<sqsubseteq> m"
   shows "gcontent data e (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = gcontent data (for_entry \<tau> G e) F k"
-  unfolding fun_eq_iff gcontent_def gfiber_def fiber_ffor[OF assms] by (simp add: gtruth_def fguard_ffor gand_assoc)
+  unfolding fun_eq_iff gcontent_def gfiber_def fiber_ffor[OF assms]
+  by (simp add: gtruth_def coarsen_conj coarsen_coarsen sopen_gand gand_assoc)
 
 lemma content_ffor:
   assumes "elower e \<sqsubseteq> m"
@@ -481,41 +479,45 @@ text \<open>The presence test at a selector: a true guard keyed at nothing, whos
   \<open>(\<bottom>, \<top>)\<close> it is the test on the full group, the key's realisation.\<close>
 
 definition present_at :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
-  "present_at a \<rho> E = \<lparr>emind = emind E \<squnion> a, eguards = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> # eguards E,
+  "present_at a \<rho> E = \<lparr>emind = emind E \<squnion> a, eguards = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue gtrue \<bottom> # eguards E,
      evalues = evalues E,
      esem = \<lambda>data F k. populated data (emind E \<squnion> a) \<rho> F k \<odot> esem E data F (proj (kd E F)\<cdot>k),
-     csem = \<lambda>Gs. \<Lambda> Xs. hd Gs \<bottom> \<odot> csem E (tl Gs)\<cdot>Xs\<rparr>"
+     csem = \<lambda>Gs. \<Lambda> Xs. case hd Gs \<bottom> of None \<Rightarrow> Absent | Some t \<Rightarrow> t \<odot> csem E (tl Gs)\<cdot>Xs\<rparr>"
 
 abbreviation present :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "present E \<equiv> present_at \<bottom> \<top> E"
 
 lemma present_at_simps [simp]:
   "emind (present_at a \<rho> E) = emind E \<squnion> a"
-  "eguards (present_at a \<rho> E) = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> # eguards E"
+  "eguards (present_at a \<rho> E) = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue gtrue \<bottom> # eguards E"
   "evalues (present_at a \<rho> E) = evalues E"
   "esem (present_at a \<rho> E) data F k = populated data (emind E \<squnion> a) \<rho> F k \<odot> esem E data F (proj (kd E F)\<cdot>k)"
-  "csem (present_at a \<rho> E) Gs\<cdot>Xs = hd Gs \<bottom> \<odot> csem E (tl Gs)\<cdot>Xs"
-  by (simp_all add: present_at_def)
+  "csem (present_at a \<rho> E) Gs\<cdot>Xs = (case hd Gs \<bottom> of None \<Rightarrow> Absent | Some t \<Rightarrow> t \<odot> csem E (tl Gs)\<cdot>Xs)"
+  by (simp_all add: present_at_def split: option.split)
 
 lemma cstrict_present_at:
   assumes E: "cstrict E"
   shows "cstrict (present_at a \<rho> E)"
 proof (rule cstrictI)
-  fix Gs :: "('k \<Rightarrow> tr) list" and Xs :: "('k \<Rightarrow> 'r option) list"
+  fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (present_at a \<rho> E))" and lx: "length Xs = length (evalues (present_at a \<rho> E))"
     and c: "csem (present_at a \<rho> E) Gs\<cdot>Xs \<noteq> Absent"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
   have lx': "length Xs = length (evalues E)" using lx by simp
-  have "G \<bottom> \<noteq> FF" and "csem E Gs'\<cdot>Xs \<noteq> Absent" using tr_mult_not_Absent[OF c[unfolded Gs present_at_simps list.sel]] by simp_all
-  then show "(\<lambda>_. FF) \<notin> set Gs" using cstrictD[OF E l' lx'] by (auto simp: Gs)
+  obtain t where t: "G \<bottom> = Some t" and c': "t \<odot> csem E Gs'\<cdot>Xs \<noteq> Absent"
+    using c by (cases "G \<bottom>") (simp_all add: Gs)
+  have tF: "t \<noteq> FF" and cE: "csem E Gs'\<cdot>Xs \<noteq> Absent" using tr_mult_not_Absent[OF c'] by simp_all
+  have "\<not> gfalse G'" if "G' \<in> set Gs'" for G' using cstrictD[OF E l' lx' that] cE by blast
+  moreover have "\<not> gfalse G" using t tF by (auto simp: gfalse_def)
+  ultimately show "\<forall>G\<in>set Gs. \<not> gfalse G" by (simp add: Gs)
 qed
 
 theorem semilawful_present_at:
   assumes ES: "semilawful E"
   shows "semilawful (present_at a \<rho> E)"
 proof (rule semilawfulI, simp_all only: present_at_simps)
-  let ?h = "mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue \<bottom> :: ('k, 'r guard) entry"
+  let ?h = "mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue gtrue \<bottom> :: ('k, 'r guard \<times> 'k guard) entry"
   show "cstrict (present_at a \<rho> E)" by (rule cstrict_present_at[OF semilawful_cstrict[OF ES]])
   show "entry_wf e" if "e \<in> set (evalues E)" for e by (rule semilawful_wf[OF ES that])
   have "fold (\<squnion>) (map lower_part (esels E)) (emind E \<squnion> a) = emind E \<squnion> a"
@@ -523,16 +525,17 @@ proof (rule semilawfulI, simp_all only: present_at_simps)
   then show "emind E \<squnion> a = fold (\<squnion>) (map lower_part (map esel (?h # eguards E) @ map esel (evalues E))) \<bottom>"
     by (simp add: lattice_join_bot_right)
   show "populated data (emind E \<squnion> a) \<rho> F k \<odot> esem E data F (proj (kd E F)\<cdot>k)
-      = hd (gcontents data (?h # eguards E) F k) \<bottom> \<odot>
-         csem E (tl (gcontents data (?h # eguards E) F k))\<cdot>(contents data (evalues E) F k)"
+      = (case hd (gcontents data (?h # eguards E) F k) \<bottom> of None \<Rightarrow> Absent
+         | Some t \<Rightarrow> t \<odot> csem E (tl (gcontents data (?h # eguards E) F k))\<cdot>(contents data (evalues E) F k))"
     if d: "fconf (evalues E) data F" for data F k
   proof -
-    have h: "hd (gcontents data (?h # eguards E) F k) \<bottom> = populated data (emind E \<squnion> a) \<rho> F k"
+    have h: "hd (gcontents data (?h # eguards E) F k) \<bottom> =
+        gex (fiber data (emind E \<squnion> a) \<rho> F k) (Rep_cfun (fguard \<rho> F))"
       by (simp add: gcontent_gtrue_bot)
     have t: "tl (gcontents data (?h # eguards E) F k) = gcontents data (eguards E) F k" by simp
     have v: "esem E data F (proj (kd E F)\<cdot>k) = csem_at E data F k"
       by (simp only: semilawful_csem_conf[OF ES d proj_idem] contents_own_key[OF ES])
-    show ?thesis by (simp only: h t v)
+    show ?thesis by (simp only: h t v gex_mult populated_def)
   qed
 qed
 
@@ -638,17 +641,20 @@ qed
 lemma row_guard_entry_gcontent_eq:
   assumes r: "row_guard_entry e" and d: "conforms data" "conforms data'"
     and x: "x \<in> gfiber data e F k" and x': "x' \<in> gfiber data' e F k"
-    and s: "rproj (ekeys e) x = rproj (ekeys e) x'" and g: "eguard e\<cdot>x = eguard e\<cdot>x'"
+    and s: "rproj (ekeys e) x = rproj (ekeys e) x'"
+    and g: "eguard e\<cdot>x = eguard e\<cdot>x'" and kg: "ekguard e\<cdot>(rkey\<cdot>x) = ekguard e\<cdot>(rkey\<cdot>x')"
     and f: "(\<exists>\<^sub>K y\<in>gfiber data e F k. fguard (eupper e) F\<cdot>y) = (\<exists>\<^sub>K y\<in>gfiber data' e F k. fguard (eupper e) F\<cdot>y)"
   shows "gcontent data e F k = gcontent data' e F k"
 proof -
+  have t: "Rep_cfun (gtruth e F) = (\<lambda>y. pand\<cdot>(fguard (eupper e) F\<cdot>y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(rkey\<cdot>y))))"
+    by (simp add: fun_eq_iff gtruth_split)
   have one: "gcontent D e F k = (\<lambda>q. if q = rproj (ekeys e) y
-      then pand\<cdot>(\<exists>\<^sub>K z\<in>gfiber D e F k. fguard (eupper e) F\<cdot>z)\<cdot>(eguard e\<cdot>y) else FF)"
+      then Some (pand\<cdot>(\<exists>\<^sub>K z\<in>gfiber D e F k. fguard (eupper e) F\<cdot>z)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(rkey\<cdot>y)))) else None)"
     if dD: "conforms D" and y: "y \<in> gfiber D e F k" for D y
-    unfolding fun_eq_iff gcontent_def gtruth_def
+    unfolding fun_eq_iff gcontent_def t
     by (intro allI row_guard_entry_image[OF r dD _ y lattice_join_ge1[of "elower e" "eupper e \<sqinter> flod F"]])
       (use y in \<open>auto simp: gfiber_def fiber_def\<close>)
-  show ?thesis unfolding one[OF d(1) x] one[OF d(2) x'] s g f ..
+  show ?thesis unfolding one[OF d(1) x] one[OF d(2) x'] s g kg f ..
 qed
 
 subsection \<open>Combining\<close>
@@ -658,7 +664,7 @@ text \<open>A binary function of two expressions: each is evaluated under the fr
   after the other.  Any operator of any arity is a map after combining.\<close>
 
 definition combine_csem :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'b::bifinite) expr \<Rightarrow>
-    ('k \<Rightarrow> tr) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'c::bifinite option_pd" where
+    ('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'c::bifinite option_pd" where
   "combine_csem f E\<^sub>1 E\<^sub>2 Gs Xs = lift2_option_pd f\<cdot>
      (csem E\<^sub>1 (take (length (eguards E\<^sub>1)) Gs)\<cdot>(take (length (evalues E\<^sub>1)) Xs))\<cdot>
      (csem E\<^sub>2 (drop (length (eguards E\<^sub>1)) Gs)\<cdot>(drop (length (evalues E\<^sub>1)) Xs))"
@@ -684,15 +690,17 @@ lemma cstrict_combine:
   assumes E\<^sub>1: "cstrict E\<^sub>1" and E\<^sub>2: "cstrict E\<^sub>2"
   shows "cstrict (combine f E\<^sub>1 E\<^sub>2)"
 proof (rule cstrictI)
-  fix Gs :: "('k \<Rightarrow> tr) list" and Xs :: "('k \<Rightarrow> 'r option) list"
+  fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (combine f E\<^sub>1 E\<^sub>2))" and lx: "length Xs = length (evalues (combine f E\<^sub>1 E\<^sub>2))"
     and c: "csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Xs \<noteq> Absent"
   let ?n = "length (eguards E\<^sub>1)" and ?m = "length (evalues E\<^sub>1)"
   have c1: "csem E\<^sub>1 (take ?n Gs)\<cdot>(take ?m Xs) \<noteq> Absent" and c2: "csem E\<^sub>2 (drop ?n Gs)\<cdot>(drop ?m Xs) \<noteq> Absent"
     using c by (auto simp: combine_csem_def)
-  have "(\<lambda>_. FF) \<notin> set (take ?n Gs)" by (rule notI, rule c1[THEN notE], rule cstrictD[OF E\<^sub>1]) (use l lx in simp_all)
-  moreover have "(\<lambda>_. FF) \<notin> set (drop ?n Gs)" by (rule notI, rule c2[THEN notE], rule cstrictD[OF E\<^sub>2]) (use l lx in simp_all)
-  ultimately show "(\<lambda>_. FF) \<notin> set Gs" using set_append[of "take ?n Gs" "drop ?n Gs"] by auto
+  have "\<not> gfalse G" if "G \<in> set (take ?n Gs)" for G
+    by (rule notI, rule c1[THEN notE], rule cstrictD[OF E\<^sub>1 _ _ that]) (use l lx in simp_all)
+  moreover have "\<not> gfalse G" if "G \<in> set (drop ?n Gs)" for G
+    by (rule notI, rule c2[THEN notE], rule cstrictD[OF E\<^sub>2 _ _ that]) (use l lx in simp_all)
+  ultimately show "\<forall>G\<in>set Gs. \<not> gfalse G" using set_append[of "take ?n Gs" "drop ?n Gs"] by auto
 qed
 
 theorem semilawful_combine:
@@ -776,6 +784,75 @@ proof (rule lawful_semiI[OF semilawful_present_at[OF ES]])
   have k': "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" using k by simp
   show "keyimg data F (emind (present_at a \<top> E) \<squnion> flod F) k" using present_at_keyimg[OF k' p] by simp
 qed
+
+
+subsection \<open>Absence is rigid\<close>
+
+text \<open>Every combinator decides presence by guards and content key parts only.\<close>
+
+lemma crigid_key_at: "crigid (key_at c)"
+  unfolding crigid_def
+proof (intro allI rigidI)
+  fix Gs and Xs Ys :: "('k \<Rightarrow> 'r option) list" assume "Xs \<sqsubseteq> Ys"
+  then have "(dom (hd Xs) = {}) = (dom (hd Ys) = {})" by (rule rigidD[OF rigid_dom_empty])
+  then show "(csem (key_at c) Gs\<cdot>Xs = Absent) = (csem (key_at c) Gs\<cdot>Ys = Absent)"
+    by (simp only: key_at_simps) simp
+qed
+
+lemma crigid_column: "crigid (column c a v)"
+  unfolding crigid_def
+proof (intro allI rigidI)
+  fix Gs and Xs Ys :: "('k \<Rightarrow> 'r option) list" assume "Xs \<sqsubseteq> Ys"
+  then have "(dom (hd Xs) = {}) = (dom (hd Ys) = {})" by (rule rigidD[OF rigid_dom_empty])
+  then show "(csem (column c a v) Gs\<cdot>Xs = Absent) = (csem (column c a v) Gs\<cdot>Ys = Absent)"
+    by (simp only: column_simps) simp
+qed
+
+lemma crigid_smap: "crigid E \<Longrightarrow> crigid (smap g E)"
+  unfolding crigid_def smap_simps map_option_pd_Absent_iff by blast
+
+lemma crigid_value_at: "crigid (value_at c g)"
+  unfolding value_at_def by (rule crigid_smap[OF crigid_key_at])
+
+lemma crigid_restrict: "crigid E \<Longrightarrow> crigid (restrict \<gamma> E)"
+  unfolding crigid_def by simp
+
+lemma crigid_filtfor: "crigid E \<Longrightarrow> crigid (filtfor \<tau> G E)"
+  unfolding crigid_def by simp
+
+lemma crigid_include_dims: "crigid E \<Longrightarrow> crigid (include_dims M E)"
+  unfolding crigid_def by simp
+
+lemma crigid_present_at: "crigid E \<Longrightarrow> crigid (present_at a \<rho> E)"
+  unfolding crigid_def
+proof (intro allI rigidI)
+  fix Gs and Xs Ys :: "('k \<Rightarrow> 'r option) list"
+  assume E: "\<forall>Gs. rigid (\<lambda>Xs. csem E Gs\<cdot>Xs = Absent)" and XY: "Xs \<sqsubseteq> Ys"
+  have r: "(csem E (tl Gs)\<cdot>Xs = Absent) = (csem E (tl Gs)\<cdot>Ys = Absent)" using rigidD[OF spec[OF E] XY] .
+  show "(csem (present_at a \<rho> E) Gs\<cdot>Xs = Absent) = (csem (present_at a \<rho> E) Gs\<cdot>Ys = Absent)"
+    by (cases "hd Gs \<bottom>") (simp_all add: tr_mult_Absent_iff r)
+qed
+
+lemma crigid_const_expr: "crigid (const_expr v)"
+  unfolding crigid_def by (simp add: rigid_def)
+
+lemma crigid_combine:
+  assumes E\<^sub>1: "crigid E\<^sub>1" and E\<^sub>2: "crigid E\<^sub>2"
+  shows "crigid (combine f E\<^sub>1 E\<^sub>2)"
+  unfolding crigid_def
+proof (intro allI rigidI)
+  fix Gs and Xs Ys :: "('k \<Rightarrow> 'r option) list" assume XY: "Xs \<sqsubseteq> Ys"
+  let ?n = "length (eguards E\<^sub>1)" and ?m = "length (evalues E\<^sub>1)"
+  have r1: "(csem E\<^sub>1 (take ?n Gs)\<cdot>(take ?m Xs) = Absent) = (csem E\<^sub>1 (take ?n Gs)\<cdot>(take ?m Ys) = Absent)"
+    by (rule rigidD[OF rigid_comp[OF crigidD[OF E\<^sub>1] cont2mono[OF cont_take]] XY])
+  have r2: "(csem E\<^sub>2 (drop ?n Gs)\<cdot>(drop ?m Xs) = Absent) = (csem E\<^sub>2 (drop ?n Gs)\<cdot>(drop ?m Ys) = Absent)"
+    by (rule rigidD[OF rigid_comp[OF crigidD[OF E\<^sub>2] cont2mono[OF cont_drop]] XY])
+  show "(csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Xs = Absent) = (csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Ys = Absent)"
+    by (simp only: combine_simps combine_csem_def lift2_option_pd_Absent_iff r1 r2)
+qed
+
+lemma crigid_tuple: "(\<And>E. E \<in> set Es \<Longrightarrow> crigid E) \<Longrightarrow> crigid (tuple Es)"
+  by (induct Es) (simp_all add: crigid_const_expr crigid_combine)
 
 end
 

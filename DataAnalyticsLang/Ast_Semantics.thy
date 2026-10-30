@@ -153,7 +153,17 @@ fun wf :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> bool" where
 | "wf (For ds C e) \<longleftrightarrow> wf e"
 | "wf (Where C e) \<longleftrightarrow> row_ast C \<and> wf e"
 
-text \<open>The semantics is semilawful; the presence test at the top gives the lawful expression.\<close>
+text \<open>Its absence is rigid, it is semilawful, and the presence test at the top gives the lawful
+  expression.\<close>
+
+lemma crigid_asem: "crigid (asem e)"
+proof (induct e)
+  case (Call fn es)
+  then show ?case by (auto intro!: crigid_smap crigid_tuple)
+next
+  case (Aggr g e)
+  then show ?case by (simp add: crigid_aggregate[OF ag_abel])
+qed (simp_all add: crigid_value_at crigid_column crigid_include_dims crigid_filtfor crigid_restrict)
 
 theorem semilawful_asem: "wf e \<Longrightarrow> semilawful (asem e)"
 proof (induct e rule: wf.induct)
@@ -162,7 +172,7 @@ proof (induct e rule: wf.induct)
 next
   case (5 g e)
   then show ?case
-    by (simp add: lawful_semilawful lawful_aggregate[OF _ ag_abel])
+    by (simp add: lawful_semilawful lawful_aggregate[OF _ crigid_asem ag_abel])
 next
   case (6 ds e)
   then show ?case by (simp add: semilawful_include_dims)

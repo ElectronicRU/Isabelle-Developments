@@ -115,6 +115,9 @@ lemma guard_holds_conj: "guard_holds (a \<^bold>* b) = gand (guard_holds a) (gua
 lemma guard_holds_unit [simp]: "guard_holds \<^bold>1 = gtrue"
   by (simp add: cfun_eq_iff guard_holds_apply sopen_unit)
 
+lemma sopen_gand: "sopen (a \<^bold>* b) = gand (sopen a) (sopen b)"
+  by (simp add: cfun_eq_iff gand_apply sopen_conj)
+
 definition fguard :: "'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r guard" where
   "fguard \<rho> F = gand (amb F) (guard_holds (coarsen \<rho> (slice F)))"
 
