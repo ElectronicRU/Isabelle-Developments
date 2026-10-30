@@ -1,5 +1,5 @@
 theory Slicer
-  imports Row LOD "HOL-Library.FSet"
+  imports Row LOD "HOL-Library.FSet" "HOLCF-extra.Kleene_Logic"
 begin
 
 default_sort type
@@ -170,9 +170,10 @@ text \<open>Slices are given by their conjunction \<open>\<^bold>*\<close> and i
   constructs only conjoin.  The order is the one conjunction induces.  Slices act on keys, which
   carry levels of detail (semi-factors of the keys, compact ones for LODs).  Each slice comes with the LOD it is written
   at, \<open>slod\<close>: what it \<^emph>\<open>looks at\<close>, not what it selects (an upper bound, not the least one).  Its
-  meaning \<open>sopen\<close> is a Scott-open predicate on keys, and a meet-semilattice homomorphism.  A slice
+  meaning \<open>sopen\<close> is a three-valued condition on keys, a continuous function into \<^typ>\<open>tr\<close>, taking
+  conjunction to the parallel \<open>pand\<close>: a slice may be undecided at a partial key.  A slice
   reads a key only through its truncation to the slice's LOD, so it applies to keys finer than its
-  LOD as well.  \<open>holds\<close> is the plain predicate.\<close>
+  LOD as well.  \<open>holds\<close> is the plain predicate of being true, a Scott-open one.\<close>
 
 text \<open>The slicer interface is a record of operations.  Besides evaluation, a slicer
   \<^emph>\<open>coarsens\<close> slices to a given LOD and \<^emph>\<open>pins\<close> keys; their laws are explained below.\<close>
@@ -181,33 +182,34 @@ record ('f, 'k) slicer_ops =
   sl_conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f"
   sl_unit :: 'f
   sl_lod :: "'f \<Rightarrow> 'k semi_factor"
-  sl_open :: "'f \<Rightarrow> 'k sel"
+  sl_open :: "'f \<Rightarrow> 'k \<rightarrow> tr"
   sl_coarsen :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f"
   sl_pin :: "'k \<Rightarrow> 'f"
 
 hide_const (open) slicer_ops.truncate
 
 locale slicer = conj: semilattice_neutr "sl_conj slicing" "sl_unit slicing" +
-  slod: semilattice_hom "sl_conj slicing" "sl_unit slicing" "(\<squnion>)" \<bottom> "sl_lod slicing" +
-  sopen: semilattice_hom "sl_conj slicing" "sl_unit slicing" inf top "sl_open slicing"
+  slod: semilattice_hom "sl_conj slicing" "sl_unit slicing" "(\<squnion>)" \<bottom> "sl_lod slicing"
   for slicing :: "('f, 'k::lod_domain) slicer_ops" +
-  assumes sopen_lod: "selects (sl_open slicing f) (proj (sl_lod slicing f)\<cdot>k) \<longleftrightarrow> selects (sl_open slicing f) k"
+  assumes sopen_conj: "sl_open slicing (sl_conj slicing a b)\<cdot>k = pand\<cdot>(sl_open slicing a\<cdot>k)\<cdot>(sl_open slicing b\<cdot>k)"
+    and sopen_unit: "sl_open slicing (sl_unit slicing)\<cdot>k = TT"
+    and sopen_lod: "sl_open slicing f\<cdot>(proj (sl_lod slicing f)\<cdot>k) = sl_open slicing f\<cdot>k"
     and slod_compact: "compact (sl_lod slicing f)"
     and coarsen_conj: "sl_coarsen slicing A (sl_conj slicing a b) =
       sl_conj slicing (sl_coarsen slicing A a) (sl_coarsen slicing A b)"
     and coarsen_inside: "sl_lod slicing f \<sqsubseteq> A \<Longrightarrow> sl_coarsen slicing A f = f"
     and slod_coarsen: "sl_lod slicing (sl_coarsen slicing A f) \<sqsubseteq> sl_lod slicing f \<sqinter> A"
-    and coarsen_cut: "selects (sl_open slicing f) k \<Longrightarrow>
-      selects (sl_open slicing (sl_coarsen slicing A f)) (proj A\<cdot>k)"
+    and coarsen_cut: "sl_open slicing f\<cdot>k = TT \<Longrightarrow> sl_open slicing (sl_coarsen slicing A f)\<cdot>(proj A\<cdot>k) = TT"
+    and coarsen_FF: "sl_open slicing (sl_coarsen slicing A f)\<cdot>k = FF \<Longrightarrow> sl_open slicing f\<cdot>k = FF"
     and coarsen_slod: "sl_coarsen slicing A f = sl_coarsen slicing (A \<sqinter> sl_lod slicing f) f"
     and coarsen_coarsen: "sl_coarsen slicing A (sl_coarsen slicing B f) = sl_coarsen slicing (A \<sqinter> B) f"
-    and sopen_spin: "compact K \<Longrightarrow> selects (sl_open slicing (sl_pin slicing K)) k \<longleftrightarrow> K \<sqsubseteq> k"
+    and sopen_spin: "compact K \<Longrightarrow> sl_open slicing (sl_pin slicing K)\<cdot>k = TT \<longleftrightarrow> K \<sqsubseteq> k"
 begin
 
 abbreviation conj :: "'f \<Rightarrow> 'f \<Rightarrow> 'f" (infixl \<open>\<^bold>*\<close> 70) where "conj \<equiv> sl_conj slicing"
 abbreviation sunit :: 'f (\<open>\<^bold>1\<close>) where "sunit \<equiv> sl_unit slicing"
 abbreviation slod :: "'f \<Rightarrow> 'k semi_factor" where "slod \<equiv> sl_lod slicing"
-abbreviation sopen :: "'f \<Rightarrow> 'k sel" where "sopen \<equiv> sl_open slicing"
+abbreviation sopen :: "'f \<Rightarrow> 'k \<rightarrow> tr" where "sopen \<equiv> sl_open slicing"
 abbreviation coarsen :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> 'f" where "coarsen \<equiv> sl_coarsen slicing"
 abbreviation spin :: "'k \<Rightarrow> 'f" where "spin \<equiv> sl_pin slicing"
 
@@ -222,23 +224,20 @@ definition slt :: "'f \<Rightarrow> 'f \<Rightarrow> bool" (infix \<open>\<^bold
 sublocale sord: semilattice_neutr_order conj sunit sle slt
   by unfold_locales (simp_all add: sle_def slt_def)
 
-lemma sopen_mono: "a \<^bold>\<le> b \<Longrightarrow> sopen a \<le> sopen b"
-  unfolding sle_def by (metis sopen.hom_f inf.orderI)
-
 definition holds :: "'f \<Rightarrow> 'k \<Rightarrow> bool" where
-  "holds f = selects (sopen f)"
+  "holds f k \<longleftrightarrow> sopen f\<cdot>k = TT"
 
 lemma holds_conj [simp]: "holds (a \<^bold>* b) k \<longleftrightarrow> holds a k \<and> holds b k"
-  by (simp add: holds_def sopen.hom_f)
+  by (simp add: holds_def sopen_conj pand_TT_iff)
 
 lemma holds_unit [simp]: "holds \<^bold>1 k"
-  by (simp add: holds_def sopen.hom_z)
+  by (simp add: holds_def sopen_unit)
 
 lemma holds_up: "holds f k \<Longrightarrow> k \<sqsubseteq> k' \<Longrightarrow> holds f k'"
-  unfolding holds_def by (rule selects_up)
+  unfolding holds_def by (metis TT_below_iff monofun_cfun_arg)
 
 lemma holds_open: "adm (\<lambda>k. \<not> holds f k)"
-  unfolding holds_def by (rule selects_open)
+  unfolding holds_def by (simp add: compact_TT eq_commute[of _ TT])
 
 lemma holds_mono: "a \<^bold>\<le> b \<Longrightarrow> holds a k \<Longrightarrow> holds b k"
   unfolding sle_def by (metis holds_conj)
@@ -246,7 +245,10 @@ lemma holds_mono: "a \<^bold>\<le> b \<Longrightarrow> holds a k \<Longrightarro
 lemma holds_lod: "holds f (proj (slod f)\<cdot>k) \<longleftrightarrow> holds f k"
   by (simp add: holds_def sopen_lod)
 
-text \<open>Truncating to any LOD the slice is written within does not change whether it holds.\<close>
+text \<open>Truncating to any LOD the slice is written within does not change its truth value.\<close>
+
+lemma sopen_proj: "slod f \<sqsubseteq> c \<Longrightarrow> sopen f\<cdot>(proj c\<cdot>k) = sopen f\<cdot>k"
+  by (metis sopen_lod proj_le)
 
 lemma holds_proj: "slod f \<sqsubseteq> c \<Longrightarrow> holds f (proj c\<cdot>k) \<longleftrightarrow> holds f k"
   by (metis holds_lod proj_le)
@@ -260,8 +262,10 @@ subsection \<open>Coarsening\<close>
 text \<open>A slicer adds \<^emph>\<open>coarsening\<close> of a slice to a given LOD.  \<open>GROUP BY ONLY\<close> coarsens to the new
   frame LOD; \<open>FOR\<close> coarsens to the slice's own LOD with dimensions dropped by a transformer.
   Coarsening distributes over conjunction, leaves slices written inside the target alone, keeps
-  only what the target looks at, holds at the truncation of every key the original holds at, and
-  coarsening twice is coarsening once, to the meet of the targets.
+  only what the target looks at, holds at the truncation of every key the original holds at, is
+  false only where the original is false (it weakens in the Kleene order: dropping a part can turn
+  falsity into undecidedness, never into truth), and coarsening twice is coarsening once, to the
+  meet of the targets.
   It only depends on the part of the target the slice is written at: coarsening is about what is
   cut away.
   It is \<^emph>\<open>not\<close> extensional: coarsening \<open>b = 2 \<and> b \<noteq> 2\<close> away from \<open>b\<close> gives \<open>True\<close>, coarsening

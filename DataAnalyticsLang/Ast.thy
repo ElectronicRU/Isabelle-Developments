@@ -398,29 +398,23 @@ next
   ultimately show ?case using insert by (simp add: compact_semi_factor_sup)
 qed
 
-lemma adm_not_ball_finite:
-  "finite S \<Longrightarrow> (\<And>e. e \<in> S \<Longrightarrow> adm (\<lambda>k. \<not> P e k)) \<Longrightarrow> adm (\<lambda>k. \<not> (\<forall>e\<in>S. P e k))"
-  by (induct rule: finite_induct) (simp_all add: adm_disj)
-
 context key_language
 begin
 
 definition slice_lod :: "('d, 'c, 'fn, 'ag) slice \<Rightarrow> 'k semi_factor" where
   "slice_lod S = lub ((\<lambda>e. lod (kdims e)) ` fset S)"
 
-definition slice_open :: "('d, 'c, 'fn, 'ag) slice \<Rightarrow> 'k sel" where
-  "slice_open S = Abs_sel (\<lambda>k. \<forall>e\<in>fset S. kholds e k)"
+text \<open>A slice is the Kleene conjunction of its conditions: false as soon as one is false, true when
+  all are.\<close>
 
-lemma selects_slice_open [simp]: "selects (slice_open S) k \<longleftrightarrow> (\<forall>e\<in>fset S. kholds e k)"
-proof -
-  have up: "\<forall>x y. (\<forall>e\<in>fset S. kholds e x) \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> (\<forall>e\<in>fset S. kholds e y)"
-    by (blast intro: kholds_up)
-  have adm: "adm (\<lambda>k. \<not> (\<forall>e\<in>fset S. kholds e k))"
-    by (rule adm_not_ball_finite[OF finite_fset kholds_open])
-  have "(\<lambda>k. \<forall>e\<in>fset S. kholds e k) \<in> {P. (\<forall>x y. P x \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> P y) \<and> adm (\<lambda>x. \<not> P x)}"
-    using up adm by (simp only: mem_Collect_eq)
-  then show ?thesis by (simp only: slice_open_def Abs_sel_inverse)
-qed
+definition slice_open :: "('d, 'c, 'fn, 'ag) slice \<Rightarrow> 'k \<rightarrow> tr" where
+  "slice_open S = (\<Lambda> k. \<forall>\<^sub>K e\<in>fset S. truth_d\<cdot>(kval e\<cdot>k))"
+
+lemma slice_open_apply: "slice_open S\<cdot>k = (\<forall>\<^sub>K e\<in>fset S. truth_d\<cdot>(kval e\<cdot>k))"
+  unfolding slice_open_def by (simp add: cont_kleene_ball)
+
+lemma slice_open_TT: "slice_open S\<cdot>k = TT \<longleftrightarrow> (\<forall>e\<in>fset S. kholds e k)"
+  by (simp add: slice_open_apply kleene_ball_TT_iff kholds_def)
 
 definition slice_coarsen :: "'k semi_factor \<Rightarrow> ('d, 'c, 'fn, 'ag) slice \<Rightarrow> ('d, 'c, 'fn, 'ag) slice" where
   "slice_coarsen A S = Abs_fset {e'. \<exists>e\<in>fset S. crs A e = Some e'}"
@@ -453,11 +447,11 @@ lemma slice_lod_union: "slice_lod (S |\<union>| T) = slice_lod S \<squnion> slic
 lemma slice_lod_empty: "slice_lod {||} = \<bottom>"
   by (simp add: slice_lod_def lattice_lub_empty)
 
-lemma slice_open_union: "slice_open (S |\<union>| T) = inf (slice_open S) (slice_open T)"
-  by (rule sel_eqI) auto
+lemma slice_open_union: "slice_open (S |\<union>| T)\<cdot>k = pand\<cdot>(slice_open S\<cdot>k)\<cdot>(slice_open T\<cdot>k)"
+  by (simp add: slice_open_apply kleene_ball_Un)
 
-lemma slice_open_empty: "slice_open {||} = top"
-  by (rule sel_eqI) simp
+lemma slice_open_empty: "slice_open {||}\<cdot>k = TT"
+  by (simp add: slice_open_apply)
 
 lemma lod_below_slice_lod: "e |\<in>| S \<Longrightarrow> lod (kdims e) \<sqsubseteq> slice_lod S"
   unfolding slice_lod_def by (rule lattice_lub_upper) simp
@@ -465,8 +459,8 @@ lemma lod_below_slice_lod: "e |\<in>| S \<Longrightarrow> lod (kdims e) \<sqsubs
 lemma reads_in_slice_lod: "e |\<in>| S \<Longrightarrow> reads_in (slice_lod S) e"
   by (rule reads_in_mono[OF reads_in_lod lod_below_slice_lod])
 
-lemma slice_open_lod: "selects (slice_open S) (proj (slice_lod S)\<cdot>k) \<longleftrightarrow> selects (slice_open S) k"
-  by (simp add: kholds_def kval_reads[OF reads_in_slice_lod])
+lemma slice_open_lod: "slice_open S\<cdot>(proj (slice_lod S)\<cdot>k) = slice_open S\<cdot>k"
+  unfolding slice_open_apply by (rule kleene_ball_cong[OF refl]) (simp add: kval_reads[OF reads_in_slice_lod])
 
 lemma compact_slice_lod: "compact (slice_lod S)"
   unfolding slice_lod_def by (rule lattice_lub_compact) (auto simp: compact_lod)
@@ -496,9 +490,19 @@ proof (rule lattice_lub_least, rule is_ubI)
   ultimately show "x \<sqsubseteq> lub ((\<lambda>e. lod (kdims e)) ` fset S) \<sqinter> A" by (rule lattice_meet_greatest)
 qed
 
+lemma slice_coarsen_FF: "slice_open (slice_coarsen A S)\<cdot>k = FF \<Longrightarrow> slice_open S\<cdot>k = FF"
+proof -
+  assume "slice_open (slice_coarsen A S)\<cdot>k = FF"
+  then obtain e' where "e' \<in> {e'. \<exists>e\<in>fset S. crs A e = Some e'}" and f: "truth_d\<cdot>(kval e'\<cdot>k) = FF"
+    by (auto simp: slice_open_apply kleene_ball_FF_iff fset_slice_coarsen)
+  then obtain e where e: "e |\<in>| S" and c: "crs A e = Some e'" by auto
+  have "truth_d\<cdot>(kval e\<cdot>k) = FF" using crs_weakens[OF c, of k] f by simp
+  then show ?thesis using e by (auto simp: slice_open_apply kleene_ball_FF_iff)
+qed
+
 lemma slice_coarsen_cut:
-  "selects (slice_open S) k \<Longrightarrow> selects (slice_open (slice_coarsen A S)) (proj A\<cdot>k)"
-proof (simp only: selects_slice_open fset_slice_coarsen, intro ballI)
+  "slice_open S\<cdot>k = TT \<Longrightarrow> slice_open (slice_coarsen A S)\<cdot>(proj A\<cdot>k) = TT"
+proof (simp only: slice_open_TT fset_slice_coarsen, intro ballI)
   fix e' assume S: "\<forall>e\<in>fset S. kholds e k" and "e' \<in> {e'. \<exists>e\<in>fset S. crs A e = Some e'}"
   then obtain e where e: "e |\<in>| S" and c: "crs A e = Some e'" by auto
   have "kholds e' k" using S e crs_weakens[OF c, of k] by (simp add: kholds_def)
@@ -585,27 +589,27 @@ proof -
   qed
 qed
 
-lemma selects_slice_pin:
-  "compact K \<Longrightarrow> selects (slice_open (slice_pin K :: ('d, 'c, 'fn, 'ag) slice)) k \<longleftrightarrow> K \<sqsubseteq> k"
+lemma slice_pin_TT:
+  "compact K \<Longrightarrow> slice_open (slice_pin K :: ('d, 'c, 'fn, 'ag) slice)\<cdot>k = TT \<longleftrightarrow> K \<sqsubseteq> k"
 proof
-  assume K: "compact K" and "selects (slice_open (slice_pin K :: ('d, 'c, 'fn, 'ag) slice)) k"
+  assume K: "compact K" and "slice_open (slice_pin K :: ('d, 'c, 'fn, 'ag) slice)\<cdot>k = TT"
   then have "\<forall>d\<in>set (key_dims K). \<forall>e\<in>set (pin_test K d :: ('d, 'c, 'fn, 'ag) ast list). kholds e k"
-    by (simp add: slice_pin_def fset_of_list.rep_eq)
+    by (simp add: slice_open_TT slice_pin_def fset_of_list.rep_eq)
   then show "K \<sqsubseteq> k" by (intro key_dims_below[OF K]) (simp add: kholds_pin_test)
 next
   assume "K \<sqsubseteq> k"
   then have "dim_val d\<cdot>K \<sqsubseteq> dim_val d\<cdot>k" for d by (rule monofun_cfun_arg)
   then have "\<forall>e\<in>set (pin_test K d :: ('d, 'c, 'fn, 'ag) ast list). kholds e k" for d
     by (simp only: kholds_pin_test)
-  then show "selects (slice_open (slice_pin K :: ('d, 'c, 'fn, 'ag) slice)) k"
-    by (auto simp: slice_pin_def fset_of_list.rep_eq)
+  then show "slice_open (slice_pin K :: ('d, 'c, 'fn, 'ag) slice)\<cdot>k = TT"
+    by (auto simp: slice_open_TT slice_pin_def fset_of_list.rep_eq)
 qed
 
 theorem slicer_ast_slicing: "slicer (ast_slicing :: (('d, 'c, 'fn, 'ag) slice, 'k) slicer_ops)"
   by unfold_locales
-    (simp_all del: selects_slice_open add: ast_slicing_def funion_ac lattice_join_ac slice_lod_union slice_lod_empty slice_open_union
+    (simp_all add: ast_slicing_def funion_ac lattice_join_ac slice_lod_union slice_lod_empty slice_open_union
       slice_open_empty slice_open_lod compact_slice_lod slice_coarsen_union slice_coarsen_inside
-      slice_lod_coarsen slice_coarsen_cut slice_coarsen_slod[symmetric] slice_coarsen_coarsen selects_slice_pin)
+      slice_lod_coarsen slice_coarsen_cut slice_coarsen_FF slice_coarsen_slod[symmetric] slice_coarsen_coarsen slice_pin_TT)
 
 end
 

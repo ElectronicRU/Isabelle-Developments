@@ -8,102 +8,17 @@ section \<open>The content law\<close>
 
 text \<open>An expression reads its data through two finite lists of \<^emph>\<open>generalized tables\<close>.  An entry's
   \<^emph>\<open>selector\<close> \<open>(a, \<rho>)\<close> picks the fiber: the rows whose key agrees with the key at hand at
-  \<open>a \<squnion> \<rho> \<sqinter> L\<close>, for the frame LOD \<open>L\<close>.  A \<^emph>\<open>guard entry\<close> cuts its fiber down by the frame's
-  filters (the ambient filter and the slice coarsened to \<open>\<rho>\<close>) and its guard, and records the keys
-  of the remaining rows: presence, ignoring the values.  A \<^emph>\<open>value entry\<close> reads its whole fiber
+  \<open>a \<squnion> \<rho> \<sqinter> L\<close>, for the frame LOD \<open>L\<close>.  A \<^emph>\<open>guard entry\<close> tests its fiber's rows with the
+  frame's filters (the ambient filter and the slice coarsened to \<open>\<rho>\<close>) and its guard, and records,
+  three-valued, at which keys some row passes: presence, ignoring the values.  A \<^emph>\<open>value entry\<close> reads its whole fiber
   through a view \<open>(c, \<kappa>)\<close>: the content maps each row's key at \<open>\<kappa>\<close> to its section at \<open>c\<close>, which
   the key determines.  The frame's filters only reach the data through the guards.  The
   \<^emph>\<open>content law\<close> says that the semantics at a key is a function of these contents.\<close>
 
-subsection \<open>Observations\<close>
-
-text \<open>Observations are continuous maps from rows into observed values.  A selection reads as a
-  continuous truth value; selections pull back along continuous maps.\<close>
-
-definition sel_chi :: "'r::pcpo sel \<Rightarrow> 'r \<rightarrow> tr" where
-  "sel_chi P = (\<Lambda> x. if selects P x then TT else \<bottom>)"
-
-lemma cont_sel_chi: "cont (\<lambda>x. if selects P x then TT else (\<bottom>::tr))"
-proof (rule contI2)
-  show m: "monofun (\<lambda>x. if selects P x then TT else (\<bottom>::tr))"
-    by (rule monofunI) (auto dest: selects_up)
-  fix Y :: "nat \<Rightarrow> 'a" assume Y: "chain Y"
-  have ch: "chain (\<lambda>i. if selects P (Y i) then TT else (\<bottom>::tr))"
-    by (rule ch2ch_monofun[OF m Y])
-  show "(if selects P (\<Squnion>i. Y i) then TT else \<bottom>) \<sqsubseteq> (\<Squnion>i. if selects P (Y i) then TT else (\<bottom>::tr))"
-  proof (cases "\<exists>i. selects P (Y i)")
-    case True
-    then obtain i where i: "selects P (Y i)" by blast
-    have "(if selects P (Y i) then TT else (\<bottom>::tr)) \<sqsubseteq> (\<Squnion>i. if selects P (Y i) then TT else (\<bottom>::tr))"
-      by (rule is_ub_thelub[OF ch])
-    then show ?thesis using i by simp
-  next
-    case False
-    then have "\<not> selects P (\<Squnion>i. Y i)" by (intro admD[OF selects_open Y]) blast
-    then show ?thesis by simp
-  qed
-qed
-
-lemma sel_chi_apply: "sel_chi P\<cdot>x = (if selects P x then TT else \<bottom>)"
-  unfolding sel_chi_def by (rule beta_cfun[OF cont_sel_chi])
-
-lift_definition sel_vimage :: "('a::pcpo \<rightarrow> 'b::pcpo) \<Rightarrow> 'b sel \<Rightarrow> 'a sel" is "\<lambda>g P x. P (g\<cdot>x)"
-proof (intro conjI allI impI)
-  fix g :: "'a \<rightarrow> 'b" and P :: "'b \<Rightarrow> bool" and x y :: 'a
-  assume P: "(\<forall>x y. P x \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> P y) \<and> adm (\<lambda>x. \<not> P x)"
-  show "P (g\<cdot>y)" if "P (g\<cdot>x)" "x \<sqsubseteq> y" using P that monofun_cfun_arg by blast
-next
-  fix g :: "'a \<rightarrow> 'b" and P :: "'b \<Rightarrow> bool"
-  assume P: "(\<forall>x y. P x \<longrightarrow> x \<sqsubseteq> y \<longrightarrow> P y) \<and> adm (\<lambda>x. \<not> P x)"
-  show "adm (\<lambda>x. \<not> P (g\<cdot>x))" by (rule adm_subst[OF cont_Rep_cfun2]) (use P in blast)
-qed
-
-lemma selects_sel_vimage [simp]: "selects (sel_vimage g P) x \<longleftrightarrow> selects P (g\<cdot>x)"
-  by (simp add: sel_vimage.rep_eq)
-
-text \<open>The truth value \<open>TT\<close> is maximal and compact, so being \<open>TT\<close> is a selection.\<close>
-
-lift_definition sel_TT :: "tr sel" is "\<lambda>t. t = TT"
-proof (intro conjI allI impI)
-  show "y = TT" if "x = TT" "x \<sqsubseteq> y" for x y :: tr using that by simp
-  show "adm (\<lambda>t. t \<noteq> TT)" by (simp add: compact_TT eq_commute[of _ TT])
-qed
-
-lemma selects_sel_TT [simp]: "selects sel_TT t \<longleftrightarrow> t = TT"
-  by (simp add: sel_TT.rep_eq)
-
-text \<open>Guards are continuous truth-valued functions of rows.  The guard every row passes, and the
-  conjunction of guards.\<close>
-
-type_synonym 'r guard = "'r \<rightarrow> tr"
-
-definition gtrue :: "'r::cpo guard" where
-  "gtrue = (\<Lambda> _. TT)"
-
-definition gand :: "'r::cpo guard \<Rightarrow> 'r guard \<Rightarrow> 'r guard" where
-  "gand \<gamma> \<delta> = (\<Lambda> y. \<gamma>\<cdot>y andalso \<delta>\<cdot>y)"
-
-lemma gtrue_apply [simp]: "gtrue\<cdot>y = TT"
-  by (simp add: gtrue_def)
-
-lemma gand_apply: "gand \<gamma> \<delta>\<cdot>y = (\<gamma>\<cdot>y andalso \<delta>\<cdot>y)"
-  by (simp add: gand_def)
-
-lemma gand_TT [simp]: "gand \<gamma> \<delta>\<cdot>y = TT \<longleftrightarrow> \<gamma>\<cdot>y = TT \<and> \<delta>\<cdot>y = TT"
-  unfolding gand_apply by (cases "\<gamma>\<cdot>y" rule: trE) simp_all
-
-text \<open>The rows a guard passes are a selection.\<close>
-
-definition gsel :: "'r::pcpo guard \<Rightarrow> 'r sel" where
-  "gsel \<gamma> = sel_vimage \<gamma> sel_TT"
-
-lemma selects_gsel [simp]: "selects (gsel \<gamma>) y \<longleftrightarrow> \<gamma>\<cdot>y = TT"
-  by (simp add: gsel_def)
-
 text \<open>An entry: a selector, picking the fiber; a key part, keying the content; and a payload.  A
-  \<^emph>\<open>guard entry\<close> carries a guard.  Its content is the set of keys, at its key part, of the rows
-  of its group (the fiber cut down by the frame's filters) passing the guard: it ignores the values,
-  and it is the only place where the frame's filters act.  A \<^emph>\<open>value entry\<close> carries a section.  Its
+  \<^emph>\<open>guard entry\<close> carries a guard.  Its content gives at each key, at its key part, the truth of
+  some row of its fiber with that key passing the frame's filters and the guard, a three-valued
+  existential: it ignores the values, and it is the only place where the frame's filters act.  A \<^emph>\<open>value entry\<close> carries a section.  Its
   content maps each key, at its key part, of the rows of its fiber (all rows of the dataset at the
   selector) to their section there, which the key determines.  Presence comes from the guards,
   values from the value entries.\<close>
@@ -152,7 +67,7 @@ abbreviation mk_value ::
   "'k selector \<Rightarrow> 'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo} semi_factor) entry" where
   "mk_value S c \<kappa> \<equiv> \<lparr>esel = S, ekeys = \<kappa>, epay = c\<rparr>"
 
-text \<open>An expression's content semantics takes the guards' contents, sets of keys, as a plain
+text \<open>An expression's content semantics takes the guards' contents, truth values at keys, as a plain
   argument, and is continuous in the value entries' contents.\<close>
 
 record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::bifinite) expr =
@@ -160,7 +75,7 @@ record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::bifinite
   eguards :: "('k, 'r guard) entry list"
   evalues :: "('k, 'r semi_factor) entry list"
   esem :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd"
-  csem :: "'k set list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<rightarrow> 'v option_pd"
+  csem :: "('k \<Rightarrow> tr) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<rightarrow> 'v option_pd"
 
 hide_const (open) expr.truncate
 
@@ -367,17 +282,6 @@ subsection \<open>Groups and contents\<close>
 context dataspace
 begin
 
-text \<open>Whether a row passes a slice, as a guard.\<close>
-
-definition guard_holds :: "'f \<Rightarrow> 'r guard" where
-  "guard_holds X = sel_chi (sopen X) oo proj (slod X) oo rkey"
-
-lemma guard_holds_apply: "guard_holds X\<cdot>y = (if holds X (rkey\<cdot>y) then TT else \<bottom>)"
-  by (simp add: guard_holds_def sel_chi_apply holds_def sopen_lod)
-
-lemma guard_holds_TT [simp]: "guard_holds X\<cdot>y = TT \<longleftrightarrow> holds X (rkey\<cdot>y)"
-  by (simp add: guard_holds_apply)
-
 subsection \<open>Keys and sections guards read\<close>
 
 text \<open>A guard is \<^emph>\<open>keyed\<close> at a key part \<open>a\<close> when in every conforming dataset it is determined by
@@ -449,42 +353,43 @@ lemma entry_wf_view: "keyed_view (c, \<kappa>) \<Longrightarrow> entry_wf (mk_va
   by (simp add: entry_wf_def)
 
 text \<open>The \<^emph>\<open>fiber\<close> of a selector: the rows whose key agrees with the key at hand at the group LOD.
-  The \<^emph>\<open>group\<close> cuts it down by the frame's filters, the slice coarsened to the upper part.\<close>
+  Its \<^emph>\<open>group\<close> are the rows passing the frame's filters, the slice coarsened to the upper part;
+  whether the group is \<^emph>\<open>populated\<close> is three-valued, the Kleene existential of the filters over the
+  fiber.\<close>
 
 definition fiber :: "'r lower_pd \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
   "fiber data a \<rho> F k = {y \<in> lower_maximal data. rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k}"
 
-definition group :: "'r lower_pd \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
-  "group data a \<rho> F k = {y \<in> lower_maximal data. selects (amb F) y \<and> holds (coarsen \<rho> (slice F)) (rkey\<cdot>y) \<and>
-     rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k}"
+definition populated :: "'r lower_pd \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> tr" where
+  "populated data a \<rho> F k = (\<exists>\<^sub>K y\<in>fiber data a \<rho> F k. fguard \<rho> F\<cdot>y)"
 
-lemma group_fiber:
-  "group data a \<rho> F k = {y \<in> fiber data a \<rho> F k. selects (amb F) y \<and> holds (coarsen \<rho> (slice F)) (rkey\<cdot>y)}"
-  by (auto simp: group_def fiber_def)
-
-lemma group_sub_fiber: "group data a \<rho> F k \<subseteq> fiber data a \<rho> F k"
-  by (auto simp: group_def fiber_def)
-
-text \<open>A guard entry's fiber is its group passing its guard; its content is the set of keys of its
-  rows at its key part.\<close>
+text \<open>A guard entry's fiber is its selector's.  A row passes the entry when it passes the frame's
+  filters, seen at the entry's upper part, and the entry's guard; the content at a key part is the
+  Kleene existential of passing over the fiber's rows with that key part.  It is false at key parts
+  no row has.\<close>
 
 definition gfiber :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'r set" where
-  "gfiber data e F k = {y \<in> group data (elower e) (eupper e) F k. eguard e\<cdot>y = TT}"
+  "gfiber data e F k = fiber data (elower e) (eupper e) F k"
 
-definition gcontent :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
-  "gcontent data e F k = (\<lambda>y. rproj (ekeys e) y) ` gfiber data e F k"
+definition gtruth :: "('k, 'r guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r guard" where
+  "gtruth e F = gand (fguard (eupper e) F) (eguard e)"
 
-abbreviation gcontents :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set list" where
+definition gcontent :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> tr" where
+  "gcontent data e F k q = (\<exists>\<^sub>K y\<in>{y \<in> gfiber data e F k. rproj (ekeys e) y = q}. gtruth e F\<cdot>y)"
+
+abbreviation gcontents :: "'r lower_pd \<Rightarrow> ('k, 'r guard) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> tr) list" where
   "gcontents data gs F k \<equiv> map (\<lambda>e. gcontent data e F k) gs"
 
-text \<open>The content of a guard passing every row is the image of its group.\<close>
+text \<open>The content of a guard passing every row tests the frame's filters alone; keyed at nothing,
+  its one key part is \<open>\<bottom>\<close>, where it tells whether the group is populated.\<close>
 
-lemma gcontent_gtrue: "gcontent data (mk_guard S gtrue \<kappa>) F k = (\<lambda>y. rproj \<kappa> y) ` group data (lower_part S) (upper_part S) F k"
-  by (simp add: gcontent_def gfiber_def)
+lemma gcontent_gtrue: "gcontent data (mk_guard S gtrue \<kappa>) F k q =
+    (\<exists>\<^sub>K y\<in>{y \<in> fiber data (lower_part S) (upper_part S) F k. rproj \<kappa> y = q}. fguard (upper_part S) F\<cdot>y)"
+  by (simp add: gcontent_def gfiber_def gtruth_def)
 
 lemma gcontent_gtrue_bot:
-  "gcontent data (mk_guard S gtrue \<bottom>) F k = (if group data (lower_part S) (upper_part S) F k = {} then {} else {\<bottom>})"
-  unfolding gcontent_gtrue by (simp add: proj_bot image_constant_conv)
+  "gcontent data (mk_guard S gtrue \<bottom>) F k = (\<lambda>q. if q = \<bottom> then populated data (lower_part S) (upper_part S) F k else FF)"
+  by (simp add: fun_eq_iff gcontent_gtrue populated_def proj_bot eq_commute[of \<bottom>])
 
 text \<open>A value entry's fiber is its selector's; its content graph pairs each row's key at the key
   part with its section at the columns, and the content is that graph as a map.\<close>
@@ -510,14 +415,14 @@ abbreviation contents :: "'r lower_pd \<Rightarrow> ('k, 'r semi_factor) entry l
 text \<open>The \<^emph>\<open>point families\<close> at a row and a key: each entry's content as if its fiber were that
   one row with that key.  A fiber of one row gives the point content.\<close>
 
-definition gpoint :: "('k, 'r guard) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> 'k set list" where
-  "gpoint gs p = map (\<lambda>e. {proj (ekeys e)\<cdot>(snd p)}) gs"
+definition gpoint :: "('k, 'r guard) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> tr) list" where
+  "gpoint gs p = map (\<lambda>e q. if q = proj (ekeys e)\<cdot>(snd p) then TT else FF) gs"
 
 definition point :: "('k, 'r semi_factor) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
   "point es p = map (\<lambda>e. [proj (ekeys e)\<cdot>(snd p) \<mapsto> fst p \<downharpoonright> ecols e]) es"
 
 lemma gpoint_simps [simp]:
-  "gpoint [] p = []" "gpoint (e # gs) p = {proj (ekeys e)\<cdot>(snd p)} # gpoint gs p"
+  "gpoint [] p = []" "gpoint (e # gs) p = (\<lambda>q. if q = proj (ekeys e)\<cdot>(snd p) then TT else FF) # gpoint gs p"
   "gpoint (gs @ gs') p = gpoint gs p @ gpoint gs' p" "length (gpoint gs p) = length gs"
   by (simp_all add: gpoint_def)
 
@@ -531,7 +436,8 @@ lemma content_single_fiber: "vfiber data e F k = {y} \<Longrightarrow> content d
 
 text \<open>A \<^emph>\<open>row entry\<close> keys its content within its lower part, and a row guard entry's guard is keyed
   there too: rows of a fiber, which agree there, agree on what the entry reads, so its content has
-  at most one key.\<close>
+  at most one key part not false, and there the guard is that of any row, conjoined with the
+  existential of the frame's filters.\<close>
 
 definition row_entry :: "('k, 'r semi_factor) entry \<Rightarrow> bool" where
   "row_entry e \<longleftrightarrow> ekeys e \<sqsubseteq> elower e"
@@ -560,7 +466,8 @@ qed
 lemma row_guard_entry_image:
   assumes r: "row_guard_entry e" and d: "conforms data" and Y: "Y \<subseteq> lower_maximal data"
     and x: "x \<in> Y" and aG: "elower e \<sqsubseteq> G" and agree: "\<And>y. y \<in> Y \<Longrightarrow> rproj G y = rproj G x"
-  shows "(\<lambda>y. rproj (ekeys e) y) ` {y \<in> Y. eguard e\<cdot>y = TT} = (if eguard e\<cdot>x = TT then {rproj (ekeys e) x} else {})"
+  shows "(\<exists>\<^sub>K y\<in>{y \<in> Y. rproj (ekeys e) y = q}. gand \<phi> (eguard e)\<cdot>y) =
+    (if q = rproj (ekeys e) x then pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi>\<cdot>y)\<cdot>(eguard e\<cdot>x) else FF)"
 proof -
   have sG: "ekeys e \<sqsubseteq> G" and gk: "guard_keyed (elower e) (eguard e)"
     using r aG unfolding row_guard_entry_def by (blast intro: below_trans)+
@@ -570,16 +477,17 @@ proof -
   have h: "rproj (ekeys e) y = rproj (ekeys e) x" if y: "y \<in> Y" for y
     by (rule rproj_agree[OF sG agree[OF y]])
   show ?thesis
-  proof (cases "eguard e\<cdot>x = TT")
+  proof (cases "q = rproj (ekeys e) x")
     case True
-    have s: "{y \<in> Y. eguard e\<cdot>y = TT} = Y" using True g by auto
-    have i: "(\<lambda>y. rproj (ekeys e) y) ` Y = (\<lambda>_. rproj (ekeys e) x) ` Y" by (rule image_cong[OF refl h])
-    have ne: "Y \<noteq> {}" using x by blast
-    show ?thesis unfolding s i by (simp add: image_constant_conv ne True)
+    have s: "{y \<in> Y. rproj (ekeys e) y = q} = Y" using True h by auto
+    have "(\<exists>\<^sub>K y\<in>Y. gand \<phi> (eguard e)\<cdot>y) = (\<exists>\<^sub>K y\<in>Y. pand\<cdot>(\<phi>\<cdot>y)\<cdot>(eguard e\<cdot>x))"
+      by (rule kleene_bex_cong[OF refl]) (simp add: gand_apply g)
+    also have "\<dots> = pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi>\<cdot>y)\<cdot>(eguard e\<cdot>x)" by (rule kleene_bex_pand_const)
+    finally show ?thesis unfolding s using True by simp
   next
     case False
-    have "{y \<in> Y. eguard e\<cdot>y = TT} = {}" using False g by auto
-    then show ?thesis using False by simp
+    have s: "{y \<in> Y. rproj (ekeys e) y = q} = {}" using False h by auto
+    show ?thesis unfolding s using False by simp
   qed
 qed
 
@@ -686,16 +594,13 @@ lemma content_row:
 
 subsection \<open>Column supports of frames and sections of datasets\<close>
 
-text \<open>A selection \<^emph>\<open>reads\<close> a section of the row when it is decided there.  A frame reads a
-  section covering its ambient filter and the column support of its slice's LOD.  The
+text \<open>A frame reads a section read by its ambient filter and covering the column support of its
+  slice's LOD.  The
   \<^emph>\<open>point section\<close> of a dataset at a section is the set of its data points cut down to it; it is
   a plain set, not down-closed: contents are sets of values over data points.\<close>
 
-definition sel_reads :: "'r semi_factor \<Rightarrow> 'r sel \<Rightarrow> bool" where
-  "sel_reads c P \<longleftrightarrow> (\<forall>y. selects P (y \<downharpoonright> c) \<longleftrightarrow> selects P y)"
-
 definition frame_reads :: "'r semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
-  "frame_reads c F \<longleftrightarrow> sel_reads c (amb F) \<and> csupp (slod (slice F)) \<sqsubseteq> c"
+  "frame_reads c F \<longleftrightarrow> guard_reads c (amb F) \<and> csupp (slod (slice F)) \<sqsubseteq> c"
 
 definition pts_section :: "'r semi_factor \<Rightarrow> 'r lower_pd \<Rightarrow> 'r set" where
   "pts_section c data = (\<lambda>y. y \<downharpoonright> c) ` lower_maximal data"
@@ -708,8 +613,16 @@ proof -
   then show ?thesis by (simp add: image_image assms(2))
 qed
 
-lemma holds_section: "csupp (slod X) \<sqsubseteq> c \<Longrightarrow> holds X (rkey\<cdot>(y \<downharpoonright> c)) \<longleftrightarrow> holds X (rkey\<cdot>y)"
-  by (metis holds_lod rproj_section)
+lemma kleene_bex_filter_factor:
+  assumes "\<And>y. Q (g y) = Q y" and "\<And>y. R (g y) = R y"
+  shows "kleene_bex {y \<in> M. Q y} R = kleene_bex {z \<in> g ` M. Q z} R"
+proof -
+  have "{z \<in> g ` M. Q z} = g ` {y \<in> M. Q y}" using assms(1) by auto
+  then show ?thesis by (simp add: kleene_bex_image assms(2))
+qed
+
+lemma sopen_section: "csupp (slod X) \<sqsubseteq> c \<Longrightarrow> sopen X\<cdot>(rkey\<cdot>(y \<downharpoonright> c)) = sopen X\<cdot>(rkey\<cdot>y)"
+  by (metis sopen_lod rproj_section)
 
 text \<open>A view's parts are read off any section covering its columns and its key part's support.\<close>
 
@@ -742,42 +655,32 @@ text \<open>The content of a guard entry is computed from the point section at a
 lemma gcontent_section:
   assumes F: "frame_reads c F" and G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
     and kc: "csupp (ekeys e) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)"
-  shows "gcontent data e F k = (\<lambda>z. rproj (ekeys e) z) ` {z \<in> pts_section c data.
-    selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and>
-    rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k \<and>
-    eguard e\<cdot>z = TT}"
+  shows "gcontent data e F k q = (\<exists>\<^sub>K z\<in>{z \<in> pts_section c data.
+    rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k \<and> rproj (ekeys e) z = q}.
+    gtruth e F\<cdot>z)"
 proof -
   let ?G = "sel_at (esel e) (flod F)"
-  let ?P = "\<lambda>z. selects (amb F) z \<and> holds (coarsen (eupper e) (slice F)) (rkey\<cdot>z) \<and> rproj ?G z = proj ?G\<cdot>k \<and>
-    eguard e\<cdot>z = TT"
+  let ?P = "\<lambda>z. rproj ?G z = proj ?G\<cdot>k \<and> rproj (ekeys e) z = q"
   have sl: "csupp (slod (coarsen (eupper e) (slice F))) \<sqsubseteq> c"
     using F csupp_mono[OF below_trans[OF slod_coarsen lattice_meet_le1]] unfolding frame_reads_def
     by (blast intro: below_trans)
-  have P: "?P (y \<downharpoonright> c) \<longleftrightarrow> ?P y" for y
-    using F unfolding frame_reads_def sel_reads_def
-    by (simp add: holds_section[OF sl] rproj_section[OF G] gc[unfolded guard_reads_def])
-  have h: "rproj (ekeys e) (y \<downharpoonright> c) = rproj (ekeys e) y" for y by (rule rproj_section[OF kc])
-  have "gfiber data e F k = {y \<in> lower_maximal data. ?P y}" by (auto simp: gfiber_def group_def)
-  moreover have "(\<lambda>z. rproj (ekeys e) z) ` {y \<in> lower_maximal data. ?P y}
-      = (\<lambda>z. rproj (ekeys e) z) ` {z \<in> pts_section c data. ?P z}"
-    unfolding pts_section_def by (rule image_filter_factor) (fact P h)+
-  ultimately show ?thesis unfolding gcontent_def by simp
+  have P: "?P (y \<downharpoonright> c) \<longleftrightarrow> ?P y" for y by (simp add: rproj_section[OF G] rproj_section[OF kc])
+  have t: "gtruth e F\<cdot>(y \<downharpoonright> c) = gtruth e F\<cdot>y" for y
+    using F gc unfolding frame_reads_def guard_reads_def
+    by (simp add: gtruth_def fguard_def gand_apply guard_holds_apply sopen_section[OF sl])
+  have fib: "{y \<in> gfiber data e F k. rproj (ekeys e) y = q} = {y \<in> lower_maximal data. ?P y}"
+    by (auto simp: gfiber_def fiber_def)
+  show ?thesis unfolding gcontent_def fib pts_section_def
+    by (rule kleene_bex_filter_factor[where Q = ?P and g = "\<lambda>y. y \<downharpoonright> c" and R = "Rep_cfun (gtruth e F)", OF P t])
 qed
 
-text \<open>Fibers and groups with the same parameters and rows coincide.\<close>
+text \<open>Fibers with the same parameters and rows coincide.\<close>
 
 lemma fiber_cong:
   assumes "a \<squnion> (\<rho> \<sqinter> flod F) = a' \<squnion> (\<rho> \<sqinter> flod F')"
     and "proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k = proj (a' \<squnion> (\<rho> \<sqinter> flod F'))\<cdot>k'"
   shows "fiber data a \<rho> F k = fiber data a' \<rho> F' k'"
   using assms unfolding fiber_def by simp
-
-lemma group_cong:
-  assumes "amb F = amb F'" "slice F = slice F'"
-    and "a \<squnion> (\<rho> \<sqinter> flod F) = a' \<squnion> (\<rho> \<sqinter> flod F')"
-    and "proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k = proj (a' \<squnion> (\<rho> \<sqinter> flod F'))\<cdot>k'"
-  shows "group data a \<rho> F k = group data a' \<rho> F' k'"
-  using assms unfolding group_def by simp
 
 text \<open>A lower part covering the masked part of the minimal LOD absorbs it.\<close>
 
@@ -823,10 +726,10 @@ subsection \<open>The laws\<close>
 
 text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed value entries, its minimal LOD is the join of its
   entries' lower parts, its content semantics is \<^emph>\<open>strict\<close> (absent as soon as one of its guards'
-  contents is empty), and its presence and values are its content semantics of its contents, at
+  contents is false everywhere), and its presence and values are its content semantics of its contents, at
   every key of its key LOD and every dataset conforming relative to its value entries (the content
   law).  A \<^emph>\<open>lawful\<close> one is moreover present, at the keys of its key LOD, only where the key is
-  realised by a row of the frame (the key law).  What an expression does at other keys is the
+  realised by a row the frame's filter does not reject (the key law).  What an expression does at other keys is the
   extension of its table to the whole key space, which no law reads.  Separately, an expression is
   \<^emph>\<open>saturated\<close> when each lower part covers the part of the minimal LOD its upper part keeps, so
   that its groups depend on the frame LOD only through the key LOD.\<close>
@@ -844,15 +747,15 @@ abbreviation csem_at :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> 'r lower_
 
 definition cstrict :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "cstrict E \<longleftrightarrow> (\<forall>Gs Xs. length Gs = length (eguards E) \<longrightarrow> length Xs = length (evalues E) \<longrightarrow>
-     csem E Gs\<cdot>Xs \<noteq> Absent \<longrightarrow> {} \<notin> set Gs)"
+     csem E Gs\<cdot>Xs \<noteq> Absent \<longrightarrow> (\<lambda>_. FF) \<notin> set Gs)"
 
 lemma cstrictI:
   "(\<And>Gs Xs. length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> csem E Gs\<cdot>Xs \<noteq> Absent \<Longrightarrow>
-     {} \<notin> set Gs) \<Longrightarrow> cstrict E"
+     (\<lambda>_. FF) \<notin> set Gs) \<Longrightarrow> cstrict E"
   unfolding cstrict_def by blast
 
 lemma cstrictD:
-  "cstrict E \<Longrightarrow> length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> {} \<in> set Gs \<Longrightarrow>
+  "cstrict E \<Longrightarrow> length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> (\<lambda>_. FF) \<in> set Gs \<Longrightarrow>
      csem E Gs\<cdot>Xs = Absent"
   unfolding cstrict_def by blast
 
@@ -971,12 +874,12 @@ lemma group_below_kd:
   by (rule join_belowI[OF below_trans[OF lower_below_mind lattice_join_ge1]
         below_trans[OF truncate_below lattice_join_ge2]])
 
-text \<open>Contents agree when the groups, respectively the fibers, do.\<close>
+text \<open>Contents agree when the fibers do, and for guard entries the frame's filters.\<close>
 
-lemma gcontent_group_cong:
-  "group data (elower e) (eupper e) F k = group data' (elower e) (eupper e) F' k' \<Longrightarrow>
-    gcontent data e F k = gcontent data' e F' k'"
-  by (simp add: gcontent_def gfiber_def)
+lemma gcontent_fiber_cong:
+  "fiber data (elower e) (eupper e) F k = fiber data' (elower e) (eupper e) F' k' \<Longrightarrow>
+    fguard (eupper e) F = fguard (eupper e) F' \<Longrightarrow> gcontent data e F k = gcontent data' e F' k'"
+  by (simp add: fun_eq_iff gcontent_def gfiber_def gtruth_def)
 
 lemma content_fiber_cong:
   "fiber data (elower e) (eupper e) F k = fiber data' (elower e) (eupper e) F' k' \<Longrightarrow>
@@ -1041,7 +944,7 @@ proof (rule semilawful_content_law[OF E d d k])
   proof (rule map_cong[OF refl])
     fix e assume e: "e \<in> set (eguards E)"
     show "gcontent data e F k = gcontent data e F ?k"
-      using at[OF esels_guardI[OF e]] by (intro gcontent_group_cong) (simp add: group_def)
+      using at[OF esels_guardI[OF e]] by (intro gcontent_fiber_cong) (simp_all add: fiber_def)
   qed
   show "contents data (evalues E) F k = contents data (evalues E) F ?k"
   proof (rule map_cong[OF refl])
@@ -1066,9 +969,9 @@ proof -
   show "gcontents data (eguards E) F k = gcontents data (eguards E) F' k"
   proof (rule map_cong[OF refl])
     fix e assume e: "e \<in> set (eguards E)"
-    have "group data (elower e) (eupper e) F k = group data (elower e) (eupper e) F' k"
-      by (rule group_cong[OF F(1,2)]) (simp_all only: group_kd[OF E esels_guardI[OF e]] F(3))
-    then show "gcontent data e F k = gcontent data e F' k" by (rule gcontent_group_cong)
+    have "fiber data (elower e) (eupper e) F k = fiber data (elower e) (eupper e) F' k"
+      by (rule fiber_cong) (simp_all only: group_kd[OF E esels_guardI[OF e]] F(3))
+    then show "gcontent data e F k = gcontent data e F' k" by (rule gcontent_fiber_cong) (rule fguard_cong[OF F(1,2)])
   qed
   show "contents data (evalues E) F k = contents data (evalues E) F' k"
   proof (rule map_cong[OF refl])
@@ -1080,24 +983,27 @@ proof -
 qed
 
 text \<open>Pegging the frame to a key does not change that key's contents: the pin's demand within
-  a mask is part of the group already, by saturation; fibers do not see the slice at all.\<close>
+  a mask is true on the fiber already, by saturation; fibers do not see the slice at all.\<close>
 
-lemma peg_group:
+lemma peg_fguard:
   assumes E: "saturated E" and S: "S \<in> set (esels E)" and cK: "compact K" and K: "proj (kd E F)\<cdot>K = K"
-  shows "group data (lower_part S) (upper_part S) (peg K F) K = group data (lower_part S) (upper_part S) F K"
+    and y: "y \<in> fiber data (lower_part S) (upper_part S) F K"
+  shows "fguard (upper_part S) (peg K F)\<cdot>y = fguard (upper_part S) F\<cdot>y"
 proof -
   let ?G = "sel_at S (flod F)" and ?T = "(upper_part S \<sqinter> kd E F)"
   have le: "?T \<sqsubseteq> ?G" unfolding group_kd[OF E S] by (rule lattice_join_ge2)
-  have pin: "holds (coarsen (upper_part S) (spin K)) (rkey\<cdot>y)" if y: "rproj ?G y = proj ?G\<cdot>K" for y
+  have yG: "rproj ?G y = proj ?G\<cdot>K" using y by (simp add: fiber_def)
+  have pin: "holds (coarsen (upper_part S) (spin K)) (rkey\<cdot>y)"
   proof -
     have "proj (upper_part S)\<cdot>K = proj ?T\<cdot>K" by (simp only: proj_inf K)
     also have "\<dots> = proj ?T\<cdot>(proj ?G\<cdot>K)" by (rule proj_le[OF le, symmetric])
-    also have "\<dots> = proj ?T\<cdot>(rproj ?G y)" by (simp only: y)
+    also have "\<dots> = proj ?T\<cdot>(rproj ?G y)" by (simp only: yG)
     also have "\<dots> = rproj ?T y" by (rule proj_le[OF le])
     finally have "proj (upper_part S)\<cdot>K \<sqsubseteq> rkey\<cdot>y" using proj_below[of ?T "rkey\<cdot>y"] by simp
     then show ?thesis by (rule holds_coarsen_spin[OF cK])
   qed
-  show ?thesis unfolding group_def using pin by (auto simp: coarsen_conj)
+  show ?thesis using pin
+    by (simp add: fguard_def gand_apply coarsen_conj guard_holds_conj guard_holds_apply holds_def)
 qed
 
 lemma peg_contents:
@@ -1109,7 +1015,14 @@ proof -
   proof (rule map_cong[OF refl])
     fix e assume e: "e \<in> set (eguards E)"
     show "gcontent data e (peg K F) K = gcontent data e F K"
-      by (rule gcontent_group_cong[OF peg_group[OF E esels_guardI[OF e] cK K]])
+    proof -
+      have fp: "fiber data (elower e) (eupper e) (peg K F) K = fiber data (elower e) (eupper e) F K"
+        by (simp add: fiber_def)
+      have pf: "fguard (eupper e) (peg K F)\<cdot>y = fguard (eupper e) F\<cdot>y" if "y \<in> fiber data (elower e) (eupper e) F K" for y
+        by (rule peg_fguard[OF E esels_guardI[OF e] cK K that])
+      show ?thesis unfolding fun_eq_iff gcontent_def gfiber_def gtruth_def fp
+        by (intro allI kleene_bex_cong[OF refl]) (simp add: gand_apply pf)
+    qed
   qed
   show "contents data (evalues E) (peg K F) K = contents data (evalues E) F K"
     by (rule map_cong[OF refl]) (simp add: content_def cgraph_def vfiber_def fiber_def)
@@ -1165,17 +1078,18 @@ qed (simp add: proj_sup)
 context dataspace
 begin
 
-text \<open>The group of the full mask on top of an LOD is the key's own group.\<close>
+text \<open>The fiber of the full mask on top of an LOD is the key's own fiber; it is populated unless the
+  key is not realised by a row the frame's filter does not reject.\<close>
 
-lemma group_top:
+lemma fiber_top:
   assumes "proj (c \<squnion> flod F)\<cdot>k = k"
-  shows "group data c \<top> F k = {y \<in> lower_maximal data. frows F y \<and> rproj (c \<squnion> flod F) y = k}"
-  using assms by (auto simp: group_def truncate_top frows_def)
+  shows "fiber data c \<top> F k = {y \<in> lower_maximal data. rproj (c \<squnion> flod F) y = k}"
+  using assms by (simp add: fiber_def truncate_top)
 
-lemma keyimg_group_top:
+lemma keyimg_populated_top:
   assumes "proj (c \<squnion> flod F)\<cdot>k = k"
-  shows "keyimg data F (c \<squnion> flod F) k \<longleftrightarrow> group data c \<top> F k \<noteq> {}"
-  by (auto simp: group_top[OF assms] keyimg_def)
+  shows "keyimg data F (c \<squnion> flod F) k \<longleftrightarrow> populated data c \<top> F k \<noteq> FF"
+  by (auto simp: populated_def kleene_bex_not_FF fiber_top[OF assms] keyimg_def)
 
 end
 

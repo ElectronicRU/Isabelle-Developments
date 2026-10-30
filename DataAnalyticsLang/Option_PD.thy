@@ -360,6 +360,12 @@ qed
 lemma tr_mult_simps [simp]: "TT \<odot> x = x" "FF \<odot> x = Absent" "\<bottom> \<odot> x = x + Absent"
   by (simp_all add: tr_mult_def cont2cont_LAM cont_tr_mult1)
 
+lemma tr_mult_Absent [simp]: "t \<odot> Absent = Absent"
+  by (cases t rule: trE) simp_all
+
+lemma tr_mult_not_Absent: "t \<odot> x \<noteq> Absent \<Longrightarrow> t \<noteq> FF \<and> x \<noteq> Absent"
+  by auto
+
 subsection \<open>Lifting binary operations\<close>
 
 text \<open>A binary function extends to the upper powerdomain by binding both arguments: on units it is

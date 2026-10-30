@@ -59,6 +59,83 @@ lemma neg_pand: "neg\<cdot>(pand\<cdot>x\<cdot>y) = por\<cdot>(neg\<cdot>x)\<cdo
   and neg_por: "neg\<cdot>(por\<cdot>x\<cdot>y) = pand\<cdot>(neg\<cdot>x)\<cdot>(neg\<cdot>y)"
   by (cases x rule: trE; cases y rule: trE; simp)+
 
+section \<open>Kleene quantifiers over a set\<close>
+
+text \<open>Three-valued quantification of a \<open>tr\<close>-valued predicate over a set: the existential is
+  true if the predicate is true somewhere in the set, false if it is false everywhere there, and
+  undefined otherwise; the universal is dual.  On finite sets they iterate \<open>por\<close> and \<open>pand\<close>, so
+  they are continuous in a parameter of the predicate.  Nested existentials over the classes of a
+  partition collapse into one.\<close>
+
+definition kleene_bex :: "'a set \<Rightarrow> ('a \<Rightarrow> tr) \<Rightarrow> tr" where
+  "kleene_bex S P = (if \<exists>x\<in>S. P x = TT then TT else if \<forall>x\<in>S. P x = FF then FF else \<bottom>)"
+
+definition kleene_ball :: "'a set \<Rightarrow> ('a \<Rightarrow> tr) \<Rightarrow> tr" where
+  "kleene_ball S P = (if \<exists>x\<in>S. P x = FF then FF else if \<forall>x\<in>S. P x = TT then TT else \<bottom>)"
+
+syntax "_kleene_bex" :: "pttrn \<Rightarrow> 'a set \<Rightarrow> tr \<Rightarrow> tr"  ("(3\<exists>\<^sub>K _\<in>_./ _)" [0, 0, 10] 10)
+syntax_consts "_kleene_bex" \<rightleftharpoons> kleene_bex
+translations "\<exists>\<^sub>K x\<in>S. t" \<rightleftharpoons> "CONST kleene_bex S (\<lambda>x. t)"
+
+syntax "_kleene_ball" :: "pttrn \<Rightarrow> 'a set \<Rightarrow> tr \<Rightarrow> tr"  ("(3\<forall>\<^sub>K _\<in>_./ _)" [0, 0, 10] 10)
+syntax_consts "_kleene_ball" \<rightleftharpoons> kleene_ball
+translations "\<forall>\<^sub>K x\<in>S. t" \<rightleftharpoons> "CONST kleene_ball S (\<lambda>x. t)"
+
+lemma kleene_bex_TT_iff: "kleene_bex S P = TT \<longleftrightarrow> (\<exists>x\<in>S. P x = TT)"
+  and kleene_bex_FF_iff: "kleene_bex S P = FF \<longleftrightarrow> (\<forall>x\<in>S. P x = FF)"
+  and kleene_ball_TT_iff: "kleene_ball S P = TT \<longleftrightarrow> (\<forall>x\<in>S. P x = TT)"
+  and kleene_ball_FF_iff: "kleene_ball S P = FF \<longleftrightarrow> (\<exists>x\<in>S. P x = FF)"
+  by (auto simp: kleene_bex_def kleene_ball_def)
+
+lemma kleene_bex_empty [simp]: "kleene_bex {} P = FF"
+  and kleene_ball_empty [simp]: "kleene_ball {} P = TT"
+  by (simp_all add: kleene_bex_def kleene_ball_def)
+
+lemma kleene_bex_Un: "kleene_bex (A \<union> B) P = por\<cdot>(kleene_bex A P)\<cdot>(kleene_bex B P)"
+  and kleene_ball_Un: "kleene_ball (A \<union> B) P = pand\<cdot>(kleene_ball A P)\<cdot>(kleene_ball B P)"
+  by (auto simp: kleene_bex_def kleene_ball_def por_apply pand_apply)
+
+lemma kleene_bex_singleton [simp]: "kleene_bex {a} P = P a"
+  and kleene_ball_singleton [simp]: "kleene_ball {a} P = P a"
+  by (cases "P a" rule: trE; simp add: kleene_bex_def kleene_ball_def)+
+
+lemma kleene_bex_insert [simp]: "kleene_bex (insert a S) P = por\<cdot>(P a)\<cdot>(kleene_bex S P)"
+  and kleene_ball_insert [simp]: "kleene_ball (insert a S) P = pand\<cdot>(P a)\<cdot>(kleene_ball S P)"
+  using kleene_bex_Un[of "{a}" S P] kleene_ball_Un[of "{a}" S P] by simp_all
+
+lemma kleene_bex_cong: "S = T \<Longrightarrow> (\<And>x. x \<in> T \<Longrightarrow> P x = Q x) \<Longrightarrow> kleene_bex S P = kleene_bex T Q"
+  and kleene_ball_cong: "S = T \<Longrightarrow> (\<And>x. x \<in> T \<Longrightarrow> P x = Q x) \<Longrightarrow> kleene_ball S P = kleene_ball T Q"
+  by (simp_all add: kleene_bex_def kleene_ball_def)
+
+lemma kleene_bex_image: "kleene_bex (g ` S) P = kleene_bex S (\<lambda>x. P (g x))"
+  by (simp add: kleene_bex_def)
+
+lemma kleene_bex_FF [simp]: "kleene_bex S (\<lambda>_. FF) = FF"
+  by (simp add: kleene_bex_def)
+
+lemma kleene_bex_not_FF: "kleene_bex S P \<noteq> FF \<longleftrightarrow> (\<exists>x\<in>S. P x \<noteq> FF)"
+  by (simp add: kleene_bex_FF_iff)
+
+lemma kleene_bex_pand_const: "(\<exists>\<^sub>K y\<in>Y. pand\<cdot>(P y)\<cdot>c) = pand\<cdot>(\<exists>\<^sub>K y\<in>Y. P y)\<cdot>c"
+  by (cases c rule: trE) (auto simp: kleene_bex_def pand_apply)
+
+text \<open>An existential over a set of classes of an existential within each class is the existential
+  over their union.\<close>
+
+lemma kleene_bex_classes:
+  "kleene_bex Q (\<lambda>q. kleene_bex {x \<in> S. g x = q} P) = kleene_bex {x \<in> S. g x \<in> Q} P"
+  unfolding kleene_bex_def by auto
+
+lemma cont_kleene_bex:
+  assumes "finite S" and "\<And>x. x \<in> S \<Longrightarrow> cont (\<lambda>y. F y x)"
+  shows "cont (\<lambda>y. kleene_bex S (F y))"
+  using assms by (induct S rule: finite_induct) simp_all
+
+lemma cont_kleene_ball:
+  assumes "finite S" and "\<And>x. x \<in> S \<Longrightarrow> cont (\<lambda>y. F y x)"
+  shows "cont (\<lambda>y. kleene_ball S (F y))"
+  using assms by (induct S rule: finite_induct) simp_all
+
 section \<open>The Kleene existential over an up-set\<close>
 
 text \<open>Three-valued existential quantification of a \<open>tr\<close>-valued predicate over the elements above

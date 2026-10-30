@@ -232,9 +232,9 @@ proof (induct e rule: key_ast.induct)
   show ?case by (simp only: pval.simps kval.simps cfcomp2 tuple_cfun_apply map_map comp_def m)
 qed simp_all
 
-text \<open>On data: at a key realised by a row of the frame, a row-level expression has the row
-  reading of that row.  Its entries are row entries with no guard, so each content is the point
-  content of the row.\<close>
+text \<open>On data: at a key realised by a row, a row-level expression has the row reading of that row,
+  whatever the frame's filters.  It has no guard entries, and its value entries are row entries,
+  so each content is the point content of the row.\<close>
 
 lemma row_ast_wf: "row_ast e \<Longrightarrow> wf e"
   by (induct e rule: row_ast.induct) auto
@@ -242,29 +242,22 @@ lemma row_ast_wf: "row_ast e \<Longrightarrow> wf e"
 lemma row_ast_row_level: "row_ast e \<Longrightarrow> row_level (asem e)"
   by (induct e rule: row_ast.induct) (auto simp: row_level_value_at row_level_column row_level_smap intro!: row_level_tuple)
 
-lemma row_ast_gtrue: "row_ast e \<Longrightarrow> e' \<in> set (eguards (asem e)) \<Longrightarrow> eguard e' = gtrue"
-  by (induct e arbitrary: e' rule: row_ast.induct) auto
+lemma row_ast_no_guards: "row_ast e \<Longrightarrow> eguards (asem e) = []"
+proof (induct e rule: row_ast.induct)
+  case (4 fn es)
+  have "set (eguards (tuple (map asem es))) = {}" using 4 by auto
+  then show ?case by (simp only: set_empty asem.simps smap_simps)
+qed simp_all
 
 theorem esem_row_ast:
-  assumes e: "row_ast e" and d: "conforms data" and xm: "x \<in> lower_maximal data" and xF: "frows F x"
+  assumes e: "row_ast e" and d: "conforms data" and xm: "x \<in> lower_maximal data"
     and kx: "k = rproj (kd (asem e) F) x"
   shows "esem (asem e) data F k = Present\<cdot>(pval e\<cdot>(x, rkey\<cdot>x))"
 proof -
   have ES: "semilawful (asem e)" by (rule semilawful_asem[OF row_ast_wf[OF e]])
   have k: "proj (kd (asem e) F)\<cdot>k = k" by (simp add: kx)
   have g: "gcontents data (eguards (asem e)) F k = gpoint (eguards (asem e)) (x, rkey\<cdot>x)"
-    unfolding gpoint_def
-  proof (rule map_cong[OF refl])
-    fix e' assume e': "e' \<in> set (eguards (asem e))"
-    let ?G = "sel_at (esel e') (flod F)" and ?Y = "group data (elower e') (eupper e') F k"
-    have Gk: "proj ?G\<cdot>k = rproj ?G x" unfolding kx by (rule proj_le[OF group_below_kd[OF ES esels_guardI[OF e']]])
-    have xY: "x \<in> ?Y" using xm xF Gk by (simp add: group_def frows_def holds_coarsen)
-    have r: "row_guard_entry e'" using row_ast_row_level[OF e] e' by (simp add: row_level_def)
-    have "(\<lambda>y. rproj (ekeys e') y) ` {y \<in> ?Y. eguard e'\<cdot>y = TT} = (if eguard e'\<cdot>x = TT then {rproj (ekeys e') x} else {})"
-      by (rule row_guard_entry_image[OF r d _ xY lattice_join_ge1]) (auto simp: group_def Gk)
-    then show "gcontent data e' F k = {proj (ekeys e')\<cdot>(snd (x, rkey\<cdot>x))}"
-      by (simp add: gcontent_def gfiber_def row_ast_gtrue[OF e e'])
-  qed
+    by (simp add: row_ast_no_guards[OF e])
   have "contents data (evalues (asem e)) F k = point (evalues (asem e)) (x, rkey\<cdot>x)"
     unfolding point_def
   proof (rule map_cong[OF refl])
