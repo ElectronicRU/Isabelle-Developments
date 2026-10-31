@@ -757,6 +757,90 @@ lemma split_possible_principal:
   by (simp add: hoare_le_def smyth_le_def)
 
 
+text \<open>\<^emph>\<open>Rigid presence\<close>: a row is present when its exact unit is included in the dataset, so
+  adding the row changes nothing.  This is neither monotone nor antitone.  It says that the row is
+  definite and its key possible; on compact data the two together are equivalent to it.\<close>
+
+definition split_present :: "'r::bifinite \<Rightarrow> ('r, 'k::bifinite) split_pd \<Rightarrow> bool" where
+  "split_present x xs \<longleftrightarrow> split_unit\<cdot>x \<subseteq>\<^sub>s xs"
+
+lemma split_open_below_plus: "split_open\<cdot>ys \<sqsubseteq> xs \<union>\<^sub>s ys"
+  apply (induct xs rule: split_pd.principal_induct, simp)
+  apply (induct ys rule: split_pd.principal_induct, simp)
+  apply (simp add: split_le_def hoare_le_def smyth_le_def, blast)
+  done
+
+lemma split_incl_maybe: "ys \<subseteq>\<^sub>s xs \<Longrightarrow> split_maybe\<cdot>ys \<subseteq>\<^sub>s xs"
+proof -
+  assume "ys \<subseteq>\<^sub>s xs"
+  then have xy: "xs \<union>\<^sub>s ys = xs" unfolding split_incl_def .
+  have "xs \<union>\<^sub>s split_maybe\<cdot>ys = (xs \<union>\<^sub>s ys) \<union>\<^sub>s split_maybe\<cdot>ys" by (simp only: xy)
+  also have "\<dots> = xs \<union>\<^sub>s ys" by (simp only: split_plus_assoc split_plus_maybe_absorb)
+  finally show ?thesis unfolding split_incl_def xy .
+qed
+
+lemma split_present_definite: "split_present x xs \<Longrightarrow> split_definite x xs"
+proof -
+  assume "split_present x xs"
+  then have "xs \<union>\<^sub>s split_unit\<cdot>x = xs" unfolding split_present_def split_incl_def .
+  moreover have "split_open\<cdot>(split_unit\<cdot>x) \<sqsubseteq> xs \<union>\<^sub>s split_unit\<cdot>x" by (rule split_open_below_plus)
+  ultimately show ?thesis unfolding split_definite_def by (simp add: split_open_unit_open)
+qed
+
+text \<open>On compact data, rigid presence reads off the generators: some definite row is above the
+  row, and some possible key below the row's key.\<close>
+
+lemma split_present_principal:
+  "split_present (Rep_compact_basis a) (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd) \<longleftrightarrow>
+    (\<exists>x\<in>srows t. a \<sqsubseteq> x) \<and> (\<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> split_key\<cdot>(Rep_compact_basis a))"
+proof -
+  let ?k = "split_key\<cdot>(Rep_compact_basis a) :: 'k"
+  let ?C = "\<lambda>i. split_principal (SPlus t (SUnit a i)) :: ('r, 'k) split_pd"
+  have C: "chain ?C"
+    by (rule chainI, rule split_pd.principal_mono, rule SPlus_split_mono, simp, rule SUnit_split_mono) simp_all
+  have lub: "split_principal t \<union>\<^sub>s split_unit\<cdot>(Rep_compact_basis a) = (\<Squnion>i. ?C i)"
+    by (simp add: contlub_cfun_arg [OF chain_split_unit_basis])
+  have kc: "chain (\<lambda>i. split_approx i\<cdot>?k)" by (rule ch2ch_Rep_cfunL [OF split_approx.chain_approx])
+  have kl: "(\<Squnion>i. split_approx i\<cdot>?k) = ?k"
+    by (simp add: contlub_cfun_fun [OF split_approx.chain_approx, symmetric])
+  have Ab: "u \<sqsubseteq> Abs_compact_basis (split_approx i\<cdot>?k) \<longleftrightarrow> Rep_compact_basis u \<sqsubseteq> split_approx i\<cdot>?k" for u i
+    unfolding compact_le_def by (simp only: Abs_compact_basis_inverse' [OF split_approx.compact_approx])
+  show ?thesis
+  proof
+    assume "split_present (Rep_compact_basis a) (split_principal t :: ('r, 'k) split_pd)"
+    then have eq: "(\<Squnion>i. ?C i) = split_principal t" unfolding split_present_def split_incl_def lub .
+    have "?C 0 \<sqsubseteq> split_principal t" unfolding eq [symmetric] by (rule is_ub_thelub [OF C])
+    then have rows: "\<exists>x\<in>srows t. a \<sqsubseteq> x" by (simp add: split_le_def hoare_le_def)
+    have "split_principal t \<sqsubseteq> (\<Squnion>i. ?C i)" unfolding eq ..
+    then obtain i where "split_principal t \<sqsubseteq> ?C i"
+      using compact_below_lub_iff [OF split_pd.compact_principal C] by blast
+    then obtain u where u: "u \<in> skeys t" and "Rep_compact_basis u \<sqsubseteq> split_approx i\<cdot>?k"
+      by (auto simp: split_le_def smyth_le_def Ab)
+    then have "Rep_compact_basis u \<sqsubseteq> ?k" by (blast intro: below_trans split_approx.approx_below)
+    with rows u show "(\<exists>x\<in>srows t. a \<sqsubseteq> x) \<and> (\<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> ?k)" by blast
+  next
+    assume "(\<exists>x\<in>srows t. a \<sqsubseteq> x) \<and> (\<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> ?k)"
+    then obtain x u where x: "x \<in> srows t" "a \<sqsubseteq> x" and u: "u \<in> skeys t" "Rep_compact_basis u \<sqsubseteq> ?k" by blast
+    have "Rep_compact_basis u \<sqsubseteq> (\<Squnion>i. split_approx i\<cdot>?k)" unfolding kl by (rule u(2))
+    then obtain i0 where i0: "Rep_compact_basis u \<sqsubseteq> split_approx i0\<cdot>?k"
+      using compact_below_lub_iff [OF Rep_compact_basis' kc] by blast
+    have Ci: "?C (i + i0) = split_principal t" for i
+    proof -
+      have "split_approx i0\<cdot>?k \<sqsubseteq> split_approx (i + i0)\<cdot>?k"
+        by (rule monofun_cfun_fun, rule chain_mono [OF split_approx.chain_approx]) simp
+      then have "Rep_compact_basis u \<sqsubseteq> split_approx (i + i0)\<cdot>?k" by (rule below_trans [OF i0])
+      then show ?thesis
+        unfolding split_pd.principal_eq_iff using x u(1)
+        by (auto simp: split_le_def hoare_le_def smyth_le_def Ab)
+    qed
+    have "(\<Squnion>i. ?C i) = (\<Squnion>i. ?C (i + i0))" by (rule lub_range_shift [OF C, symmetric])
+    also have "\<dots> = split_principal t" by (simp only: Ci lub_const)
+    finally show "split_present (Rep_compact_basis a) (split_principal t :: ('r, 'k) split_pd)"
+      unfolding split_present_def split_incl_def lub .
+  qed
+qed
+
+
 subsection \<open>Views act on datasets\<close>
 
 text \<open>When the key of a row is the key function of a keying, a view acts on datasets: it
