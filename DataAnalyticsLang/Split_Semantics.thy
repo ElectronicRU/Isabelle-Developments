@@ -224,6 +224,102 @@ theorem ext_lawful_key_at: "ext_lawful (key_at_ext c)"
   unfolding ext_lawful_def by (simp add: semilawful_key_at ext_sound_key_at)
 
 
+subsection \<open>Table columns\<close>
+
+text \<open>A column at a key maximal at its key part \<open>a\<close> where some definite row has that key is
+  present, with the column function of the join of the sections of the definite rows there: in a
+  conforming dataset above, the rows at the key carry one section, above all of them.  At a partial
+  key the value is not determined: a row there may move up, and another row may come to the key with
+  an unrelated section, so it is undecided.  It is absent where no possible key projects to the key.\<close>
+
+definition col_sections :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'r set" where
+  "col_sections c a D k = {y \<downharpoonright> c | y. split_definite y D \<and> rproj a y = proj a\<cdot>k}"
+
+abbreviation column_sem :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::bifinite) \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'w option_pd" where
+  "column_sem c a v D k \<equiv> if maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}
+     then Present\<cdot>(v\<cdot>(lub (col_sections c a D k)))
+     else if \<exists>u. split_possible u D \<and> proj a\<cdot>u = proj a\<cdot>k then \<bottom> else Absent"
+
+definition column_ext :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'w) expr_ext" where
+  "column_ext c a v = with_ext (column c a v) (\<lambda>D F k. column_sem c a v D k)"
+
+lemma column_ext_simps [simp]:
+  "semilawful (column_ext c a v) \<longleftrightarrow> semilawful (column c a v)"
+  "emind (column_ext c a v) = emind (column c a v)" "eguards (column_ext c a v) = eguards (column c a v)"
+  "evalues (column_ext c a v) = evalues (column c a v)"
+  "esem (column_ext c a v) = esem (column c a v)" "csem (column_ext c a v) = csem (column c a v)"
+  "sem_ext (column_ext c a v) D F k = column_sem c a v D k"
+  by (simp_all add: column_ext_def)
+
+theorem ext_sound_column: "ext_sound (column_ext c a v)"
+proof (rule ext_soundI, simp only: column_ext_simps)
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
+    and conf: "fconf (evalues (column c a v)) data F"
+  let ?e = "mk_value (sel a a) c a"
+  have cf: "entry_conf ?e data F" using conf by (simp add: fconf_def)
+  have fib: "fiber data a a F k = {m \<in> lower_maximal data. rproj a m = proj a\<cdot>k}"
+    by (simp add: fiber_def join_meet_self)
+  show "column_sem c a v D k \<sqsubseteq> esem (column c a v) data F k"
+  proof (cases "maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}")
+    case True
+    then have mx: "maximal_at a (proj a\<cdot>k)" and ne: "col_sections c a D k \<noteq> {}" by simp_all
+    have point: "\<exists>m. m \<in> fiber data a a F k \<and> y \<sqsubseteq> m"
+      if y: "split_definite y D" "rproj a y = proj a\<cdot>k" for y
+    proof -
+      have "maximal_at a (rproj a y)" using mx y(2) by simp
+      then obtain m where "m \<in> lower_maximal data" "y \<sqsubseteq> m" "rproj a m = rproj a y"
+        using definite_maximal_point [OF DD d y(1)] by blast
+      then show ?thesis using fib y(2) by auto
+    qed
+    obtain y0 where y0: "split_definite y0 D" "rproj a y0 = proj a\<cdot>k"
+      using ne by (auto simp: col_sections_def)
+    obtain m where m: "m \<in> fiber data a a F k" "y0 \<sqsubseteq> m" using point [OF y0] by blast
+    have ub: "col_sections c a D k <| m \<downharpoonright> c"
+    proof (rule is_ubI)
+      fix z assume "z \<in> col_sections c a D k"
+      then obtain y where y: "split_definite y D" "rproj a y = proj a\<cdot>k" "z = y \<downharpoonright> c"
+        by (auto simp: col_sections_def)
+      obtain m' where m': "m' \<in> fiber data a a F k" "y \<sqsubseteq> m'" using point [OF y(1,2)] by blast
+      have "y \<downharpoonright> c \<sqsubseteq> m' \<downharpoonright> c" by (intro monofun_cfun_arg m'(2))
+      also have "\<dots> = m \<downharpoonright> c" by (rule column_fiber_section [OF cf m(1) m'(1)])
+      finally show "z \<sqsubseteq> m \<downharpoonright> c" by (simp only: y(3))
+    qed
+    have "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = (\<lambda>_. v\<cdot>(m \<downharpoonright> c)) ` fiber data a a F k"
+      by (rule image_cong [OF refl]) (simp add: column_fiber_section [OF cf m(1)])
+    then have V: "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = {v\<cdot>(m \<downharpoonright> c)}"
+      using m(1) by (auto simp: image_constant_conv)
+    have "fiber data a a F k \<noteq> {}" using m(1) by blast
+    then have esem: "esem (column c a v) data F k = Present\<cdot>(v\<cdot>(m \<downharpoonright> c))" by (simp add: V)
+    have "lub (col_sections c a D k) \<sqsubseteq> m \<downharpoonright> c" by (rule lub_belowI [OF ne ub])
+    then have "Present\<cdot>(v\<cdot>(lub (col_sections c a D k))) \<sqsubseteq> esem (column c a v) data F k"
+      unfolding esem by (simp add: monofun_cfun_arg)
+    then show ?thesis using True by simp
+  next
+    case nP: False
+    show ?thesis
+    proof (cases "\<exists>u. split_possible u D \<and> proj a\<cdot>u = proj a\<cdot>k")
+      case True
+      show ?thesis by (simp only: if_not_P [OF nP] if_P [OF True] minimal)
+    next
+      case nA: False
+      have "fiber data a a F k = {}"
+      proof (rule ccontr)
+        assume "fiber data a a F k \<noteq> {}"
+        then obtain m where m: "m \<in> lower_maximal data" "rproj a m = proj a\<cdot>k" using fib by blast
+        have "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
+        then show False using nA m(2) by blast
+      qed
+      then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] column_simps) simp
+    qed
+  qed
+qed
+
+theorem ext_lawful_column:
+  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> ext_lawful (column_ext c a v)"
+  unfolding ext_lawful_def by (simp add: semilawful_column ext_sound_column)
+
+
 subsection \<open>Constants and maps\<close>
 
 definition const_ext :: "'v::bifinite \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
