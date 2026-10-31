@@ -85,11 +85,8 @@ lemma with_ext_simps [simp]:
   by (simp_all add: with_ext_def expr.defs expr_ext.defs)
 
 
-text \<open>The row key of split datasets is the keying's.\<close>
-
-locale split_dataspace = dataspace slicing rules keying + split_keyed keying
+locale split_dataspace = dataspace slicing + split_keyed
   for slicing :: "('f, 'k::{domain, lod_domain}) slicer_ops"
-    and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying"
 begin
 
 text \<open>\<^emph>\<open>Soundness\<close>: below a compact dataset whose definite rows are \<open>data\<close>, a conforming
@@ -162,15 +159,15 @@ qed
 lemma impossible_no_point:
   assumes DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
     and m: "m \<in> lower_maximal data"
-  shows "split_possible (rkey\<cdot>m) D"
+  shows "split_possible (row_key\<cdot>m) D"
 proof -
   obtain t where t: "D' = split_principal t" using split_pd.compact_imp_principal [OF cD] by blast
   obtain s where s: "s \<in> srows t" "m = Rep_compact_basis s"
     using split_maximal_row_generator [OF d [unfolded t] m] by blast
-  obtain u where u: "u \<in> skeys t" "Rep_compact_basis u \<sqsubseteq> rkey\<cdot>m"
-    using split_basis_consistentD [OF s(1)] unfolding split_key_rkey s(2) by blast
+  obtain u where u: "u \<in> skeys t" "Rep_compact_basis u \<sqsubseteq> row_key\<cdot>m"
+    using split_basis_consistentD [OF s(1)] unfolding s(2) by blast
   have "split_possible (Rep_compact_basis u) D'" unfolding t using u(1) by (auto simp: split_possible_principal)
-  then have "split_possible (rkey\<cdot>m) D'" by (rule split_possible_up [OF _ u(2)])
+  then have "split_possible (row_key\<cdot>m) D'" by (rule split_possible_up [OF _ u(2)])
   then show ?thesis by (rule split_possible_below [OF _ DD])
 qed
 
@@ -212,7 +209,7 @@ proof (rule ext_soundI, simp only: key_at_ext_simps)
       proof (rule ccontr)
         assume "fiber data c c F k \<noteq> {}"
         then obtain m where m: "m \<in> lower_maximal data" "rproj c m = proj c\<cdot>k" using fib by blast
-        have "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
+        have "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
         then show False using nA m(2) by blast
       qed
       then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] esem) simp
@@ -307,7 +304,7 @@ proof (rule ext_soundI, simp only: column_ext_simps)
       proof (rule ccontr)
         assume "fiber data a a F k \<noteq> {}"
         then obtain m where m: "m \<in> lower_maximal data" "rproj a m = proj a\<cdot>k" using fib by blast
-        have "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
+        have "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
         then show False using nA m(2) by blast
       qed
       then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] column_simps) simp
@@ -523,7 +520,7 @@ proof -
       proof (rule ccontr)
         assume "fiber data a \<rho> F k \<noteq> {}"
         then obtain m where m: "m \<in> lower_maximal data" "rproj ?L m = proj ?L\<cdot>k" using fib by blast
-        have "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
+        have "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
         then show False using nA m(2) by blast
       qed
       then show ?thesis unfolding populated_ext_def populated_def by (simp only: if_not_P [OF nT] if_not_P [OF nA]) simp
@@ -643,8 +640,8 @@ proof (rule ext_soundI, simp only: aggregate_ext_simps aggregate_simps)
     fix \<kappa> assume "\<kappa> \<in> ?A"
     then obtain m where m: "m \<in> ?Z" "\<kappa> = rproj ?K m" by blast
     have mm: "m \<in> lower_maximal data" and mk: "rproj (flod F) m = k" using m(1) by (simp_all add: afiber_def)
-    have p: "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD nD mm])
-    have r: "rkey\<cdot>m \<in> conforming_keyspace" using universallyD [OF universally_keyspace cf] mm by blast
+    have p: "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD nD mm])
+    have r: "row_key\<cdot>m \<in> conforming_keyspace" using universallyD [OF universally_keyspace cf] mm by blast
     show "\<kappa> \<in> agg_possible X D F k" unfolding agg_possible_def m(2) using p r pK mk by blast
   qed
   have DA: "agg_definite X D F k \<union> ?A = ?A" using defA by blast

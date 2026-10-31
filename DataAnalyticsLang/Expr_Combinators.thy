@@ -643,14 +643,14 @@ lemma row_guard_entry_gcontent_eq:
   assumes r: "row_guard_entry e" and d: "conforms data" "conforms data'"
     and x: "x \<in> gfiber data e F k" and x': "x' \<in> gfiber data' e F k"
     and s: "rproj (ekeys e) x = rproj (ekeys e) x'"
-    and g: "eguard e\<cdot>x = eguard e\<cdot>x'" and kg: "ekguard e\<cdot>(rkey\<cdot>x) = ekguard e\<cdot>(rkey\<cdot>x')"
+    and g: "eguard e\<cdot>x = eguard e\<cdot>x'" and kg: "ekguard e\<cdot>(row_key\<cdot>x) = ekguard e\<cdot>(row_key\<cdot>x')"
     and f: "(\<exists>\<^sub>K y\<in>gfiber data e F k. fguard (eupper e) F\<cdot>y) = (\<exists>\<^sub>K y\<in>gfiber data' e F k. fguard (eupper e) F\<cdot>y)"
   shows "gcontent data e F k = gcontent data' e F k"
 proof -
-  have t: "Rep_cfun (gtruth e F) = (\<lambda>y. pand\<cdot>(fguard (eupper e) F\<cdot>y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(rkey\<cdot>y))))"
+  have t: "Rep_cfun (gtruth e F) = (\<lambda>y. pand\<cdot>(fguard (eupper e) F\<cdot>y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y))))"
     by (simp add: fun_eq_iff gtruth_split)
   have one: "gcontent D e F k = (\<lambda>q. if q = rproj (ekeys e) y
-      then Some (pand\<cdot>(\<exists>\<^sub>K z\<in>gfiber D e F k. fguard (eupper e) F\<cdot>z)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(rkey\<cdot>y)))) else None)"
+      then Some (pand\<cdot>(\<exists>\<^sub>K z\<in>gfiber D e F k. fguard (eupper e) F\<cdot>z)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y)))) else None)"
     if dD: "conforms D" and y: "y \<in> gfiber D e F k" for D y
     unfolding fun_eq_iff gcontent_def t
     by (intro allI row_guard_entry_image[OF r dD _ y lattice_join_ge1[of "elower e" "eupper e \<sqinter> flod F"]])

@@ -91,22 +91,21 @@ lemma amb_frestrict [simp]: "amb (frestrict \<phi> F) = gand (amb F) \<phi>"
 section \<open>Frame semantics\<close>
 
 text \<open>A dataspace fixes a slicer and a schema with keys; datasets are elements of the lower
-  powerdomain of rows, their data points the maximal members.  Rows have keys, via \<open>rkey\<close>; a frame's
+  powerdomain of rows, their data points the maximal members.  Rows have keys, via \<open>row_key\<close>; a frame's
   filter on rows conjoins its ambient filter with its slice at the row's key.  A slice coarsened to
   an upper part \<open>\<rho>\<close> gives the frame's filter as seen by a group that keeps only \<open>\<rho>\<close>.\<close>
 
-locale dataspace = slicer slicing + keyed_schema rules keying
+locale dataspace = slicer slicing + keyed_schema
   for slicing :: "('f, 'k::{domain, lod_domain}) slicer_ops"
-    and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying"
 begin
 
 definition guard_holds :: "'f \<Rightarrow> 'r guard" where
-  "guard_holds X = sopen X oo proj (slod X) oo rkey"
+  "guard_holds X = sopen X oo proj (slod X) oo row_key"
 
-lemma guard_holds_apply: "guard_holds X\<cdot>y = sopen X\<cdot>(rkey\<cdot>y)"
+lemma guard_holds_apply: "guard_holds X\<cdot>y = sopen X\<cdot>(row_key\<cdot>y)"
   by (simp add: guard_holds_def sopen_lod)
 
-lemma guard_holds_TT [simp]: "guard_holds X\<cdot>y = TT \<longleftrightarrow> holds X (rkey\<cdot>y)"
+lemma guard_holds_TT [simp]: "guard_holds X\<cdot>y = TT \<longleftrightarrow> holds X (row_key\<cdot>y)"
   by (simp add: guard_holds_apply holds_def)
 
 lemma guard_holds_conj: "guard_holds (a \<^bold>* b) = gand (guard_holds a) (guard_holds b)"
@@ -161,7 +160,7 @@ lemma amb_peg [simp]: "amb (peg K F) = amb F"
 lemma slice_peg [simp]: "slice (peg K F) = slice F \<^bold>* spin K"
   by (simp add: peg_def)
 
-lemma frows_peg: "compact K \<Longrightarrow> K \<sqsubseteq> rkey\<cdot>r \<Longrightarrow> frows (peg K F)\<cdot>r = frows F\<cdot>r"
+lemma frows_peg: "compact K \<Longrightarrow> K \<sqsubseteq> row_key\<cdot>r \<Longrightarrow> frows (peg K F)\<cdot>r = frows F\<cdot>r"
   by (simp add: frows_def gand_apply guard_holds_conj holds_spin[unfolded holds_def, symmetric] guard_holds_apply)
 
 text \<open>Pegging commutes with the transformers that keep the slice.\<close>
@@ -183,7 +182,7 @@ context dataspace
 begin
 
 definition keyimg :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> 'k \<Rightarrow> bool" where
-  "keyimg data F c k \<longleftrightarrow> (\<exists>x\<in>lower_maximal data. frows F\<cdot>x \<noteq> FF \<and> k = proj c\<cdot>(rkey\<cdot>x))"
+  "keyimg data F c k \<longleftrightarrow> (\<exists>x\<in>lower_maximal data. frows F\<cdot>x \<noteq> FF \<and> k = proj c\<cdot>(row_key\<cdot>x))"
 
 lemma keyimg_cong: "frows F = frows F' \<Longrightarrow> keyimg data F c = keyimg data F' c"
   by (simp add: keyimg_def fun_eq_iff)
@@ -199,7 +198,7 @@ lemma keyimg_slicer: "keyimg data F c k \<Longrightarrow> \<exists>k'. k \<sqsub
 lemma keyimg_peg_iff:
   assumes K: "compact K" shows "keyimg data (peg K F) c K \<longleftrightarrow> keyimg data F c K"
 proof -
-  have "frows (peg K F)\<cdot>x = frows F\<cdot>x" if "K = proj c\<cdot>(rkey\<cdot>x)" for x
+  have "frows (peg K F)\<cdot>x = frows F\<cdot>x" if "K = proj c\<cdot>(row_key\<cdot>x)" for x
     by (rule frows_peg[OF K]) (simp only: that proj_below)
   then show ?thesis unfolding keyimg_def by (metis (no_types, lifting))
 qed

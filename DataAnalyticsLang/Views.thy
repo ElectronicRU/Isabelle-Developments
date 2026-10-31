@@ -22,27 +22,24 @@ definition pproj :: "('r, 'k) view \<Rightarrow> 'r \<times> 'k \<rightarrow> 'r
 lemma pproj_apply [simp]: "pproj v\<cdot>(r, k) = (r \<downharpoonright> fst v, proj (snd v)\<cdot>k)"
   by (simp add: pproj_def)
 
-text \<open>A keying computes keys from rows and declares the column support of each key part.\<close>
+text \<open>Rows carry keys: the \<^emph>\<open>row key\<close> of a row type at a key type, and the declared column
+  support of each key part.  Both are constants, given by instances for particular row and key types.\<close>
 
-record ('r, 'k) keying =
-  key_fun :: "'r \<rightarrow> 'k"
-  key_supp :: "'k semi_factor \<Rightarrow> 'r semi_factor"
+consts row_key :: "'r::cpo \<rightarrow> 'k::cpo"
+consts csupp :: "'k semi_factor \<Rightarrow> 'r semi_factor"
 
-hide_const (open) keying.truncate
+text \<open>Keyed rows: a key part is read off the section at its support, and supports are compact and
+  join-preserving.  Keyed rows have a schema.\<close>
 
 locale keyed =
-  fixes keying :: "('r::{domain, lod_domain}, 'k::lod_domain) keying"
-  assumes csupp_reads: "proj a\<cdot>(key_fun keying\<cdot>(x \<downharpoonright> key_supp keying a)) = proj a\<cdot>(key_fun keying\<cdot>x)"
-    and csupp_bot: "key_supp keying \<bottom> = \<bottom>"
-    and csupp_sup: "key_supp keying (a \<squnion> b) = key_supp keying a \<squnion> key_supp keying b"
-    and csupp_compact: "compact a \<Longrightarrow> compact (key_supp keying a)"
+  assumes csupp_reads: "proj a\<cdot>(row_key\<cdot>((x::'r::{domain, lod_domain, schema}) \<downharpoonright> csupp a)) = proj a\<cdot>(row_key\<cdot>x :: 'k::{domain, lod_domain})"
+    and csupp_bot: "csupp (\<bottom> :: 'k semi_factor) = (\<bottom> :: 'r semi_factor)"
+    and csupp_sup: "csupp (a \<squnion> b :: 'k semi_factor) = (csupp a \<squnion> csupp b :: 'r semi_factor)"
+    and csupp_compact: "compact (a :: 'k semi_factor) \<Longrightarrow> compact (csupp a :: 'r semi_factor)"
 begin
 
-abbreviation rkey :: "'r \<rightarrow> 'k" where "rkey \<equiv> key_fun keying"
-abbreviation csupp :: "'k semi_factor \<Rightarrow> 'r semi_factor" where "csupp \<equiv> key_supp keying"
-
 abbreviation rproj :: "'k semi_factor \<Rightarrow> 'r \<Rightarrow> 'k" where
-  "rproj a x \<equiv> proj a\<cdot>(rkey\<cdot>x)"
+  "rproj a x \<equiv> proj a\<cdot>(row_key\<cdot>x)"
 
 definition vpart :: "('r, 'k) view \<Rightarrow> 'r \<Rightarrow> 'r \<times> 'k" where
   "vpart v x = (x \<downharpoonright> fst v, rproj (snd v) x)"
@@ -60,7 +57,7 @@ text \<open>A key part is read off any section covering its support.\<close>
 lemma rproj_section: "csupp a \<sqsubseteq> c \<Longrightarrow> rproj a (y \<downharpoonright> c) = rproj a y"
   by (metis csupp_reads proj_le)
 
-lemma csupp_mono: "a \<sqsubseteq> b \<Longrightarrow> csupp a \<sqsubseteq> csupp b"
+lemma csupp_mono: "(a :: 'k semi_factor) \<sqsubseteq> b \<Longrightarrow> csupp a \<sqsubseteq> (csupp b :: 'r semi_factor)"
   by (metis csupp_sup join_absorb lattice_join_ge1)
 
 subsection \<open>Dependencies on a set of rows\<close>
@@ -103,7 +100,7 @@ lemma determines_trans: "vfd P u v \<Longrightarrow> determines P v g \<Longrigh
 lemma vpart_below_iff: "vpart (c, a) x \<sqsubseteq> vpart (c, a) y \<longleftrightarrow> x \<downharpoonright> c \<sqsubseteq> y \<downharpoonright> c \<and> rproj a x \<sqsubseteq> rproj a y"
   by (simp add: below_prod_def)
 
-lemma determines_key: "determines P (c, a) (h oo proj a oo rkey)"
+lemma determines_key: "determines P (c, a) (h oo proj a oo row_key)"
   unfolding determines_def vproj_apply by (simp add: vpart_below_iff monofun_cfun_arg)
 
 lemma determines_comp:
@@ -463,8 +460,7 @@ end
 
 section \<open>Dependencies over all conforming datasets\<close>
 
-locale keyed_schema = schema rules + keyed keying
-  for rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k::lod_domain) keying"
+locale keyed_schema = keyed
 begin
 
 definition universally :: "('r set \<Rightarrow> bool) \<Rightarrow> bool" where
@@ -487,7 +483,7 @@ text \<open>The \<^emph>\<open>conforming keyspace\<close>: what the schema know
 definition conforming_keyspace :: "'k set" where
   "conforming_keyspace = UNIV"
 
-theorem universally_keyspace: "universally (\<lambda>P. Rep_cfun rkey ` P \<subseteq> conforming_keyspace)"
+theorem universally_keyspace: "universally (\<lambda>P. Rep_cfun row_key ` P \<subseteq> conforming_keyspace)"
   unfolding universally_def conforming_keyspace_def by simp
 
 text \<open>A functional dependency of the schema holds universally between views, given maximal

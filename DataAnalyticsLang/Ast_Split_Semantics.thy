@@ -8,18 +8,17 @@ text \<open>An AST space whose row keys are the split datasets' keys.  Each AST 
   extended combinator over the extended denotations of its children: its rigid part is the rigid
   denotation, and it is lawful in the extended sense on well-formed ASTs.\<close>
 
-locale ast_split_space = ast_space dim_lod dim_val key_dims fn_other rules keying col_sec col_dim col_val fn_arity ag_sem
-  + split_keyed keying
+locale ast_split_space = ast_space dim_lod dim_val key_dims fn_other col_sec col_dim col_val fn_arity ag_sem
+  + split_keyed
   for dim_lod :: "'d \<Rightarrow> 'k::{domain, lod_domain} semi_factor"
     and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar datum" and key_dims :: "'k \<Rightarrow> 'd list"
     and fn_other :: "'fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum"
-    and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying"
-    and col_sec :: "'c \<Rightarrow> 'r semi_factor" and col_dim :: "'c \<Rightarrow> 'd" and col_val :: "'c \<Rightarrow> 'r \<rightarrow> scalar datum"
+    and col_sec :: "'c \<Rightarrow> 'r::{domain, lod_domain, schema} semi_factor" and col_dim :: "'c \<Rightarrow> 'd" and col_val :: "'c \<Rightarrow> 'r \<rightarrow> scalar datum"
     and fn_arity :: "'fn \<Rightarrow> nat \<Rightarrow> bool"
     and ag_sem :: "'ag \<Rightarrow> scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum"
 begin
 
-sublocale split_dataspace "ast_slicing :: (('d, 'c, 'fn, 'ag) slice, 'k) slicer_ops" rules keying
+sublocale split_dataspace "ast_slicing :: (('d, 'c, 'fn, 'ag) slice, 'k) slicer_ops"
   by unfold_locales
 
 fun asem_ext :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> ('k, ('d, 'c, 'fn, 'ag) slice, 'r, scalar datum) expr_ext" where

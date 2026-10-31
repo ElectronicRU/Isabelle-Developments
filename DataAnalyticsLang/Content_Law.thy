@@ -392,7 +392,7 @@ definition kguard_keyed :: "'k semi_factor \<Rightarrow> 'k guard \<Rightarrow> 
   "kguard_keyed a \<sigma> \<longleftrightarrow> (\<forall>k. \<sigma>\<cdot>(proj a\<cdot>k) = \<sigma>\<cdot>k)"
 
 definition kguard_reads :: "'r semi_factor \<Rightarrow> 'k guard \<Rightarrow> bool" where
-  "kguard_reads c \<sigma> \<longleftrightarrow> (\<forall>y. \<sigma>\<cdot>(rkey\<cdot>(y \<downharpoonright> c)) = \<sigma>\<cdot>(rkey\<cdot>y))"
+  "kguard_reads c \<sigma> \<longleftrightarrow> (\<forall>y. \<sigma>\<cdot>(row_key\<cdot>(y \<downharpoonright> c)) = \<sigma>\<cdot>(row_key\<cdot>y))"
 
 lemma kguard_keyed_gtrue: "kguard_keyed a gtrue"
   by (simp add: kguard_keyed_def)
@@ -455,7 +455,7 @@ definition gfiber :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard)
   "gfiber data e F k = fiber data (elower e) (eupper e) F k"
 
 definition gtruth :: "('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r guard" where
-  "gtruth e F = gand (gand (amb F) (eguard e)) (gand (sopen (coarsen (eupper e) (slice F))) (ekguard e) oo rkey)"
+  "gtruth e F = gand (gand (amb F) (eguard e)) (gand (sopen (coarsen (eupper e) (slice F))) (ekguard e) oo row_key)"
 
 definition gcontent :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> tr option" where
   "gcontent data e F k q = gex {y \<in> gfiber data e F k. rproj (ekeys e) y = q} (Rep_cfun (gtruth e F))"
@@ -465,7 +465,7 @@ abbreviation gcontents :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k g
 
 text \<open>Passing an entry is passing the frame's filters at its upper part and its own guards.\<close>
 
-lemma gtruth_split: "gtruth e F\<cdot>y = pand\<cdot>(fguard (eupper e) F\<cdot>y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(rkey\<cdot>y)))"
+lemma gtruth_split: "gtruth e F\<cdot>y = pand\<cdot>(fguard (eupper e) F\<cdot>y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y)))"
 proof -
   have "pand\<cdot>(pand\<cdot>a\<cdot>b)\<cdot>(pand\<cdot>c\<cdot>d) = pand\<cdot>(pand\<cdot>a\<cdot>c)\<cdot>(pand\<cdot>b\<cdot>d)" for a b c d
     by (metis pand_assoc pand_commute)
@@ -533,7 +533,7 @@ lemma point_simps [simp]:
   "point (es @ es') p = point es p @ point es' p" "length (point es p) = length es"
   by (simp_all add: point_def)
 
-lemma content_single_fiber: "vfiber data e F k = {y} \<Longrightarrow> content data e F k = hd (point [e] (y, rkey\<cdot>y))"
+lemma content_single_fiber: "vfiber data e F k = {y} \<Longrightarrow> content data e F k = hd (point [e] (y, row_key\<cdot>y))"
   by (simp add: content_def cgraph_def cpair_def)
 
 text \<open>A \<^emph>\<open>row entry\<close> keys its content within its lower part, and a row guard entry's guards are
@@ -568,19 +568,19 @@ qed
 lemma row_guard_entry_image:
   assumes r: "row_guard_entry e" and d: "conforms data" and Y: "Y \<subseteq> lower_maximal data"
     and x: "x \<in> Y" and aG: "elower e \<sqsubseteq> G" and agree: "\<And>y. y \<in> Y \<Longrightarrow> rproj G y = rproj G x"
-  shows "gex {y \<in> Y. rproj (ekeys e) y = q} (\<lambda>y. pand\<cdot>(\<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(rkey\<cdot>y)))) =
-    (if q = rproj (ekeys e) x then Some (pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(rkey\<cdot>x)))) else None)"
+  shows "gex {y \<in> Y. rproj (ekeys e) y = q} (\<lambda>y. pand\<cdot>(\<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y)))) =
+    (if q = rproj (ekeys e) x then Some (pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(row_key\<cdot>x)))) else None)"
 proof -
   have sG: "ekeys e \<sqsubseteq> G" and gk: "guard_keyed (elower e) (eguard e)" and kk: "kguard_keyed (elower e) (ekguard e)"
     using r aG unfolding row_guard_entry_def by (blast intro: below_trans)+
   have xm: "x \<in> lower_maximal data" using x Y by blast
   have g: "eguard e\<cdot>y = eguard e\<cdot>x" if y: "y \<in> Y" for y
     using guard_agree[OF gk d xm _ aG agree[OF y]] y Y by blast
-  have k: "ekguard e\<cdot>(rkey\<cdot>y) = ekguard e\<cdot>(rkey\<cdot>x)" if y: "y \<in> Y" for y
+  have k: "ekguard e\<cdot>(row_key\<cdot>y) = ekguard e\<cdot>(row_key\<cdot>x)" if y: "y \<in> Y" for y
   proof -
-    have "ekguard e\<cdot>(rkey\<cdot>y) = ekguard e\<cdot>(rproj (elower e) y)" using kk by (simp add: kguard_keyed_def)
+    have "ekguard e\<cdot>(row_key\<cdot>y) = ekguard e\<cdot>(rproj (elower e) y)" using kk by (simp add: kguard_keyed_def)
     also have "\<dots> = ekguard e\<cdot>(rproj (elower e) x)" by (simp only: rproj_agree[OF aG agree[OF y]])
-    also have "\<dots> = ekguard e\<cdot>(rkey\<cdot>x)" using kk by (simp add: kguard_keyed_def)
+    also have "\<dots> = ekguard e\<cdot>(row_key\<cdot>x)" using kk by (simp add: kguard_keyed_def)
     finally show ?thesis .
   qed
   have h: "rproj (ekeys e) y = rproj (ekeys e) x" if y: "y \<in> Y" for y
@@ -589,10 +589,10 @@ proof -
   proof (cases "q = rproj (ekeys e) x")
     case True
     have s: "{y \<in> Y. rproj (ekeys e) y = q} = Y" using True h by auto
-    have "(\<exists>\<^sub>K y\<in>Y. pand\<cdot>(\<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(rkey\<cdot>y)))) =
-        (\<exists>\<^sub>K y\<in>Y. pand\<cdot>(\<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(rkey\<cdot>x))))"
+    have "(\<exists>\<^sub>K y\<in>Y. pand\<cdot>(\<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y)))) =
+        (\<exists>\<^sub>K y\<in>Y. pand\<cdot>(\<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(row_key\<cdot>x))))"
       by (rule kleene_bex_cong[OF refl]) (simp add: g k)
-    also have "\<dots> = pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(rkey\<cdot>x)))" by (rule kleene_bex_pand_const)
+    also have "\<dots> = pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(row_key\<cdot>x)))" by (rule kleene_bex_pand_const)
     finally show ?thesis unfolding s using True x by (auto simp: gex_def)
   next
     case False
@@ -723,7 +723,7 @@ proof -
   then show ?thesis by (simp add: image_image assms(2))
 qed
 
-lemma sopen_section: "csupp (slod X) \<sqsubseteq> c \<Longrightarrow> sopen X\<cdot>(rkey\<cdot>(y \<downharpoonright> c)) = sopen X\<cdot>(rkey\<cdot>y)"
+lemma sopen_section: "csupp (slod X) \<sqsubseteq> c \<Longrightarrow> sopen X\<cdot>(row_key\<cdot>((y::'r) \<downharpoonright> c)) = sopen X\<cdot>(row_key\<cdot>y)"
   by (metis sopen_lod rproj_section)
 
 text \<open>A view's parts are read off any section covering its columns and its key part's support.\<close>
@@ -1097,13 +1097,13 @@ proof -
   let ?G = "sel_at S (flod F)" and ?T = "(upper_part S \<sqinter> kd E F)"
   have le: "?T \<sqsubseteq> ?G" unfolding group_kd[OF E S] by (rule lattice_join_ge2)
   have yG: "rproj ?G y = proj ?G\<cdot>K" using y by (simp add: fiber_def)
-  have pin: "holds (coarsen (upper_part S) (spin K)) (rkey\<cdot>y)"
+  have pin: "holds (coarsen (upper_part S) (spin K)) (row_key\<cdot>y)"
   proof -
     have "proj (upper_part S)\<cdot>K = proj ?T\<cdot>K" by (simp only: proj_inf K)
     also have "\<dots> = proj ?T\<cdot>(proj ?G\<cdot>K)" by (rule proj_le[OF le, symmetric])
     also have "\<dots> = proj ?T\<cdot>(rproj ?G y)" by (simp only: yG)
     also have "\<dots> = rproj ?T y" by (rule proj_le[OF le])
-    finally have "proj (upper_part S)\<cdot>K \<sqsubseteq> rkey\<cdot>y" using proj_below[of ?T "rkey\<cdot>y"] by simp
+    finally have "proj (upper_part S)\<cdot>K \<sqsubseteq> row_key\<cdot>y" using proj_below[of ?T "row_key\<cdot>y"] by simp
     then show ?thesis by (rule holds_coarsen_spin[OF cK])
   qed
   show ?thesis using pin

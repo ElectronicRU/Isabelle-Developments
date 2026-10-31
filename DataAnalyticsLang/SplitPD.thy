@@ -9,7 +9,7 @@ section \<open>The split powerdomain\<close>
 text \<open>A dataset in the split powerdomain has two parts in different types: \<^emph>\<open>definite rows\<close>,
   ordered as in the lower (Hoare) powerdomain over the row type, and \<^emph>\<open>possible keys\<close>, ordered
   as in the upper (Smyth) powerdomain over the key type.  The two are tied through the key of a
-  row, @{text split_key}: every definite row has its key above some possible key.  Like HOLCF's
+  row, @{text row_key}: every definite row has its key above some possible key.  Like HOLCF's
   powerdomains and the mixed powerdomain (the case where the key of a row is the row itself), it
   is the ideal completion of a preordered basis of pairs of finite sets of compact elements, and
   the consistency condition is stated on the generators of a basis element: on Hoare closures it
@@ -17,17 +17,16 @@ text \<open>A dataset in the split powerdomain has two parts in different types:
   possible keys the Smyth top (definitely no rows), which consistency forces to come with no
   definite rows.
 
-  The key of a row is a constant, left unspecified: instances give it for particular row and key
-  types.  The split powerdomain is pointed; it is bifinite only for suitable keys (spectral ones),
+  The key of a row is the constant @{const row_key}, given by instances for particular row and
+  key types.  The split powerdomain is pointed; it is bifinite only for suitable keys (spectral ones),
   so no generic bifinite instance is given.\<close>
 
-consts split_key :: "'r \<rightarrow> 'k"
 
 
 subsection \<open>The basis\<close>
 
 definition split_consistent :: "'r compact_basis set \<Rightarrow> 'k compact_basis set \<Rightarrow> bool" where
-  "split_consistent X U \<longleftrightarrow> (\<forall>x\<in>X. \<exists>u\<in>U. Rep_compact_basis u \<sqsubseteq> split_key\<cdot>(Rep_compact_basis x))"
+  "split_consistent X U \<longleftrightarrow> (\<forall>x\<in>X. \<exists>u\<in>U. Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x))"
 
 lemma split_consistent_empty [simp]: "split_consistent {} U"
   by (simp add: split_consistent_def)
@@ -55,7 +54,7 @@ lemma finite_srows [simp]: "finite (srows t)"
   using Rep_split_basis [of t] by (auto simp: srows_def skeys_def split: prod.splits)
 
 lemma split_basis_consistentD:
-  "x \<in> srows t \<Longrightarrow> \<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> split_key\<cdot>(Rep_compact_basis x)"
+  "x \<in> srows t \<Longrightarrow> \<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x)"
   using split_basis_consistent [of t] unfolding split_consistent_def by blast
 
 lemma split_basis_eqI: "\<lbrakk>srows s = srows t; skeys s = skeys t\<rbrakk> \<Longrightarrow> s = t"
@@ -417,18 +416,18 @@ interpretation split_approx: approx_chain split_approx
   by (rule approx_chain_split_approx)
 
 definition SUnit :: "'r compact_basis \<Rightarrow> nat \<Rightarrow> ('r, 'k) split_basis" where
-  "SUnit a i = SplitB {a} {Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a)))}"
+  "SUnit a i = SplitB {a} {Abs_compact_basis (split_approx i\<cdot>(row_key\<cdot>(Rep_compact_basis a)))}"
 
 lemma srows_SUnit [simp]: "srows (SUnit a i :: ('r, 'k) split_basis) = {a}"
   and skeys_SUnit [simp]:
     "skeys (SUnit a i :: ('r, 'k) split_basis)
-      = {Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a) :: 'k))}"
+      = {Abs_compact_basis (split_approx i\<cdot>(row_key\<cdot>(Rep_compact_basis a) :: 'k))}"
 proof -
-  have "split_consistent {a} {Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a) :: 'k))}"
+  have "split_consistent {a} {Abs_compact_basis (split_approx i\<cdot>(row_key\<cdot>(Rep_compact_basis a) :: 'k))}"
     by (simp add: split_consistent_def split_approx.approx_below)
   then show "srows (SUnit a i :: ('r, 'k) split_basis) = {a}"
     and "skeys (SUnit a i :: ('r, 'k) split_basis)
-      = {Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a) :: 'k))}"
+      = {Abs_compact_basis (split_approx i\<cdot>(row_key\<cdot>(Rep_compact_basis a) :: 'k))}"
     unfolding SUnit_def by simp_all
 qed
 
@@ -438,12 +437,12 @@ lemma SUnit_split_mono:
 proof -
   have "split_approx i \<sqsubseteq> (split_approx j :: 'k \<rightarrow> 'k)"
     by (rule chain_mono [OF split_approx.chain_approx ij])
-  moreover have "split_key\<cdot>(Rep_compact_basis a) \<sqsubseteq> (split_key\<cdot>(Rep_compact_basis b) :: 'k)"
+  moreover have "row_key\<cdot>(Rep_compact_basis a) \<sqsubseteq> (row_key\<cdot>(Rep_compact_basis b) :: 'k)"
     by (rule monofun_cfun_arg) (use ab in \<open>simp only: compact_le_def\<close>)
-  ultimately have "split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a)) \<sqsubseteq> (split_approx j\<cdot>(split_key\<cdot>(Rep_compact_basis b)) :: 'k)"
+  ultimately have "split_approx i\<cdot>(row_key\<cdot>(Rep_compact_basis a)) \<sqsubseteq> (split_approx j\<cdot>(row_key\<cdot>(Rep_compact_basis b)) :: 'k)"
     by (rule monofun_cfun)
-  then have "Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a)))
-      \<sqsubseteq> (Abs_compact_basis (split_approx j\<cdot>(split_key\<cdot>(Rep_compact_basis b))) :: 'k compact_basis)"
+  then have "Abs_compact_basis (split_approx i\<cdot>(row_key\<cdot>(Rep_compact_basis a)))
+      \<sqsubseteq> (Abs_compact_basis (split_approx j\<cdot>(row_key\<cdot>(Rep_compact_basis b))) :: 'k compact_basis)"
     by (simp only: compact_le_def Abs_compact_basis_inverse' split_approx.compact_approx)
   then show ?thesis using ab unfolding split_le_def hoare_le_def smyth_le_def srows_SUnit skeys_SUnit by simp
 qed
@@ -724,12 +723,12 @@ proof (induct k rule: compact_basis.principal_induct)
 qed (simp add: skeys_upper_def Abs_pd_basis_singleton)
 
 lemma split_keys_unit [simp]:
-  "split_keys\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>(split_key\<cdot>x :: 'k))"
+  "split_keys\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>(row_key\<cdot>x :: 'k))"
 proof (induct x rule: compact_basis.principal_induct)
-  show "adm (\<lambda>x. split_keys\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>(split_key\<cdot>x :: 'k)))"
+  show "adm (\<lambda>x. split_keys\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>(row_key\<cdot>x :: 'k)))"
     by simp
   fix a :: "'r compact_basis"
-  let ?k = "split_key\<cdot>(Rep_compact_basis a) :: 'k"
+  let ?k = "row_key\<cdot>(Rep_compact_basis a) :: 'k"
   have "split_keys\<cdot>(\<Squnion>i. split_principal (SUnit a i) :: ('r, 'k) split_pd)
       = (\<Squnion>i. down\<cdot>(upper_unit\<cdot>(split_approx i\<cdot>?k)))"
   proof -
@@ -926,9 +925,9 @@ text \<open>On compact data, rigid presence reads off the generators: some defin
 
 lemma split_present_principal:
   "split_present (Rep_compact_basis a) (split_principal t :: ('r, 'k) split_pd) \<longleftrightarrow>
-    (\<exists>x\<in>srows t. a \<sqsubseteq> x) \<and> (\<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> split_key\<cdot>(Rep_compact_basis a))"
+    (\<exists>x\<in>srows t. a \<sqsubseteq> x) \<and> (\<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis a))"
 proof -
-  let ?k = "split_key\<cdot>(Rep_compact_basis a) :: 'k"
+  let ?k = "row_key\<cdot>(Rep_compact_basis a) :: 'k"
   let ?C = "\<lambda>i. split_principal (SPlus t (SUnit a i)) :: ('r, 'k) split_pd"
   have C: "chain ?C"
     by (rule chainI, rule split_pd.principal_mono, rule SPlus_split_mono, simp, rule SUnit_split_mono) simp_all
@@ -977,12 +976,11 @@ qed
 
 subsection \<open>Views act on datasets\<close>
 
-text \<open>When the key of a row is the key function of a keying, a view acts on datasets: it
+text \<open>For keyed rows, a view acts on datasets: it
   sections the rows to the view's columns and the support of its key part, and projects the
   possible keys to the key part.  This is a deflation.\<close>
 
-locale split_keyed = keyed keying for keying :: "('r::{domain, lod_domain}, 'k::lod_domain) keying" +
-  assumes split_key_rkey: "split_key = rkey"
+locale split_keyed = keyed
 begin
 
 definition vrow :: "('r, 'k) view \<Rightarrow> 'r compact_basis \<Rightarrow> 'r compact_basis" where
@@ -1002,17 +1000,17 @@ lemma vview_consistent: "split_consistent (vrow v ` srows t) (vkeyb v ` skeys t)
 proof
   fix x' assume "x' \<in> vrow v ` srows t"
   then obtain x where x: "x \<in> srows t" and x': "x' = vrow v x" by blast
-  obtain u where u: "u \<in> skeys t" and ux: "Rep_compact_basis u \<sqsubseteq> split_key\<cdot>(Rep_compact_basis x)"
+  obtain u where u: "u \<in> skeys t" and ux: "Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x)"
     using split_basis_consistentD [OF x] by blast
   let ?s = "fst v \<squnion> csupp (snd v)" and ?a = "snd v"
   have "proj ?a\<cdot>(Rep_compact_basis u) \<sqsubseteq> rproj ?a (Rep_compact_basis x)"
-    using ux unfolding split_key_rkey by (rule monofun_cfun_arg)
+    using ux by (rule monofun_cfun_arg)
   also have "\<dots> = rproj ?a (Rep_compact_basis x \<downharpoonright> ?s)"
     by (rule rproj_section [symmetric]) (rule lattice_join_ge2)
-  also have "\<dots> \<sqsubseteq> rkey\<cdot>(Rep_compact_basis x \<downharpoonright> ?s)"
+  also have "\<dots> \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x \<downharpoonright> ?s)"
     by (rule deflation.below [OF proj_defl])
-  finally show "\<exists>w\<in>vkeyb v ` skeys t. Rep_compact_basis w \<sqsubseteq> split_key\<cdot>(Rep_compact_basis x')"
-    using u unfolding x' split_key_rkey by auto
+  finally show "\<exists>w\<in>vkeyb v ` skeys t. Rep_compact_basis w \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x')"
+    using u unfolding x' by auto
 qed
 
 definition SView :: "('r, 'k) view \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis" where

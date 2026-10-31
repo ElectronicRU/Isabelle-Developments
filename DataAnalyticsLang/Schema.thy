@@ -709,7 +709,7 @@ corollary fd_maximal_members:
     fd a b (lower_maximal X)"
   using chase_closed_pd_iff_rule_holds rule_holds_fd by blast
 
-section \<open>The schema locale\<close>
+section \<open>The schema class\<close>
 
 definition upholds :: "'r presence_rule set \<Rightarrow> 'r chase_rule \<Rightarrow> 'r presence_rule \<Rightarrow> bool" where
   "upholds R c r \<longleftrightarrow> (\<forall>x y z. row_obeys R x \<longrightarrow> row_obeys R y \<longrightarrow> guard c x y \<longrightarrow>
@@ -727,23 +727,26 @@ record 'r schema_rules =
 
 hide_const (open) schema_rules.truncate
 
-locale schema =
-  fixes rules :: "'r schema_rules"
-  assumes antecedent_decisive: "r \<in> presence rules \<Longrightarrow> decisive (trigger r) (antecedent r)"
-    and consequent_up_closed: "r \<in> presence rules \<Longrightarrow> up_closed (consequent r)"
-    and guard_open: "\<forall>c\<in>chase rules. open_guard (guard c)"
-    and rule_maintained: "r \<in> presence rules \<Longrightarrow>
-      (\<forall>c\<in>chase rules. upholds (presence rules) c r) \<or>
-      (\<exists>D. (\<forall>(a, b)\<in>D. fd_rule a b \<in> chase rules) \<and> repairs D r)"
-begin
+text \<open>A schema is a class of row domains: the rules are the row type's.\<close>
 
-abbreviation presence_rules :: "'r presence_rule set" where "presence_rules \<equiv> presence rules"
-abbreviation chase_rules :: "'r chase_rule set" where "chase_rules \<equiv> chase rules"
+class schema = bifinite + distributive_cpo +
+  fixes schema_rules :: "'a schema_rules"
+  assumes antecedent_decisive: "r \<in> presence schema_rules \<Longrightarrow> decisive (trigger r) (antecedent r)"
+    and consequent_up_closed: "r \<in> presence schema_rules \<Longrightarrow> up_closed (consequent r)"
+    and guard_open: "\<forall>c\<in>chase schema_rules. open_guard (guard c)"
+    and rule_maintained: "r \<in> presence schema_rules \<Longrightarrow>
+      (\<forall>c\<in>chase schema_rules. upholds (presence schema_rules) c r) \<or>
+      (\<exists>D. (\<forall>(a, b)\<in>D. fd_rule a b \<in> chase schema_rules) \<and> repairs D r)"
 
-abbreviation conforming_row :: "'r \<Rightarrow> bool" where
+text \<open>The facts about schemas are stated at the class's types rather than in its context.\<close>
+
+abbreviation presence_rules :: "'r::schema presence_rule set" where "presence_rules \<equiv> presence schema_rules"
+abbreviation chase_rules :: "'r::schema chase_rule set" where "chase_rules \<equiv> chase schema_rules"
+
+abbreviation conforming_row :: "'r::schema \<Rightarrow> bool" where
   "conforming_row \<equiv> row_obeys presence_rules"
 
-definition conforms :: "'r lower_pd \<Rightarrow> bool" where
+definition conforms :: "'r::schema lower_pd \<Rightarrow> bool" where
   "conforms X \<longleftrightarrow> obeys_presence_pd presence_rules X \<and> chase_closed_pd chase_rules X"
 
 lemma conforming_row_bot: "conforming_row \<bottom>"
@@ -793,7 +796,5 @@ corollary conforms_fd:
 lemma conforms_iff_rule_holds:
   "conforms X \<longleftrightarrow> obeys_presence_pd presence_rules X \<and> (\<forall>c\<in>chase_rules. rule_holds c X)"
   unfolding conforms_def by (simp add: chase_closed_pd_iff_rule_holds[OF guard_open])
-
-end
 
 end

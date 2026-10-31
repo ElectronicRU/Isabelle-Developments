@@ -68,12 +68,12 @@ text \<open>The symbol tables: dimensions and tabled function symbols as in the 
   symbols are commutative and associative.  The slicer is the one of conditions; a cut's
   condition is a slice of one conjunct.\<close>
 
-locale ast_space = key_language dim_lod dim_val key_dims fn_other + keyed_schema rules keying
+locale ast_space = key_language dim_lod dim_val key_dims fn_other + keyed_schema
   for dim_lod :: "'d \<Rightarrow> 'k::{domain, lod_domain} semi_factor"
     and dim_val :: "'d \<Rightarrow> 'k \<rightarrow> scalar datum" and key_dims :: "'k \<Rightarrow> 'd list"
     and fn_other :: "'fn \<Rightarrow> scalar datum list \<rightarrow> scalar datum"
-    and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying" +
-  fixes col_sec :: "'c \<Rightarrow> 'r semi_factor" and col_dim :: "'c \<Rightarrow> 'd" and col_val :: "'c \<Rightarrow> 'r \<rightarrow> scalar datum"
+  +
+  fixes col_sec :: "'c \<Rightarrow> 'r::{domain, lod_domain, schema} semi_factor" and col_dim :: "'c \<Rightarrow> 'd" and col_val :: "'c \<Rightarrow> 'r \<rightarrow> scalar datum"
     and fn_arity :: "'fn \<Rightarrow> nat \<Rightarrow> bool"
     and ag_sem :: "'ag \<Rightarrow> scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum"
   assumes col_reads: "col_val c\<cdot>(x \<downharpoonright> col_sec c) = col_val c\<cdot>x"
@@ -81,7 +81,7 @@ locale ast_space = key_language dim_lod dim_val key_dims fn_other + keyed_schema
     and ag_abel: "abel_semigroup (\<lambda>a b. ag_sem g\<cdot>a\<cdot>b)"
 begin
 
-sublocale dataspace "ast_slicing :: (('d, 'c, 'fn, 'ag) slice, 'k) slicer_ops" rules keying
+sublocale dataspace "ast_slicing :: (('d, 'c, 'fn, 'ag) slice, 'k) slicer_ops"
   by (simp add: dataspace_def slicer_ast_slicing keyed_schema_axioms)
 
 text \<open>Row-level expressions read the parts of their views directly: dimensions the key part,
@@ -252,13 +252,13 @@ qed simp_all
 theorem esem_row_ast:
   assumes e: "row_ast e" and d: "conforms data" and xm: "x \<in> lower_maximal data"
     and kx: "k = rproj (kd (asem e) F) x"
-  shows "esem (asem e) data F k = Present\<cdot>(pval e\<cdot>(x, rkey\<cdot>x))"
+  shows "esem (asem e) data F k = Present\<cdot>(pval e\<cdot>(x, row_key\<cdot>x))"
 proof -
   have ES: "semilawful (asem e)" by (rule semilawful_asem[OF row_ast_wf[OF e]])
   have k: "proj (kd (asem e) F)\<cdot>k = k" by (simp add: kx)
-  have g: "gcontents data (eguards (asem e)) F k = gpoint (eguards (asem e)) (x, rkey\<cdot>x)"
+  have g: "gcontents data (eguards (asem e)) F k = gpoint (eguards (asem e)) (x, row_key\<cdot>x)"
     by (simp add: row_ast_no_guards[OF e])
-  have "contents data (evalues (asem e)) F k = point (evalues (asem e)) (x, rkey\<cdot>x)"
+  have "contents data (evalues (asem e)) F k = point (evalues (asem e)) (x, row_key\<cdot>x)"
     unfolding point_def
   proof (rule map_cong[OF refl])
     fix e' assume e': "e' \<in> set (evalues (asem e))"
@@ -269,7 +269,7 @@ proof -
     have "cpair e' ` ?Y = {cpair e' x}"
       by (rule row_entry_image[OF semilawful_wf[OF ES e'] r d _ xY lattice_join_ge1])
         (auto simp: vfiber_def fiber_def Gk)
-    then show "content data e' F k = [proj (ekeys e')\<cdot>(snd (x, rkey\<cdot>x)) \<mapsto> fst (x, rkey\<cdot>x) \<downharpoonright> ecols e']"
+    then show "content data e' F k = [proj (ekeys e')\<cdot>(snd (x, row_key\<cdot>x)) \<mapsto> fst (x, row_key\<cdot>x) \<downharpoonright> ecols e']"
       by (simp add: content_def cgraph_def cpair_def)
   qed
   then show ?thesis by (simp only: semilawful_csem[OF ES d k] g csem_point[OF e])
