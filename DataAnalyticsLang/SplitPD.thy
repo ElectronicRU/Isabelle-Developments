@@ -1,5 +1,5 @@
 theory SplitPD
-  imports Views "HOLCF-extra.Top"
+  imports Views "HOLCF-extra.Top" "HOLCF-extra.UpperPD_Representation"
 begin
 
 section \<open>The split powerdomain\<close>
@@ -755,6 +755,84 @@ lemma split_possible_principal:
   "split_possible (Rep_compact_basis k) (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd) \<longleftrightarrow> (\<exists>u\<in>skeys t. u \<sqsubseteq> k)"
   unfolding split_possible_def split_maybe_unit_Rep_compact_basis split_incl_principal
   by (simp add: hoare_le_def smyth_le_def)
+
+text \<open>Possibility is read off the possible keys: a key is possible when the Smyth set of possible
+  keys lies below its unit, that is, when it belongs to the set the Smyth set represents.  So
+  possibility is upward closed.\<close>
+
+lemma split_keys_plus_below: "split_keys\<cdot>(xs \<union>\<^sub>s ys) \<sqsubseteq> split_keys\<cdot>ys"
+proof (induct xs rule: split_pd.principal_induct)
+  case (2 s)
+  show ?case
+  proof (induct ys rule: split_pd.principal_induct)
+    case (2 t)
+    show ?case
+    proof (cases "skeys t = {}")
+      case False
+      have "Abs_pd_basis (skeys s \<union> skeys t) \<le>\<sharp> Abs_pd_basis (skeys t)"
+        using False by (simp add: upper_le_def Abs_pd_basis_inverse pd_basis_def) blast
+      then show ?thesis using False by (simp add: skeys_upper_def upper_pd.principal_mono)
+    qed (simp add: skeys_upper_def)
+  qed simp
+qed simp
+
+lemma split_possible_keys: "split_possible (k::'k::bifinite) (xs :: ('r::bifinite, 'k) split_pd) \<longleftrightarrow> split_keys\<cdot>xs \<sqsubseteq> down\<cdot>{k}\<sharp>"
+proof
+  assume "split_possible k xs"
+  then have "split_keys\<cdot>xs = split_keys\<cdot>(xs \<union>\<^sub>s split_maybe_unit\<cdot>k)" by (simp add: split_possible_def split_incl_def)
+  also have "\<dots> \<sqsubseteq> down\<cdot>{k}\<sharp>" by (rule below_trans [OF split_keys_plus_below]) simp
+  finally show "split_keys\<cdot>xs \<sqsubseteq> down\<cdot>{k}\<sharp>" .
+next
+  assume K: "split_keys\<cdot>xs \<sqsubseteq> down\<cdot>{k}\<sharp>"
+  have kc: "chain (\<lambda>i. split_approx i\<cdot>k)" by (rule ch2ch_Rep_cfunL [OF split_approx.chain_approx])
+  have kl: "(\<Squnion>i. split_approx i\<cdot>k) = k"
+    by (simp add: contlub_cfun_fun [OF split_approx.chain_approx, symmetric])
+  have le: "xs \<union>\<^sub>s split_maybe_unit\<cdot>k \<sqsubseteq> xs"
+    using monofun_cfun_arg [OF split_maybe_unit_bottom_below [of k], of "split_plus\<cdot>xs"] by simp
+  have "split_keys\<cdot>ys \<sqsubseteq> down\<cdot>{k}\<sharp> \<longrightarrow> ys \<sqsubseteq> ys \<union>\<^sub>s split_maybe_unit\<cdot>k" for ys :: "('r::bifinite, 'k) split_pd"
+  proof (induct ys rule: split_pd.principal_induct)
+    case 1
+    show ?case by (intro adm_imp adm_not_below adm_below) simp_all
+  next
+    case (2 s)
+    show ?case
+    proof
+      assume "split_keys\<cdot>(split_principal s) \<sqsubseteq> down\<cdot>{k}\<sharp>"
+      then have ne: "skeys s \<noteq> {}" and "upper_principal (Abs_pd_basis (skeys s)) \<sqsubseteq> {k}\<sharp>"
+        by (auto simp: skeys_upper_def split: if_splits)
+      then obtain u where u: "u \<in> skeys s" "Rep_compact_basis u \<sqsubseteq> k"
+        by (auto simp: upper_principal_below_unit_iff Abs_pd_basis_inverse pd_basis_def)
+      have "Rep_compact_basis u \<sqsubseteq> (\<Squnion>i. split_approx i\<cdot>k)" unfolding kl by (rule u(2))
+      then obtain i where i: "Rep_compact_basis u \<sqsubseteq> split_approx i\<cdot>k"
+        using compact_below_lub_iff [OF Rep_compact_basis' kc] by blast
+      let ?a = "Abs_compact_basis (split_approx i\<cdot>k)"
+      have a: "Rep_compact_basis ?a = split_approx i\<cdot>k" by (rule Abs_compact_basis_inverse' [OF split_approx.compact_approx])
+      have ua: "u \<sqsubseteq> ?a" unfolding compact_le_def a by (rule i)
+      have "split_le s (SPlus s (SKey ?a))"
+        unfolding split_le_def hoare_le_def smyth_le_def using u(1) ua by auto
+      then have "split_principal s \<sqsubseteq> split_principal (SPlus s (SKey ?a))" by (rule split_pd.principal_mono)
+      also have "\<dots> = split_principal s \<union>\<^sub>s split_maybe_unit\<cdot>(split_approx i\<cdot>k)"
+      proof -
+        have "split_maybe_unit\<cdot>(split_approx i\<cdot>k) = (split_principal (SKey ?a) :: ('r, 'k) split_pd)"
+          using split_maybe_unit_Rep_compact_basis [of ?a] unfolding a .
+        then show ?thesis by (simp only: split_plus_principal)
+      qed
+      also have "\<dots> \<sqsubseteq> split_principal s \<union>\<^sub>s split_maybe_unit\<cdot>k"
+        by (intro monofun_cfun_arg split_approx.approx_below)
+      finally show "split_principal s \<sqsubseteq> split_principal s \<union>\<^sub>s split_maybe_unit\<cdot>k" .
+    qed
+  qed
+  then have "xs \<sqsubseteq> xs \<union>\<^sub>s split_maybe_unit\<cdot>k" using K by blast
+  then show "split_possible k xs" unfolding split_possible_def split_incl_def by (rule below_antisym [OF le])
+qed
+
+lemma split_possible_upper_set:
+  "split_keys\<cdot>xs = down\<cdot>U \<Longrightarrow> split_possible k xs \<longleftrightarrow> k \<in> upper_set U"
+  "split_keys\<cdot>xs = Top \<Longrightarrow> \<not> split_possible k xs"
+  by (simp_all add: split_possible_keys upper_set_def)
+
+lemma split_possible_up: "split_possible u xs \<Longrightarrow> u \<sqsubseteq> v \<Longrightarrow> split_possible v xs"
+  unfolding split_possible_keys by (erule below_trans) (simp add: monofun_cfun_arg)
 
 
 text \<open>\<^emph>\<open>Rigid presence\<close>: a row is present when its exact unit is included in the dataset, so
