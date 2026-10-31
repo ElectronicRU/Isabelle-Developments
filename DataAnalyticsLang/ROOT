@@ -23,6 +23,7 @@ session DataAnalyticsLang = "HOLCF-extra" +
     Aggregate
     Ast
     Ast_Semantics
+    Split_Semantics
   document_files
     "root.tex"
     "root.bib"
