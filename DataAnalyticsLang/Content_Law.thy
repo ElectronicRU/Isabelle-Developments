@@ -710,7 +710,7 @@ text \<open>A frame reads a section read by its ambient filter and covering the 
   a plain set, not down-closed: contents are sets of values over data points.\<close>
 
 definition frame_reads :: "'r semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
-  "frame_reads c F \<longleftrightarrow> guard_reads c (amb F) \<and> csupp (slod (slice F)) \<sqsubseteq> c"
+  "frame_reads c F \<longleftrightarrow> guard_reads c (amb F) \<and> key_supp\<cdot>(slod (slice F)) \<sqsubseteq> c"
 
 definition pts_section :: "'r semi_factor \<Rightarrow> 'r lower_pd \<Rightarrow> 'r set" where
   "pts_section c data = (\<lambda>y. y \<downharpoonright> c) ` lower_maximal data"
@@ -723,7 +723,7 @@ proof -
   then show ?thesis by (simp add: image_image assms(2))
 qed
 
-lemma sopen_section: "csupp (slod X) \<sqsubseteq> c \<Longrightarrow> sopen X\<cdot>(row_key\<cdot>((y::'r) \<downharpoonright> c)) = sopen X\<cdot>(row_key\<cdot>y)"
+lemma sopen_section: "key_supp\<cdot>(slod X) \<sqsubseteq> c \<Longrightarrow> sopen X\<cdot>(row_key\<cdot>(y \<downharpoonright> c)) = sopen X\<cdot>(row_key\<cdot>y)"
   by (metis sopen_lod rproj_section)
 
 text \<open>A view's parts are read off any section covering its columns and its key part's support.\<close>
@@ -737,7 +737,7 @@ text \<open>The content of a value entry is computed from the point section at a
   group LOD's support and the entry's view.\<close>
 
 lemma content_section:
-  assumes G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c" and fc: "fst (vsec (eview e)) \<sqsubseteq> c"
+  assumes G: "key_supp\<cdot>(sel_at (esel e) (flod F)) \<sqsubseteq> c" and fc: "fst (vsec (eview e)) \<sqsubseteq> c"
   shows "content data e F k = gmap (cpair e ` {z \<in> pts_section c data.
     rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k})"
 proof -
@@ -755,16 +755,16 @@ text \<open>The content of a guard entry is computed from the point section at a
   group LOD's support, the frame and the entry's key part, and read by the guard.\<close>
 
 lemma gcontent_section:
-  assumes F: "frame_reads c F" and G: "csupp (sel_at (esel e) (flod F)) \<sqsubseteq> c"
-    and kc: "csupp (ekeys e) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)" and gk: "kguard_reads c (ekguard e)"
+  assumes F: "frame_reads c F" and G: "key_supp\<cdot>(sel_at (esel e) (flod F)) \<sqsubseteq> c"
+    and kc: "key_supp\<cdot>(ekeys e) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)" and gk: "kguard_reads c (ekguard e)"
   shows "gcontent data e F k q = gex {z \<in> pts_section c data.
     rproj (sel_at (esel e) (flod F)) z = proj (sel_at (esel e) (flod F))\<cdot>k \<and> rproj (ekeys e) z = q}
     (Rep_cfun (gtruth e F))"
 proof -
   let ?G = "sel_at (esel e) (flod F)"
   let ?P = "\<lambda>z. rproj ?G z = proj ?G\<cdot>k \<and> rproj (ekeys e) z = q"
-  have sl: "csupp (slod (coarsen (eupper e) (slice F))) \<sqsubseteq> c"
-    using F csupp_mono[OF below_trans[OF slod_coarsen lattice_meet_le1]] unfolding frame_reads_def
+  have sl: "key_supp\<cdot>(slod (coarsen (eupper e) (slice F))) \<sqsubseteq> c"
+    using F key_supp_mono[OF below_trans[OF slod_coarsen lattice_meet_le1]] unfolding frame_reads_def
     by (blast intro: below_trans)
   have P: "?P (y \<downharpoonright> c) \<longleftrightarrow> ?P y" for y by (simp add: rproj_section[OF G] rproj_section[OF kc])
   have t: "gtruth e F\<cdot>(y \<downharpoonright> c) = gtruth e F\<cdot>y" for y
@@ -996,19 +996,19 @@ definition entry_reads :: "'r semi_factor \<Rightarrow> ('k, 'r semi_factor) ent
   "entry_reads c e \<longleftrightarrow> fst (vsec (eview e)) \<sqsubseteq> c"
 
 lemma contents_section:
-  assumes E: "semilawful E" and F: "frame_reads c F" and K: "csupp (kd E F) \<sqsubseteq> c"
-    and gr: "\<And>e. e \<in> set (eguards E) \<Longrightarrow> csupp (ekeys e) \<sqsubseteq> c \<and> guard_reads c (eguard e) \<and> kguard_reads c (ekguard e)"
+  assumes E: "semilawful E" and F: "frame_reads c F" and K: "key_supp\<cdot>(kd E F) \<sqsubseteq> c"
+    and gr: "\<And>e. e \<in> set (eguards E) \<Longrightarrow> key_supp\<cdot>(ekeys e) \<sqsubseteq> c \<and> guard_reads c (eguard e) \<and> kguard_reads c (ekguard e)"
     and cols: "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_reads c e"
     and sec: "pts_section c data = pts_section c data'"
   shows "gcontents data (eguards E) F k = gcontents data' (eguards E) F k"
     and "contents data (evalues E) F k = contents data' (evalues E) F k"
 proof -
-  have G: "csupp (sel_at S (flod F)) \<sqsubseteq> c" if "S \<in> set (esels E)" for S
-    by (rule below_trans[OF csupp_mono[OF group_below_kd[OF E that]] K])
+  have G: "key_supp\<cdot>(sel_at S (flod F)) \<sqsubseteq> c" if "S \<in> set (esels E)" for S
+    by (rule below_trans[OF key_supp_mono[OF group_below_kd[OF E that]] K])
   show "gcontents data (eguards E) F k = gcontents data' (eguards E) F k"
   proof (rule map_cong[OF refl])
     fix e assume e: "e \<in> set (eguards E)"
-    have kc: "csupp (ekeys e) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)" and gk: "kguard_reads c (ekguard e)"
+    have kc: "key_supp\<cdot>(ekeys e) \<sqsubseteq> c" and gc: "guard_reads c (eguard e)" and gk: "kguard_reads c (ekguard e)"
       using gr[OF e] by simp_all
     show "gcontent data e F k = gcontent data' e F k"
       unfolding fun_eq_iff gcontent_section[OF F G[OF esels_guardI[OF e]] kc gc gk] sec by simp
@@ -1158,8 +1158,8 @@ text \<open>Locality: the semantics at a frame depends on the dataset only throu
 
 theorem sem_section:
   assumes E: "semilawful E" and d: "conforms data" and d': "conforms data'"
-    and F: "frame_reads c F" and K: "csupp (kd E F) \<sqsubseteq> c"
-    and gr: "\<And>e. e \<in> set (eguards E) \<Longrightarrow> csupp (ekeys e) \<sqsubseteq> c \<and> guard_reads c (eguard e) \<and> kguard_reads c (ekguard e)"
+    and F: "frame_reads c F" and K: "key_supp\<cdot>(kd E F) \<sqsubseteq> c"
+    and gr: "\<And>e. e \<in> set (eguards E) \<Longrightarrow> key_supp\<cdot>(ekeys e) \<sqsubseteq> c \<and> guard_reads c (eguard e) \<and> kguard_reads c (ekguard e)"
     and cols: "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_reads c e"
     and sec: "pts_section c data = pts_section c data'" and k: "proj (kd E F)\<cdot>k = k"
   shows "esem E data F k = esem E data' F k"

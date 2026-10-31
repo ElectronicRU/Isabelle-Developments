@@ -118,6 +118,18 @@ lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarro
 definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_lawful X \<longleftrightarrow> semilawful X \<and> ext_sound X"
 
+text \<open>\<^emph>\<open>Continuity\<close>: on split datasets with conforming definite rows the extended semantics is
+  continuous in the dataset.  Then it is a continuous function there.\<close>
+
+definition ext_cont :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
+  "ext_cont X \<longleftrightarrow> (\<forall>F k. cont (\<lambda>D :: ('r, 'k) conf_split. sem_ext X (Rep_conf_split D) F k))"
+
+definition ext_fun :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) conf_split \<rightarrow> 'v option_pd" where
+  "ext_fun X F k = (\<Lambda> D. sem_ext X (Rep_conf_split D) F k)"
+
+lemma ext_fun_apply: "ext_cont X \<Longrightarrow> ext_fun X F k\<cdot>D = sem_ext X (Rep_conf_split D) F k"
+  unfolding ext_cont_def ext_fun_def by simp
+
 
 subsection \<open>Keys\<close>
 

@@ -26,17 +26,21 @@ text \<open>Rows carry keys: the \<^emph>\<open>row key\<close> of a row type at
   support of each key part.  Both are constants, given by instances for particular row and key types.\<close>
 
 consts row_key :: "'r::cpo \<rightarrow> 'k::cpo"
-consts csupp :: "'k semi_factor \<Rightarrow> 'r semi_factor"
+consts key_supp :: "'k semi_factor \<rightarrow> 'r semi_factor"
 
 text \<open>Keyed rows: a key part is read off the section at its support, and supports are compact and
-  join-preserving.  Keyed rows have a schema.\<close>
+  join-preserving.  Keyed rows have a schema.  In the locale the constants are fixed at its row and
+  key types.\<close>
 
 locale keyed =
-  assumes csupp_reads: "proj a\<cdot>(row_key\<cdot>((x::'r::{domain, lod_domain, schema}) \<downharpoonright> csupp a)) = proj a\<cdot>(row_key\<cdot>x :: 'k::{domain, lod_domain})"
-    and csupp_bot: "csupp (\<bottom> :: 'k semi_factor) = (\<bottom> :: 'r semi_factor)"
-    and csupp_sup: "csupp (a \<squnion> b :: 'k semi_factor) = (csupp a \<squnion> csupp b :: 'r semi_factor)"
-    and csupp_compact: "compact (a :: 'k semi_factor) \<Longrightarrow> compact (csupp a :: 'r semi_factor)"
+  assumes key_supp_reads: "proj a\<cdot>(row_key\<cdot>((x::'r::{domain, lod_domain, schema}) \<downharpoonright> key_supp\<cdot>a)) = proj a\<cdot>(row_key\<cdot>x :: 'k::{domain, lod_domain})"
+    and key_supp_bot: "key_supp\<cdot>(\<bottom> :: 'k semi_factor) = (\<bottom> :: 'r semi_factor)"
+    and key_supp_sup: "key_supp\<cdot>(a \<squnion> b :: 'k semi_factor) = (key_supp\<cdot>a \<squnion> key_supp\<cdot>b :: 'r semi_factor)"
+    and key_supp_compact: "compact (a :: 'k semi_factor) \<Longrightarrow> compact (key_supp\<cdot>a :: 'r semi_factor)"
 begin
+
+abbreviation row_key :: "'r \<rightarrow> 'k" where "row_key \<equiv> Views.row_key"
+abbreviation key_supp :: "'k semi_factor \<rightarrow> 'r semi_factor" where "key_supp \<equiv> Views.key_supp"
 
 abbreviation rproj :: "'k semi_factor \<Rightarrow> 'r \<Rightarrow> 'k" where
   "rproj a x \<equiv> proj a\<cdot>(row_key\<cdot>x)"
@@ -54,11 +58,11 @@ lemma vpart_pproj: "v \<sqsubseteq> w \<Longrightarrow> pproj v\<cdot>(vpart w x
 
 text \<open>A key part is read off any section covering its support.\<close>
 
-lemma rproj_section: "csupp a \<sqsubseteq> c \<Longrightarrow> rproj a (y \<downharpoonright> c) = rproj a y"
-  by (metis csupp_reads proj_le)
+lemma rproj_section: "key_supp\<cdot>a \<sqsubseteq> c \<Longrightarrow> rproj a (y \<downharpoonright> c) = rproj a y"
+  by (metis key_supp_reads proj_le)
 
-lemma csupp_mono: "(a :: 'k semi_factor) \<sqsubseteq> b \<Longrightarrow> csupp a \<sqsubseteq> (csupp b :: 'r semi_factor)"
-  by (metis csupp_sup join_absorb lattice_join_ge1)
+lemma key_supp_mono: "a \<sqsubseteq> b \<Longrightarrow> key_supp\<cdot>a \<sqsubseteq> key_supp\<cdot>b"
+  by (rule monofun_cfun_arg)
 
 subsection \<open>Dependencies on a set of rows\<close>
 
@@ -171,10 +175,10 @@ lemma vfd_sup: "vfd P u v \<Longrightarrow> vfd P u w \<Longrightarrow> vfd P u 
 
 text \<open>Columns-to-keys dependencies are a matter of computation.\<close>
 
-lemma vfd_support: "csupp a \<sqsubseteq> c \<Longrightarrow> vfd P (c, \<bottom>) (\<bottom>, a)"
+lemma vfd_support: "key_supp\<cdot>a \<sqsubseteq> c \<Longrightarrow> vfd P (c, \<bottom>) (\<bottom>, a)"
   unfolding determines_def vproj_apply
 proof (intro ballI impI)
-  fix x y assume le: "csupp a \<sqsubseteq> c" and below: "vpart (c, \<bottom>) x \<sqsubseteq> vpart (c, \<bottom>) y"
+  fix x y assume le: "key_supp\<cdot>a \<sqsubseteq> c" and below: "vpart (c, \<bottom>) x \<sqsubseteq> vpart (c, \<bottom>) y"
   have "x \<downharpoonright> c \<sqsubseteq> y \<downharpoonright> c" using below by (simp add: vpart_below_iff)
   then have "rproj a (x \<downharpoonright> c) \<sqsubseteq> rproj a (y \<downharpoonright> c)" by (rule monofun_cfun_arg[OF monofun_cfun_arg])
   then have "rproj a x \<sqsubseteq> rproj a y" by (simp only: rproj_section[OF le])
@@ -193,7 +197,7 @@ definition vkey :: "('r, 'k) view \<Rightarrow> ('r, 'k) view" where
   "vkey v = (\<bottom>, snd v)"
 
 definition vsec :: "('r, 'k) view \<Rightarrow> ('r, 'k) view" where
-  "vsec v = (fst v \<squnion> csupp (snd v), \<bottom>)"
+  "vsec v = (fst v \<squnion> key_supp\<cdot>(snd v), \<bottom>)"
 
 definition vdet :: "('r, 'k) view \<Rightarrow> ('r, 'k) view \<Rightarrow> bool" (infix \<open>\<preceq>\<close> 50) where
   "v \<preceq> w \<longleftrightarrow> vfd UNIV w v"
@@ -211,7 +215,7 @@ lemma vkey_join: "vkey (v \<squnion> w) = vkey v \<squnion> vkey w"
   by (simp add: vkey_def lattice_join_prod)
 
 lemma vsec_idem [simp]: "vsec (vsec v) = vsec v"
-  by (simp add: vsec_def csupp_bot)
+  by (simp add: vsec_def key_supp_bot)
 
 lemma vdet_refl [simp]: "v \<preceq> v"
   unfolding vdet_def by (rule vfd_refl) simp
@@ -235,13 +239,13 @@ lemma vdet_vsec: "v \<preceq> vsec v"
   unfolding vdet_def determines_def vproj_apply
 proof (intro ballI impI)
   fix x y assume below: "vpart (vsec v) x \<sqsubseteq> vpart (vsec v) y"
-  let ?s = "fst v \<squnion> csupp (snd v)"
+  let ?s = "fst v \<squnion> key_supp\<cdot>(snd v)"
   have s: "x \<downharpoonright> ?s \<sqsubseteq> y \<downharpoonright> ?s" using below by (simp add: vsec_def vpart_def below_prod_def)
   have "x \<downharpoonright> fst v \<sqsubseteq> y \<downharpoonright> fst v"
     using monofun_cfun_arg[OF s, of "proj (fst v)"] by (simp add: proj_le lattice_join_ge1)
   moreover have "rproj (snd v) x \<sqsubseteq> rproj (snd v) y"
   proof -
-    have le: "csupp (snd v) \<sqsubseteq> ?s" by (rule lattice_join_ge2)
+    have le: "key_supp\<cdot>(snd v) \<sqsubseteq> ?s" by (rule lattice_join_ge2)
     have "rproj (snd v) (x \<downharpoonright> ?s) \<sqsubseteq> rproj (snd v) (y \<downharpoonright> ?s)" by (rule monofun_cfun_arg[OF monofun_cfun_arg[OF s]])
     then show ?thesis by (simp only: rproj_section[OF le])
   qed
@@ -253,10 +257,10 @@ text \<open>Factoring: a continuous function determined by a view on all rows fa
 
 theorem determines_factor:
   assumes "determines UNIV v f"
-  shows "f = f oo proj (fst v \<squnion> csupp (snd v))"
+  shows "f = f oo proj (fst v \<squnion> key_supp\<cdot>(snd v))"
 proof (rule cfun_eqI)
   fix x
-  let ?s = "fst v \<squnion> csupp (snd v)"
+  let ?s = "fst v \<squnion> key_supp\<cdot>(snd v)"
   have p: "vsec v = (?s, \<bottom>)" by (rule vsec_def)
   have s: "determines UNIV (?s, \<bottom>) f"
     using determines_vdet[OF assms vdet_vsec] unfolding p .
@@ -358,7 +362,7 @@ corollary vfactor_vproj:
   by (rule cfun_eqI) (simp add: vfactor_vpart)
 
 corollary determines_factor_ex:
-  "determines UNIV v f \<Longrightarrow> \<exists>h. f = h oo proj (fst v \<squnion> csupp (snd v))"
+  "determines UNIV v f \<Longrightarrow> \<exists>h. f = h oo proj (fst v \<squnion> key_supp\<cdot>(snd v))"
   by (blast dest: determines_factor)
 
 text \<open>Joins: a view determined by two views' join is bounded by both; a join is the least
@@ -377,16 +381,16 @@ text \<open>A key part is \<^emph>\<open>exact\<close> when it determines its de
   is one-to-one with those columns.  For exact key parts the section is equivalent to the view.\<close>
 
 definition exact_key :: "'k semi_factor \<Rightarrow> bool" where
-  "exact_key a \<longleftrightarrow> (csupp a, \<bottom>) \<preceq> (\<bottom>, a)"
+  "exact_key a \<longleftrightarrow> (key_supp\<cdot>a, \<bottom>) \<preceq> (\<bottom>, a)"
 
 theorem vsec_vdet_exact:
   assumes "exact_key (snd v)"
   shows "vsec v \<preceq> v"
 proof -
-  have "vsec v = (fst v, \<bottom>) \<squnion> (csupp (snd v), \<bottom>)"
+  have "vsec v = (fst v, \<bottom>) \<squnion> (key_supp\<cdot>(snd v), \<bottom>)"
     by (simp add: vsec_def lattice_join_prod lattice_join_bot_left)
   moreover have "(fst v, \<bottom>) \<preceq> v" by (rule below_vdet) (simp add: below_prod_def)
-  moreover have "(csupp (snd v), \<bottom>) \<preceq> v"
+  moreover have "(key_supp\<cdot>(snd v), \<bottom>) \<preceq> v"
     using assms unfolding exact_key_def
     by (rule vdet_trans) (rule below_vdet, simp add: below_prod_def)
   ultimately show ?thesis by (simp only: vdet_join)
@@ -504,16 +508,16 @@ text \<open>A key is \<^emph>\<open>strong\<close> when it is functionally equiv
   to keys: recover the columns from the key, then compute the other key from them.\<close>
 
 definition strong_key :: "'k semi_factor \<Rightarrow> bool" where
-  "strong_key a \<longleftrightarrow> universally (\<lambda>P. vfd P (\<bottom>, a) (csupp a, \<bottom>))"
+  "strong_key a \<longleftrightarrow> universally (\<lambda>P. vfd P (\<bottom>, a) (key_supp\<cdot>a, \<bottom>))"
 
 lemma strong_key_equiv:
   "strong_key a \<Longrightarrow> conforms X \<Longrightarrow>
-    vfd (lower_maximal X) (\<bottom>, a) (csupp a, \<bottom>) \<and> vfd (lower_maximal X) (csupp a, \<bottom>) (\<bottom>, a)"
+    vfd (lower_maximal X) (\<bottom>, a) (key_supp\<cdot>a, \<bottom>) \<and> vfd (lower_maximal X) (key_supp\<cdot>a, \<bottom>) (\<bottom>, a)"
   unfolding strong_key_def by (auto dest: universallyD intro: vfd_support)
 
 theorem strong_key_transfer:
-  assumes a: "strong_key a" and c: "universally (\<lambda>P. vfd P (csupp a, \<bottom>) (c, \<bottom>))"
-    and b: "csupp b \<sqsubseteq> c"
+  assumes a: "strong_key a" and c: "universally (\<lambda>P. vfd P (key_supp\<cdot>a, \<bottom>) (c, \<bottom>))"
+    and b: "key_supp\<cdot>b \<sqsubseteq> c"
   shows "universally (\<lambda>P. vfd P (\<bottom>, a) (\<bottom>, b))"
   using a c unfolding strong_key_def
   by (rule universally_mono2) (blast intro: determines_trans vfd_support[OF b])

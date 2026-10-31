@@ -1026,12 +1026,12 @@ locale split_keyed = keyed
 begin
 
 definition vrow :: "('r, 'k) view \<Rightarrow> 'r compact_basis \<Rightarrow> 'r compact_basis" where
-  "vrow v x = Abs_compact_basis (Rep_compact_basis x \<downharpoonright> (fst v \<squnion> csupp (snd v)))"
+  "vrow v x = Abs_compact_basis (Rep_compact_basis x \<downharpoonright> (fst v \<squnion> key_supp\<cdot>(snd v)))"
 
 definition vkeyb :: "('r, 'k) view \<Rightarrow> 'k compact_basis \<Rightarrow> 'k compact_basis" where
   "vkeyb v u = Abs_compact_basis (proj (snd v)\<cdot>(Rep_compact_basis u))"
 
-lemma Rep_vrow [simp]: "Rep_compact_basis (vrow v x) = Rep_compact_basis x \<downharpoonright> (fst v \<squnion> csupp (snd v))"
+lemma Rep_vrow [simp]: "Rep_compact_basis (vrow v x) = Rep_compact_basis x \<downharpoonright> (fst v \<squnion> key_supp\<cdot>(snd v))"
   unfolding vrow_def by (simp add: compact_proj_compact)
 
 lemma Rep_vkeyb [simp]: "Rep_compact_basis (vkeyb v u) = proj (snd v)\<cdot>(Rep_compact_basis u)"
@@ -1044,7 +1044,7 @@ proof
   then obtain x where x: "x \<in> srows t" and x': "x' = vrow v x" by blast
   obtain u where u: "u \<in> skeys t" and ux: "Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x)"
     using split_basis_consistentD [OF x] by blast
-  let ?s = "fst v \<squnion> csupp (snd v)" and ?a = "snd v"
+  let ?s = "fst v \<squnion> key_supp\<cdot>(snd v)" and ?a = "snd v"
   have "proj ?a\<cdot>(Rep_compact_basis u) \<sqsubseteq> rproj ?a (Rep_compact_basis x)"
     using ux by (rule monofun_cfun_arg)
   also have "\<dots> = rproj ?a (Rep_compact_basis x \<downharpoonright> ?s)"
