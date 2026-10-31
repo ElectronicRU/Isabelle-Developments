@@ -48,6 +48,35 @@ proof -
   show ?thesis unfolding agg_fold_def AB F e ..
 qed
 
+text \<open>A finite fold is monotone in the members, and leaving out members below the unit raises it.\<close>
+
+lemma agg_fold_mono:
+  assumes A: "finite A" and vw: "\<And>a. a \<in> A \<Longrightarrow> v a \<sqsubseteq> w a"
+  shows "agg_fold f v A \<sqsubseteq> agg_fold f w A"
+  unfolding agg_fold_finite[OF A] using A vw
+proof (induct A rule: finite_induct)
+  case (insert a B)
+  show ?case unfolding agg.insert[OF insert(1,2)]
+    by (rule monofun_cfun[OF monofun_cfun_arg insert(3)]) (simp_all add: insert(4))
+qed simp
+
+lemma agg_fold_drop:
+  assumes B: "finite B" and AB: "A \<subseteq> B" and v: "\<And>a. a \<in> B - A \<Longrightarrow> v a \<sqsubseteq> Absent"
+  shows "agg_fold f v B \<sqsubseteq> agg_fold f v A"
+proof -
+  have A: "finite A" by (rule finite_subset[OF AB B])
+  have "agg_fold f v (B - A) \<sqsubseteq> agg_fold f (\<lambda>_. Absent) (B - A)"
+    by (rule agg_fold_mono[OF finite_Diff[OF B] v])
+  also have "\<dots> = Absent" by (rule agg_fold_absent[OF finite_Diff[OF B]]) simp
+  finally have D: "agg_fold f v (B - A) \<sqsubseteq> Absent" .
+  have "agg_fold f v B = combine_option_pd f\<cdot>(agg_fold f v (B - A))\<cdot>(agg_fold f v A)"
+    unfolding agg_fold_finite[OF B] agg_fold_finite[OF A] agg_fold_finite[OF finite_Diff[OF B]]
+    by (rule agg.subset_diff[OF AB B])
+  also have "\<dots> \<sqsubseteq> combine_option_pd f\<cdot>Absent\<cdot>(agg_fold f v A)" by (rule monofun_cfun_fun[OF monofun_cfun_arg[OF D]])
+  also have "\<dots> = agg_fold f v A" by (rule agg.left_neutral)
+  finally show ?thesis .
+qed
+
 text \<open>The fold is continuous in the folded values: a finite fold is a composite of continuous
   operations, and presence of a member is decided by a compact value.\<close>
 

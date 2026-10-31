@@ -1,5 +1,5 @@
 theory Split_Semantics
-  imports Expr_Combinators SplitPD
+  imports Expr_Combinators Aggregate SplitPD
 begin
 
 default_sort type
@@ -92,25 +92,25 @@ locale split_dataspace = dataspace slicing rules keying + split_keyed keying
     and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying"
 begin
 
-text \<open>\<^emph>\<open>Soundness\<close>: below a compact dataset whose definite rows are \<open>data\<close>, conforming
-  relative to the expression's value entries, the extended semantics is below the rigid semantics
+text \<open>\<^emph>\<open>Soundness\<close>: below a compact dataset whose definite rows are \<open>data\<close>, a conforming
+  dataset, conforming moreover relative to the expression's value entries, the extended semantics is below the rigid semantics
   of \<open>data\<close>, at every key of the key LOD.  Compact datasets with definite rows are where the rigid
   semantics is meant: it reads no possible keys, and its datasets cannot be empty.  An
   \<^emph>\<open>extended-lawful\<close> expression is moreover semilawful.\<close>
 
 definition ext_sound :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
-  "ext_sound X \<longleftrightarrow> (\<forall>D D' data F k. D \<sqsubseteq> D' \<longrightarrow> compact D' \<longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<longrightarrow>
+  "ext_sound X \<longleftrightarrow> (\<forall>D D' data F k. D \<sqsubseteq> D' \<longrightarrow> compact D' \<longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<longrightarrow> conforms data \<longrightarrow>
      fconf (evalues X) data F \<longrightarrow> proj (kd X F)\<cdot>k = k \<longrightarrow>
      sem_ext X D F k \<sqsubseteq> esem X data F k)"
 
 lemma ext_soundI:
-  "(\<And>D D' data F k. D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<Longrightarrow>
+  "(\<And>D D' data F k. D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<Longrightarrow> conforms data \<Longrightarrow>
      fconf (evalues X) data F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
      sem_ext X D F k \<sqsubseteq> esem X data F k) \<Longrightarrow> ext_sound X"
   unfolding ext_sound_def by blast
 
 lemma ext_soundD:
-  "ext_sound X \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<Longrightarrow>
+  "ext_sound X \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<Longrightarrow> conforms data \<Longrightarrow>
      fconf (evalues X) data F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
      sem_ext X D F k \<sqsubseteq> esem X data F k"
   unfolding ext_sound_def by blast
@@ -386,12 +386,12 @@ lemma filtfor_ext_simps [simp]:
 theorem ext_sound_filtfor: "ext_sound X \<Longrightarrow> ext_sound (filtfor_ext \<tau> G X)"
 proof (rule ext_soundI, simp only: filtfor_ext_simps filtfor_simps)
   fix D D' :: "('r, 'k) split_pd" and data F k
-  assume X: "ext_sound X" and DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+  assume X: "ext_sound X" and DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data" and cf: "conforms data"
     and d: "fconf (map (for_value \<tau>) (evalues X)) data F"
   have d': "fconf (evalues X) data (ffor \<tau> G F)" using d by (simp only: fconf_filtfor [of _ _ _ _ G])
   show "sem_ext X D (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)
       \<sqsubseteq> esem X data (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)"
-    by (rule ext_soundD [OF X DD cD nD d' proj_idem])
+    by (rule ext_soundD [OF X DD cD nD cf d' proj_idem])
 qed
 
 theorem ext_lawful_filtfor: "ext_lawful X \<Longrightarrow> ext_lawful (filtfor_ext \<tau> G X)"
@@ -432,13 +432,13 @@ theorem ext_sound_include_dims:
   shows "ext_sound (include_dims_ext M X)"
 proof (rule ext_soundI, simp only: include_dims_ext_simps include_dims_simps(3,4))
   fix D D' :: "('r, 'k) split_pd" and data F k
-  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data" and cf: "conforms data"
     and d: "fconf (map (include_entry M) (evalues X)) data F"
     and k: "proj (kd (include_dims M X) F)\<cdot>k = k"
   have d': "fconf (evalues X) data (finclude M F)" using d by (simp only: fconf_include)
   have k': "proj (kd X (finclude M F))\<cdot>k = k" by (rule proj_fix_mono [OF include_dims_kd_below [OF ES] k])
   show "sem_ext X D (finclude M F) k \<sqsubseteq> esem X data (finclude M F) k"
-    by (rule ext_soundD [OF X DD cD nD d' k'])
+    by (rule ext_soundD [OF X DD cD nD cf d' k'])
 qed
 
 theorem ext_lawful_include_dims: "ext_lawful X \<Longrightarrow> ext_lawful (include_dims_ext M X)"
@@ -464,19 +464,223 @@ theorem ext_sound_combine:
   shows "ext_sound (combine_ext f X\<^sub>1 X\<^sub>2)"
 proof (rule ext_soundI, simp only: combine_ext_simps combine_simps)
   fix D D' :: "('r, 'k) split_pd" and data F k
-  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data" and cf: "conforms data"
     and d: "fconf (evalues X\<^sub>1 @ evalues X\<^sub>2) data F"
   have d1: "fconf (evalues X\<^sub>1) data F" and d2: "fconf (evalues X\<^sub>2) data F"
     using d by (simp_all add: fconf_def)
   show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd X\<^sub>2 F)\<cdot>k))
       \<sqsubseteq> lift2_option_pd f\<cdot>(esem X\<^sub>1 data F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>
           (esem X\<^sub>2 data F (proj (kd X\<^sub>2 F)\<cdot>k))"
-    by (rule monofun_cfun [OF monofun_cfun_arg ext_soundD [OF X\<^sub>2 DD cD nD d2 proj_idem]],
-        rule ext_soundD [OF X\<^sub>1 DD cD nD d1 proj_idem])
+    by (rule monofun_cfun [OF monofun_cfun_arg ext_soundD [OF X\<^sub>2 DD cD nD cf d2 proj_idem]],
+        rule ext_soundD [OF X\<^sub>1 DD cD nD cf d1 proj_idem])
 qed
 
 theorem ext_lawful_combine: "ext_lawful X\<^sub>1 \<Longrightarrow> ext_lawful X\<^sub>2 \<Longrightarrow> ext_lawful (combine_ext f X\<^sub>1 X\<^sub>2)"
   unfolding ext_lawful_def by (simp add: semilawful_combine ext_sound_combine)
+
+
+subsection \<open>Presence tests\<close>
+
+text \<open>A group is populated where some definite row at a key maximal at the fiber's LOD passes
+  the frame's filter: the data point above it is in the fiber and passes too.  It is unpopulated
+  where no possible key projects to the key, and undecided otherwise.\<close>
+
+definition populated_ext :: "('r, 'k) split_pd \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> tr" where
+  "populated_ext D a \<rho> F k = (if maximal_at (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) \<and>
+       (\<exists>y. split_definite y D \<and> rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k \<and> fguard \<rho> F\<cdot>y = TT)
+     then TT
+     else if \<exists>u. split_possible u D \<and> proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>u = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k then \<bottom> else FF)"
+
+lemma populated_ext_sound:
+  assumes DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
+  shows "populated_ext D a \<rho> F k \<sqsubseteq> populated data a \<rho> F k"
+proof -
+  let ?L = "a \<squnion> (\<rho> \<sqinter> flod F)"
+  have fib: "fiber data a \<rho> F k = {m \<in> lower_maximal data. rproj ?L m = proj ?L\<cdot>k}"
+    by (simp add: fiber_def)
+  show ?thesis
+  proof (cases "maximal_at ?L (proj ?L\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj ?L y = proj ?L\<cdot>k \<and> fguard \<rho> F\<cdot>y = TT)")
+    case True
+    then obtain y where mx: "maximal_at ?L (proj ?L\<cdot>k)" and y: "split_definite y D" "rproj ?L y = proj ?L\<cdot>k"
+      and g: "fguard \<rho> F\<cdot>y = TT" by blast
+    have mx': "maximal_at ?L (rproj ?L y)" using mx y(2) by simp
+    obtain m where m: "m \<in> lower_maximal data" "y \<sqsubseteq> m" "rproj ?L m = rproj ?L y"
+      using definite_maximal_point [OF DD d y(1) mx'] by blast
+    have mF: "m \<in> fiber data a \<rho> F k" using fib m(1,3) y(2) by simp
+    have "TT \<sqsubseteq> fguard \<rho> F\<cdot>m" unfolding g [symmetric] by (rule monofun_cfun_arg [OF m(2)])
+    then have "fguard \<rho> F\<cdot>m = TT" by simp
+    then have "populated data a \<rho> F k = TT" unfolding populated_def kleene_bex_TT_iff using mF by blast
+    then show ?thesis unfolding populated_ext_def using True by simp
+  next
+    case nT: False
+    show ?thesis
+    proof (cases "\<exists>u. split_possible u D \<and> proj ?L\<cdot>u = proj ?L\<cdot>k")
+      case True
+      show ?thesis unfolding populated_ext_def by (simp only: if_not_P [OF nT] if_P [OF True] minimal)
+    next
+      case nA: False
+      have "fiber data a \<rho> F k = {}"
+      proof (rule ccontr)
+        assume "fiber data a \<rho> F k \<noteq> {}"
+        then obtain m where m: "m \<in> lower_maximal data" "rproj ?L m = proj ?L\<cdot>k" using fib by blast
+        have "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
+        then show False using nA m(2) by blast
+      qed
+      then show ?thesis unfolding populated_ext_def populated_def by (simp only: if_not_P [OF nT] if_not_P [OF nA]) simp
+    qed
+  qed
+qed
+
+definition present_at_ext :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
+  "present_at_ext a \<rho> X = with_ext (present_at a \<rho> X)
+     (\<lambda>D F k. populated_ext D (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X D F (proj (kd X F)\<cdot>k))"
+
+lemma present_at_ext_simps [simp]:
+  "semilawful (present_at_ext a \<rho> X) \<longleftrightarrow> semilawful (present_at a \<rho> X)"
+  "emind (present_at_ext a \<rho> X) = emind (present_at a \<rho> X)" "eguards (present_at_ext a \<rho> X) = eguards (present_at a \<rho> X)"
+  "evalues (present_at_ext a \<rho> X) = evalues (present_at a \<rho> X)"
+  "esem (present_at_ext a \<rho> X) = esem (present_at a \<rho> X)" "csem (present_at_ext a \<rho> X) = csem (present_at a \<rho> X)"
+  "sem_ext (present_at_ext a \<rho> X) D F k = populated_ext D (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X D F (proj (kd X F)\<cdot>k)"
+  by (simp_all add: present_at_ext_def)
+
+theorem ext_sound_present_at: "ext_sound X \<Longrightarrow> ext_sound (present_at_ext a \<rho> X)"
+proof (rule ext_soundI, simp only: present_at_ext_simps present_at_simps)
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume X: "ext_sound X" and DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+    and cf: "conforms data" and d: "fconf (evalues X) data F"
+  show "populated_ext D (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X D F (proj (kd X F)\<cdot>k)
+      \<sqsubseteq> populated data (emind X \<squnion> a) \<rho> F k \<odot> esem X data F (proj (kd X F)\<cdot>k)"
+    by (rule monofun_cfun [OF monofun_cfun_arg [OF populated_ext_sound [OF DD cD nD]] ext_soundD [OF X DD cD nD cf d proj_idem]])
+qed
+
+theorem ext_lawful_present_at: "ext_lawful X \<Longrightarrow> ext_lawful (present_at_ext a \<rho> X)"
+  unfolding ext_lawful_def by (simp add: semilawful_present_at ext_sound_present_at)
+
+
+subsection \<open>Aggregation\<close>
+
+text \<open>The data points of a compact dataset are finitely many.\<close>
+
+lemma split_maximal_finite:
+  assumes cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
+  shows "finite (lower_maximal data)"
+proof -
+  obtain t where t: "D' = split_principal t" using split_pd.compact_imp_principal [OF cD] by blast
+  have "lower_maximal data \<subseteq> Rep_compact_basis ` srows t"
+    using split_maximal_row_generator [OF d [unfolded t]] by blast
+  then show ?thesis by (rule finite_subset) (simp add: finite_srows)
+qed
+
+text \<open>An aggregate over a split dataset folds over the inner keys of the outer key that are
+  definitely there, those maximal at the inner key LOD with a definite row, and those possibly
+  there, the inner parts of possible keys in the conforming keyspace.  A definite inner key is
+  folded with its value, a possible one with its value or the unit.  Finitely many inner keys
+  give the least of the folds over the subsets possibly there; for infinitely many nothing is
+  known.\<close>
+
+definition agg_definite :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
+  "agg_definite E D F k = {\<kappa>. maximal_at (kd E F) \<kappa> \<and> proj (flod F)\<cdot>\<kappa> = k \<and> (\<exists>y. split_definite y D \<and> rproj (kd E F) y = \<kappa>)}"
+
+definition agg_possible :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
+  "agg_possible E D F k = {\<kappa>. proj (flod F)\<cdot>\<kappa> = k \<and> (\<exists>u. split_possible u D \<and> u \<in> conforming_keyspace \<and> proj (kd E F)\<cdot>u = \<kappa>)}"
+
+definition agg_member :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "agg_member X D F k \<kappa> = (if \<kappa> \<in> agg_definite X D F k then populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa>
+     else populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> + Absent)"
+
+definition aggregate_ext :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
+  "aggregate_ext f X = with_ext (aggregate f X) (\<lambda>D F k.
+     if finite (agg_definite X D F k \<union> agg_possible X D F k)
+     then agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> agg_possible X D F k) else \<bottom>)"
+
+lemma aggregate_ext_simps [simp]:
+  "emind (aggregate_ext f X) = emind (aggregate f X)" "eguards (aggregate_ext f X) = eguards (aggregate f X)"
+  "evalues (aggregate_ext f X) = evalues (aggregate f X)"
+  "esem (aggregate_ext f X) = esem (aggregate f X)" "csem (aggregate_ext f X) = csem (aggregate f X)"
+  "sem_ext (aggregate_ext f X) D F k = (if finite (agg_definite X D F k \<union> agg_possible X D F k)
+     then agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> agg_possible X D F k) else \<bottom>)"
+  by (simp_all add: aggregate_ext_def)
+
+lemma semilawful_aggregate_ext [simp]: "semilawful (aggregate_ext f X) \<longleftrightarrow> semilawful (aggregate f X)"
+  by (simp add: aggregate_ext_def)
+
+theorem ext_sound_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_sound X"
+  shows "ext_sound (aggregate_ext f X)"
+proof (rule ext_soundI, simp only: aggregate_ext_simps aggregate_simps)
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+    and cf: "conforms data" and d0: "fconf (map release (evalues X)) data F"
+  have d: "fconf (evalues X) data F" using d0 by (simp only: fconf_release)
+  let ?K = "kd X F" and ?Z = "afiber data F (flod F) k"
+  let ?A = "rproj ?K ` ?Z" and ?S = "agg_definite X D F k \<union> agg_possible X D F k"
+  let ?V = "\<lambda>\<kappa>. populated data (emind X) \<top> F \<kappa> \<odot> esem X data F \<kappa>"
+  have FK: "flod F \<sqsubseteq> ?K" by (rule lattice_join_ge2)
+  have pK: "proj (flod F)\<cdot>(rproj ?K y) = rproj (flod F) y" for y by (rule proj_le [OF FK])
+  have fA: "finite ?A" by (rule finite_imageI, rule finite_subset [OF _ split_maximal_finite [OF cD nD]]) (auto simp: afiber_def)
+  have rigid: "agg_fold f ?V (inner_keys X data F k) = agg_fold f ?V ?A"
+  proof -
+    interpret agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
+      unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd [OF f])
+    have sub: "inner_keys X data F k \<subseteq> ?A" by (auto simp: inner_keys_def)
+    have "agg.F ?V (inner_keys X data F k) = agg.F ?V ?A"
+      by (rule agg.mono_neutral_left [OF fA sub]) (auto simp: inner_keys_def)
+    then show ?thesis by (simp only: agg_fold_finite [OF f fA] agg_fold_finite [OF f finite_subset [OF sub fA]])
+  qed
+  have defA: "agg_definite X D F k \<subseteq> ?A"
+  proof
+    fix \<kappa> assume "\<kappa> \<in> agg_definite X D F k"
+    then obtain y where mx: "maximal_at ?K \<kappa>" and k: "proj (flod F)\<cdot>\<kappa> = k"
+      and y: "split_definite y D" "rproj ?K y = \<kappa>" by (auto simp: agg_definite_def)
+    have mx': "maximal_at ?K (rproj ?K y)" using mx y(2) by simp
+    obtain m where m: "m \<in> lower_maximal data" "rproj ?K m = rproj ?K y"
+      using definite_maximal_point [OF DD nD y(1) mx'] by blast
+    have "rproj (flod F) m = k" unfolding pK [symmetric] m(2) y(2) by (rule k)
+    then have mZ: "m \<in> ?Z" using m(1) by (simp add: afiber_def)
+    have "\<kappa> = rproj ?K m" by (simp only: m(2) y(2))
+    then show "\<kappa> \<in> ?A" by (rule image_eqI [OF _ mZ])
+  qed
+  have Apos: "?A \<subseteq> agg_possible X D F k"
+  proof
+    fix \<kappa> assume "\<kappa> \<in> ?A"
+    then obtain m where m: "m \<in> ?Z" "\<kappa> = rproj ?K m" by blast
+    have mm: "m \<in> lower_maximal data" and mk: "rproj (flod F) m = k" using m(1) by (simp_all add: afiber_def)
+    have p: "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD nD mm])
+    have r: "rkey\<cdot>m \<in> conforming_keyspace" using universallyD [OF universally_keyspace cf] mm by blast
+    show "\<kappa> \<in> agg_possible X D F k" unfolding agg_possible_def m(2) using p r pK mk by blast
+  qed
+  show "(if finite ?S then agg_fold f (agg_member X D F k) ?S else \<bottom>) \<sqsubseteq> agg_fold f ?V (inner_keys X data F k)"
+  proof (cases "finite ?S")
+    case fS: True
+    have AS: "?A \<subseteq> ?S" using Apos by blast
+    have "agg_fold f (agg_member X D F k) ?S \<sqsubseteq> agg_fold f (agg_member X D F k) ?A"
+    proof (rule agg_fold_drop [OF f fS AS])
+      fix \<kappa> assume "\<kappa> \<in> ?S - ?A"
+      then have "\<kappa> \<notin> agg_definite X D F k" using defA by blast
+      then show "agg_member X D F k \<kappa> \<sqsubseteq> Absent" by (simp add: agg_member_def plus_option_pd_below2)
+    qed
+    also have "\<dots> \<sqsubseteq> agg_fold f ?V ?A"
+    proof (rule agg_fold_mono [OF f fA])
+      fix \<kappa> assume "\<kappa> \<in> ?A"
+      then obtain m where m: "\<kappa> = rproj ?K m" by blast
+      have kk: "proj (kd X F)\<cdot>\<kappa> = \<kappa>" by (simp only: m proj_idem)
+      have "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> \<sqsubseteq> ?V \<kappa>"
+        by (rule monofun_cfun [OF monofun_cfun_arg [OF populated_ext_sound [OF DD cD nD]] ext_soundD [OF X DD cD nD cf d kk]])
+      moreover have "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> + Absent \<sqsubseteq> populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa>"
+        by (rule plus_option_pd_below1)
+      ultimately show "agg_member X D F k \<kappa> \<sqsubseteq> ?V \<kappa>" unfolding agg_member_def by (auto intro: below_trans)
+    qed
+    finally have "agg_fold f (agg_member X D F k) ?S \<sqsubseteq> agg_fold f ?V (inner_keys X data F k)" by (simp only: rigid)
+    then show ?thesis by (simp only: if_P [OF fS])
+  next
+    case False
+    show ?thesis by (simp only: if_not_P [OF False] minimal)
+  qed
+qed
+
+theorem ext_lawful_aggregate:
+  "semilawful X \<Longrightarrow> ext_sound X \<Longrightarrow> abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b) \<Longrightarrow> ext_lawful (aggregate_ext f X)"
+  unfolding ext_lawful_def using lawful_aggregate [of X f] by (simp add: lawful_def ext_sound_aggregate)
 
 end
 

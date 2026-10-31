@@ -480,6 +480,16 @@ lemma universally_mono2:
   "universally Q \<Longrightarrow> universally Q' \<Longrightarrow> (\<And>P. Q P \<Longrightarrow> Q' P \<Longrightarrow> T P) \<Longrightarrow> universally T"
   unfolding universally_def by blast
 
+text \<open>The \<^emph>\<open>conforming keyspace\<close>: what the schema knows about the shape of the keys rows of
+  conforming datasets can have.  For now it knows nothing; schema laws on keys will refine it, and
+  consumers use only that the keys of conforming datasets lie in it.\<close>
+
+definition conforming_keyspace :: "'k set" where
+  "conforming_keyspace = UNIV"
+
+theorem universally_keyspace: "universally (\<lambda>P. Rep_cfun rkey ` P \<subseteq> conforming_keyspace)"
+  unfolding universally_def conforming_keyspace_def by simp
+
 text \<open>A functional dependency of the schema holds universally between views, given maximal
   determinants and absent dependents where the determinant is absent.\<close>
 
