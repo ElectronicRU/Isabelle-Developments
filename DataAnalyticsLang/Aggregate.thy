@@ -126,7 +126,7 @@ text \<open>\<open>aggregate f E\<close> folds the inner values over the inner k
   it decides no detail: its entries are the inner ones released (their lower parts move into their
   views' key parts), and the fold reads the fiber's classes at \<open>emind E\<close>.\<close>
 
-definition inner_keys :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
+definition inner_keys :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
   "inner_keys E data F k = {\<kappa> \<in> rproj (kd E F) ` afiber data F (flod F) k. populated data (emind E) \<top> F \<kappa> \<noteq> FF}"
 
 text \<open>An inner entry, seen from outside the aggregate, is \<^emph>\<open>released\<close>: its lower part, which the
@@ -204,7 +204,7 @@ text \<open>The content semantics folds the inner content semantics, multiplied 
   the keys where the fold guard is defined and not false, reading the inner contents at each off the outer
   ones.\<close>
 
-definition agg_csem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option_pd" where
+definition agg_csem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v, 'z) expr_scheme \<Rightarrow> ('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option_pd" where
   "agg_csem f E Gs Xs = agg_fold f (\<lambda>p. the (hd Gs p) \<odot> csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p))
      {p \<in> dom (hd Gs). the (hd Gs p) \<noteq> FF}"
 
@@ -220,7 +220,7 @@ lemma cont_agg_csem:
 lemma map2_map: "map2 g xs (map h xs) = map (\<lambda>x. g x (h x)) xs"
   by (induct xs) simp_all
 
-definition aggregate :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition aggregate :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "aggregate f E = \<lparr>emind = \<bottom>,
      eguards = mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind E) # map release (eguards E),
      evalues = map release (evalues E),

@@ -170,7 +170,7 @@ qed
 
 subsection \<open>Maps\<close>
 
-definition smap :: "('v::bifinite \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'v) expr \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
+definition smap :: "('v::bifinite \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'v, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'w) expr" where
   "smap g E = \<lparr>emind = emind E, eguards = eguards E, evalues = evalues E,
      esem = \<lambda>data F k. map_option_pd g\<cdot>(esem E data F k),
      csem = \<lambda>Gs. \<Lambda> Xs. map_option_pd g\<cdot>(csem E Gs\<cdot>Xs)\<rparr>"
@@ -239,7 +239,7 @@ lemma restrict_entry_simps [simp]:
   "eguard (restrict_entry \<gamma> e) = gand \<gamma> (eguard e)" "ekguard (restrict_entry \<gamma> e) = ekguard e"
   by (simp_all add: restrict_entry_def)
 
-definition restrict :: "'r guard \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition restrict :: "'r guard \<Rightarrow> ('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "restrict \<gamma> E = \<lparr>emind = emind E, eguards = map (restrict_entry \<gamma>) (eguards E), evalues = evalues E,
      esem = \<lambda>data F. esem E data (frestrict \<gamma> F), csem = csem E\<rparr>"
 
@@ -321,12 +321,12 @@ lemma for_value_simps [simp]:
   "esel (for_value \<tau> e) = trunc_sel \<tau> (esel e)" "ekeys (for_value \<tau> e) = ekeys e" "ecols (for_value \<tau> e) = ecols e"
   by (simp_all add: for_value_def)
 
-definition filtfor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition filtfor :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "filtfor \<tau> G E = \<lparr>emind = emind E, eguards = map (for_entry \<tau> G) (eguards E),
      evalues = map (for_value \<tau>) (evalues E),
      esem = \<lambda>data F k. esem E data (ffor \<tau> G F) (proj (emind E \<squnion> flod (ffor \<tau> G F))\<cdot>k), csem = csem E\<rparr>"
 
-abbreviation fixed :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+abbreviation fixed :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "fixed D \<equiv> filtfor D \<^bold>1"
 
 lemma filtfor_simps [simp]:
@@ -478,13 +478,13 @@ text \<open>The presence test at a selector: a true guard keyed at nothing, whos
   is populated: absent where it is not, possibly absent where that is undecided.  At
   \<open>(\<bottom>, \<top>)\<close> it is the test on the full group, the key's realisation.\<close>
 
-definition present_at :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition present_at :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "present_at a \<rho> E = \<lparr>emind = emind E \<squnion> a, eguards = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue gtrue \<bottom> # eguards E,
      evalues = evalues E,
      esem = \<lambda>data F k. populated data (emind E \<squnion> a) \<rho> F k \<odot> esem E data F (proj (kd E F)\<cdot>k),
      csem = \<lambda>Gs. \<Lambda> Xs. case hd Gs \<bottom> of None \<Rightarrow> Absent | Some t \<Rightarrow> t \<odot> csem E (tl Gs)\<cdot>Xs\<rparr>"
 
-abbreviation present :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+abbreviation present :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "present E \<equiv> present_at \<bottom> \<top> E"
 
 lemma present_at_simps [simp]:
@@ -543,7 +543,7 @@ qed
 text \<open>Including dimensions: evaluating under the frame raised by \<open>M\<close>, with each entry's lower
   part raised by its masked part of \<open>M\<close>.  The minimal LOD is the join of the raised lower parts.\<close>
 
-definition include_dims :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
+definition include_dims :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "include_dims M E = \<lparr>emind = fold (\<squnion>) (map (\<lambda>S. lower_part (include_sel M S)) (esels E)) \<bottom>,
      eguards = map (include_entry M) (eguards E), evalues = map (include_entry M) (evalues E),
      esem = \<lambda>data F. esem E data (finclude M F), csem = csem E\<rparr>"
@@ -603,7 +603,7 @@ text \<open>Covering is necessary, given rich enough data.  A lawful expression 
   not yet formalised; the general case needs views keyed within their group LODs: subdividing
   entries can jointly reveal a realising row.)\<close>
 
-definition total :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
+definition total :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
   "total E \<longleftrightarrow> (\<forall>data F k. conforms data \<longrightarrow> keyimg data F (kd E F) k \<longrightarrow> esem E data F k \<noteq> Absent)"
 
 theorem lawful_total_separates:
@@ -664,7 +664,7 @@ text \<open>A binary function of two expressions: each is evaluated under the fr
   key, and the result is present where both are.  The entries are the two lists of entries, one
   after the other.  Any operator of any arity is a map after combining.\<close>
 
-definition combine_csem :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'b::bifinite) expr \<Rightarrow>
+definition combine_csem :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'b::bifinite, 'y) expr_scheme \<Rightarrow>
     ('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'c::bifinite option_pd" where
   "combine_csem f E\<^sub>1 E\<^sub>2 Gs Xs = lift2_option_pd f\<cdot>
      (csem E\<^sub>1 (take (length (eguards E\<^sub>1)) Gs)\<cdot>(take (length (evalues E\<^sub>1)) Xs))\<cdot>
@@ -673,7 +673,7 @@ definition combine_csem :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow>
 lemma cont_combine_csem: "cont (combine_csem f E\<^sub>1 E\<^sub>2 Gs)"
   unfolding combine_csem_def[abs_def] by (simp add: cont_take cont_drop)
 
-definition combine :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite) expr \<Rightarrow> ('k, 'f, 'r, 'b::bifinite) expr \<Rightarrow>
+definition combine :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'b::bifinite, 'y) expr_scheme \<Rightarrow>
     ('k, 'f, 'r, 'c::bifinite) expr" where
   "combine f E\<^sub>1 E\<^sub>2 = \<lparr>emind = emind E\<^sub>1 \<squnion> emind E\<^sub>2,
      eguards = eguards E\<^sub>1 @ eguards E\<^sub>2, evalues = evalues E\<^sub>1 @ evalues E\<^sub>2,

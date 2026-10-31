@@ -86,7 +86,7 @@ hide_const (open) expr.truncate
 
 text \<open>The selectors of all of an expression's entries.\<close>
 
-abbreviation esels :: "('k::{domain, distributive_cpo}, 'f, 'r::{bifinite, distributive_cpo}, 'v::bifinite) expr \<Rightarrow> 'k selector list" where
+abbreviation esels :: "('k::{domain, distributive_cpo}, 'f, 'r::{bifinite, distributive_cpo}, 'v::bifinite, 'z) expr_scheme \<Rightarrow> 'k selector list" where
   "esels E \<equiv> map esel (eguards E) @ map esel (evalues E)"
 
 lemma esels_guardI: "e \<in> set (eguards E) \<Longrightarrow> esel e \<in> set (esels E)"
@@ -839,15 +839,15 @@ text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed value
 context dataspace
 begin
 
-abbreviation kd :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
+abbreviation kd :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
   "kd E F \<equiv> emind E \<squnion> flod F"
 
 text \<open>The content semantics of an expression at its contents.\<close>
 
-abbreviation csem_at :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+abbreviation csem_at :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> 'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
   "csem_at E data F k \<equiv> csem E (gcontents data (eguards E) F k)\<cdot>(contents data (evalues E) F k)"
 
-definition cstrict :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
+definition cstrict :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
   "cstrict E \<longleftrightarrow> (\<forall>Gs Xs. length Gs = length (eguards E) \<longrightarrow> length Xs = length (evalues E) \<longrightarrow>
      gfinite Gs \<longrightarrow> csem E Gs\<cdot>Xs \<noteq> Absent \<longrightarrow> (\<forall>G\<in>set Gs. \<not> gfalse G))"
 
@@ -862,17 +862,17 @@ lemma cstrictD:
      csem E Gs\<cdot>Xs = Absent"
   unfolding cstrict_def by blast
 
-definition semilawful :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
+definition semilawful :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
   "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom> \<and> (\<forall>e\<in>set (evalues E). entry_wf e) \<and>
      cstrict E \<and>
      (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem_at E data F k)"
 
-definition lawful :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
+definition lawful :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
   "lawful E \<longleftrightarrow> semilawful E \<and>
      (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k \<noteq> Absent \<longrightarrow>
        keyimg data F (kd E F) k)"
 
-definition saturated :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
+definition saturated :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
   "saturated E \<longleftrightarrow> (\<forall>S\<in>set (esels E). (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S)"
 
 lemma saturatedD: "saturated E \<Longrightarrow> S \<in> set (esels E) \<Longrightarrow> (upper_part S \<sqinter> emind E) \<sqsubseteq> lower_part S"
@@ -1026,7 +1026,7 @@ text \<open>The \<^emph>\<open>grain\<close> of an expression at a frame joins t
   so values, depend on the key only through its part at the grain: an expression emits at its
   grain, and its values at finer keys are broadcast.\<close>
 
-definition grain :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
+definition grain :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
   "grain E F = fold (\<squnion>) (map (\<lambda>S. sel_at S (flod F)) (esels E)) \<bottom>"
 
 lemma group_below_grain: assumes "S \<in> set (esels E)" shows "sel_at S (flod F) \<sqsubseteq> grain E F"

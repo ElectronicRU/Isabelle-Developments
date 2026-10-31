@@ -85,13 +85,25 @@ qed
 
 subsection \<open>Expressions with an extended semantics\<close>
 
-text \<open>An extended expression pairs a rigid expression with a semantics over split datasets.\<close>
+text \<open>An extended expression is an expression with a semantics over split datasets as well.\<close>
 
-record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::bifinite) expr_ext =
-  erigid :: "('k, 'f, 'r, 'v) expr"
+record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::bifinite) expr_ext = "('k, 'f, 'r, 'v) expr" +
   sem_ext :: "('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd"
 
 hide_const (open) expr_ext.truncate
+
+text \<open>An expression extended by a semantics over split datasets.\<close>
+
+definition with_ext :: "('k::domain, 'f, 'r::{bifinite, distributive_cpo}, 'v::bifinite) expr \<Rightarrow>
+    (('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
+  "with_ext E s = expr.extend E (expr_ext.fields s)"
+
+lemma with_ext_simps [simp]:
+  "emind (with_ext E s) = emind E" "eguards (with_ext E s) = eguards E" "evalues (with_ext E s) = evalues E"
+  
+  "esem (with_ext E s) = esem E" "csem (with_ext E s) = csem E" "sem_ext (with_ext E s) = s"
+  by (simp_all add: with_ext_def expr.defs expr_ext.defs)
+
 
 text \<open>The row key of split datasets is the keying's.\<close>
 
@@ -108,23 +120,26 @@ text \<open>\<^emph>\<open>Soundness\<close>: below a compact dataset with rows,
 
 definition ext_sound :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_sound X \<longleftrightarrow> (\<forall>D D' F k. D \<sqsubseteq> D' \<longrightarrow> compact D' \<longrightarrow> split_definite (\<bottom>::'r) D' \<longrightarrow>
-     fconf (evalues (erigid X)) (split_rows\<cdot>D') F \<longrightarrow> proj (kd (erigid X) F)\<cdot>k = k \<longrightarrow>
-     sem_ext X D F k \<sqsubseteq> esem (erigid X) (split_rows\<cdot>D') F k)"
+     fconf (evalues X) (split_rows\<cdot>D') F \<longrightarrow> proj (kd X F)\<cdot>k = k \<longrightarrow>
+     sem_ext X D F k \<sqsubseteq> esem X (split_rows\<cdot>D') F k)"
 
 lemma ext_soundI:
   "(\<And>D D' F k. D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_definite (\<bottom>::'r) D' \<Longrightarrow>
-     fconf (evalues (erigid X)) (split_rows\<cdot>D') F \<Longrightarrow> proj (kd (erigid X) F)\<cdot>k = k \<Longrightarrow>
-     sem_ext X D F k \<sqsubseteq> esem (erigid X) (split_rows\<cdot>D') F k) \<Longrightarrow> ext_sound X"
+     fconf (evalues X) (split_rows\<cdot>D') F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     sem_ext X D F k \<sqsubseteq> esem X (split_rows\<cdot>D') F k) \<Longrightarrow> ext_sound X"
   unfolding ext_sound_def by blast
 
 lemma ext_soundD:
   "ext_sound X \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_definite (\<bottom>::'r) D' \<Longrightarrow>
-     fconf (evalues (erigid X)) (split_rows\<cdot>D') F \<Longrightarrow> proj (kd (erigid X) F)\<cdot>k = k \<Longrightarrow>
-     sem_ext X D F k \<sqsubseteq> esem (erigid X) (split_rows\<cdot>D') F k"
+     fconf (evalues X) (split_rows\<cdot>D') F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     sem_ext X D F k \<sqsubseteq> esem X (split_rows\<cdot>D') F k"
   unfolding ext_sound_def by blast
 
+lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarrow> semilawful E"
+  by (simp add: semilawful_def cstrict_def)
+
 definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
-  "ext_lawful X \<longleftrightarrow> semilawful (erigid X) \<and> ext_sound X"
+  "ext_lawful X \<longleftrightarrow> semilawful X \<and> ext_sound X"
 
 
 subsection \<open>Keys\<close>
@@ -134,13 +149,14 @@ text \<open>The key at an LOD \<open>c\<close> is present where some definite ro
   below it.  Otherwise it is undecided.\<close>
 
 definition key_at_ext :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'k) expr_ext" where
-  "key_at_ext c = \<lparr>erigid = key_at c,
-     sem_ext = \<lambda>D F k. if maximal_at c (proj c\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k)
+  "key_at_ext c = with_ext (key_at c) (\<lambda>D F k. if maximal_at c (proj c\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k)
        then Present\<cdot>(proj c\<cdot>k)
-       else if \<exists>u::'k. split_possible u D \<and> proj c\<cdot>u \<sqsubseteq> proj c\<cdot>k then \<bottom> else Absent\<rparr>"
+       else if \<exists>u::'k. split_possible u D \<and> proj c\<cdot>u \<sqsubseteq> proj c\<cdot>k then \<bottom> else Absent)"
 
 lemma key_at_ext_simps [simp]:
-  "erigid (key_at_ext c) = key_at c"
+  "semilawful (key_at_ext c) \<longleftrightarrow> semilawful (key_at c)"
+  "emind (key_at_ext c) = emind (key_at c)" "eguards (key_at_ext c) = eguards (key_at c)" "evalues (key_at_ext c) = evalues (key_at c)"
+  "esem (key_at_ext c) = esem (key_at c)" "csem (key_at_ext c) = csem (key_at c)"
   "sem_ext (key_at_ext c) D F k = (if maximal_at c (proj c\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k)
      then Present\<cdot>(proj c\<cdot>k)
      else if \<exists>u::'k. split_possible u D \<and> proj c\<cdot>u \<sqsubseteq> proj c\<cdot>k then \<bottom> else Absent)"
@@ -203,20 +219,25 @@ theorem ext_lawful_key_at: "ext_lawful (key_at_ext c)"
 subsection \<open>Constants and maps\<close>
 
 definition const_ext :: "'v::bifinite \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
-  "const_ext v = \<lparr>erigid = const_expr v, sem_ext = \<lambda>D F k. Present\<cdot>v\<rparr>"
+  "const_ext v = with_ext (const_expr v) (\<lambda>D F k. Present\<cdot>v)"
 
 lemma const_ext_simps [simp]:
-  "erigid (const_ext v) = const_expr v" "sem_ext (const_ext v) D F k = Present\<cdot>v"
+  "semilawful (const_ext v) \<longleftrightarrow> semilawful (const_expr v)"
+  "emind (const_ext v) = emind (const_expr v)" "eguards (const_ext v) = eguards (const_expr v)" "evalues (const_ext v) = evalues (const_expr v)"
+  "esem (const_ext v) = esem (const_expr v)" "csem (const_ext v) = csem (const_expr v)"
+  "sem_ext (const_ext v) D F k = Present\<cdot>v"
   by (simp_all add: const_ext_def)
 
 theorem ext_lawful_const: "ext_lawful (const_ext v)"
   unfolding ext_lawful_def by (auto simp: semilawful_const_expr intro: ext_soundI)
 
 definition smap_ext :: "('v::bifinite \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('k, 'f, 'r, 'w) expr_ext" where
-  "smap_ext g X = \<lparr>erigid = smap g (erigid X), sem_ext = \<lambda>D F k. map_option_pd g\<cdot>(sem_ext X D F k)\<rparr>"
+  "smap_ext g X = with_ext (smap g X) (\<lambda>D F k. map_option_pd g\<cdot>(sem_ext X D F k))"
 
 lemma smap_ext_simps [simp]:
-  "erigid (smap_ext g X) = smap g (erigid X)"
+  "semilawful (smap_ext g X) \<longleftrightarrow> semilawful (smap g X)"
+  "emind (smap_ext g X) = emind (smap g X)" "eguards (smap_ext g X) = eguards (smap g X)" "evalues (smap_ext g X) = evalues (smap g X)"
+  "esem (smap_ext g X) = esem (smap g X)" "csem (smap_ext g X) = csem (smap g X)"
   "sem_ext (smap_ext g X) D F k = map_option_pd g\<cdot>(sem_ext X D F k)"
   by (simp_all add: smap_ext_def)
 
@@ -229,17 +250,16 @@ theorem ext_lawful_smap: "ext_lawful X \<Longrightarrow> ext_lawful (smap_ext g 
 abbreviation value_at_ext :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> 'v::bifinite) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
   "value_at_ext c g \<equiv> smap_ext g (key_at_ext c)"
 
-lemma erigid_value_at_ext: "erigid (value_at_ext c g) = value_at c g"
-  by (simp add: value_at_def)
-
 
 subsection \<open>Frame transformers\<close>
 
 definition restrict_ext :: "'r guard \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
-  "restrict_ext \<gamma> X = \<lparr>erigid = restrict \<gamma> (erigid X), sem_ext = \<lambda>D F. sem_ext X D (frestrict \<gamma> F)\<rparr>"
+  "restrict_ext \<gamma> X = with_ext (restrict \<gamma> X) (\<lambda>D F. sem_ext X D (frestrict \<gamma> F))"
 
 lemma restrict_ext_simps [simp]:
-  "erigid (restrict_ext \<gamma> X) = restrict \<gamma> (erigid X)"
+  "semilawful (restrict_ext \<gamma> X) \<longleftrightarrow> semilawful (restrict \<gamma> X)"
+  "emind (restrict_ext \<gamma> X) = emind (restrict \<gamma> X)" "eguards (restrict_ext \<gamma> X) = eguards (restrict \<gamma> X)" "evalues (restrict_ext \<gamma> X) = evalues (restrict \<gamma> X)"
+  "esem (restrict_ext \<gamma> X) = esem (restrict \<gamma> X)" "csem (restrict_ext \<gamma> X) = csem (restrict \<gamma> X)"
   "sem_ext (restrict_ext \<gamma> X) D F = sem_ext X D (frestrict \<gamma> F)"
   by (simp_all add: restrict_ext_def)
 
@@ -250,22 +270,23 @@ theorem ext_lawful_restrict: "ext_lawful X \<Longrightarrow> ext_lawful (restric
   unfolding ext_lawful_def by (simp add: semilawful_restrict ext_sound_restrict)
 
 definition filtfor_ext :: "'k semi_factor \<Rightarrow> 'f \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
-  "filtfor_ext \<tau> G X = \<lparr>erigid = filtfor \<tau> G (erigid X),
-     sem_ext = \<lambda>D F k. sem_ext X D (ffor \<tau> G F) (proj (emind (erigid X) \<squnion> flod (ffor \<tau> G F))\<cdot>k)\<rparr>"
+  "filtfor_ext \<tau> G X = with_ext (filtfor \<tau> G X) (\<lambda>D F k. sem_ext X D (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k))"
 
 lemma filtfor_ext_simps [simp]:
-  "erigid (filtfor_ext \<tau> G X) = filtfor \<tau> G (erigid X)"
-  "sem_ext (filtfor_ext \<tau> G X) D F k = sem_ext X D (ffor \<tau> G F) (proj (emind (erigid X) \<squnion> flod (ffor \<tau> G F))\<cdot>k)"
+  "semilawful (filtfor_ext \<tau> G X) \<longleftrightarrow> semilawful (filtfor \<tau> G X)"
+  "emind (filtfor_ext \<tau> G X) = emind (filtfor \<tau> G X)" "eguards (filtfor_ext \<tau> G X) = eguards (filtfor \<tau> G X)" "evalues (filtfor_ext \<tau> G X) = evalues (filtfor \<tau> G X)"
+  "esem (filtfor_ext \<tau> G X) = esem (filtfor \<tau> G X)" "csem (filtfor_ext \<tau> G X) = csem (filtfor \<tau> G X)"
+  "sem_ext (filtfor_ext \<tau> G X) D F k = sem_ext X D (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)"
   by (simp_all add: filtfor_ext_def)
 
 theorem ext_sound_filtfor: "ext_sound X \<Longrightarrow> ext_sound (filtfor_ext \<tau> G X)"
 proof (rule ext_soundI, simp only: filtfor_ext_simps filtfor_simps)
   fix D D' :: "('r, 'k) split_pd" and F k
   assume X: "ext_sound X" and DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_definite (\<bottom>::'r) D'"
-    and d: "fconf (map (for_value \<tau>) (evalues (erigid X))) (split_rows\<cdot>D') F"
-  have d': "fconf (evalues (erigid X)) (split_rows\<cdot>D') (ffor \<tau> G F)" using d by (simp only: fconf_filtfor [of _ _ _ _ G])
-  show "sem_ext X D (ffor \<tau> G F) (proj (emind (erigid X) \<squnion> flod (ffor \<tau> G F))\<cdot>k)
-      \<sqsubseteq> esem (erigid X) (split_rows\<cdot>D') (ffor \<tau> G F) (proj (emind (erigid X) \<squnion> flod (ffor \<tau> G F))\<cdot>k)"
+    and d: "fconf (map (for_value \<tau>) (evalues X)) (split_rows\<cdot>D') F"
+  have d': "fconf (evalues X) (split_rows\<cdot>D') (ffor \<tau> G F)" using d by (simp only: fconf_filtfor [of _ _ _ _ G])
+  show "sem_ext X D (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)
+      \<sqsubseteq> esem X (split_rows\<cdot>D') (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)"
     by (rule ext_soundD [OF X DD cD nD d' proj_idem])
 qed
 
@@ -293,24 +314,26 @@ proof -
 qed
 
 definition include_dims_ext :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
-  "include_dims_ext M X = \<lparr>erigid = include_dims M (erigid X), sem_ext = \<lambda>D F. sem_ext X D (finclude M F)\<rparr>"
+  "include_dims_ext M X = with_ext (include_dims M X) (\<lambda>D F. sem_ext X D (finclude M F))"
 
 lemma include_dims_ext_simps [simp]:
-  "erigid (include_dims_ext M X) = include_dims M (erigid X)"
+  "semilawful (include_dims_ext M X) \<longleftrightarrow> semilawful (include_dims M X)"
+  "emind (include_dims_ext M X) = emind (include_dims M X)" "eguards (include_dims_ext M X) = eguards (include_dims M X)" "evalues (include_dims_ext M X) = evalues (include_dims M X)"
+  "esem (include_dims_ext M X) = esem (include_dims M X)" "csem (include_dims_ext M X) = csem (include_dims M X)"
   "sem_ext (include_dims_ext M X) D F = sem_ext X D (finclude M F)"
   by (simp_all add: include_dims_ext_def)
 
 theorem ext_sound_include_dims:
-  assumes ES: "semilawful (erigid X)" and X: "ext_sound X"
+  assumes ES: "semilawful X" and X: "ext_sound X"
   shows "ext_sound (include_dims_ext M X)"
 proof (rule ext_soundI, simp only: include_dims_ext_simps include_dims_simps(3,4))
   fix D D' :: "('r, 'k) split_pd" and F k
   assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_definite (\<bottom>::'r) D'"
-    and d: "fconf (map (include_entry M) (evalues (erigid X))) (split_rows\<cdot>D') F"
-    and k: "proj (kd (include_dims M (erigid X)) F)\<cdot>k = k"
-  have d': "fconf (evalues (erigid X)) (split_rows\<cdot>D') (finclude M F)" using d by (simp only: fconf_include)
-  have k': "proj (kd (erigid X) (finclude M F))\<cdot>k = k" by (rule proj_fix_mono [OF include_dims_kd_below [OF ES] k])
-  show "sem_ext X D (finclude M F) k \<sqsubseteq> esem (erigid X) (split_rows\<cdot>D') (finclude M F) k"
+    and d: "fconf (map (include_entry M) (evalues X)) (split_rows\<cdot>D') F"
+    and k: "proj (kd (include_dims M X) F)\<cdot>k = k"
+  have d': "fconf (evalues X) (split_rows\<cdot>D') (finclude M F)" using d by (simp only: fconf_include)
+  have k': "proj (kd X (finclude M F))\<cdot>k = k" by (rule proj_fix_mono [OF include_dims_kd_below [OF ES] k])
+  show "sem_ext X D (finclude M F) k \<sqsubseteq> esem X (split_rows\<cdot>D') (finclude M F) k"
     by (rule ext_soundD [OF X DD cD nD d' k'])
 qed
 
@@ -322,13 +345,14 @@ subsection \<open>Combining\<close>
 
 definition combine_ext :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite) expr_ext \<Rightarrow> ('k, 'f, 'r, 'b::bifinite) expr_ext \<Rightarrow>
     ('k, 'f, 'r, 'c::bifinite) expr_ext" where
-  "combine_ext f X\<^sub>1 X\<^sub>2 = \<lparr>erigid = combine f (erigid X\<^sub>1) (erigid X\<^sub>2),
-     sem_ext = \<lambda>D F k. lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd (erigid X\<^sub>1) F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd (erigid X\<^sub>2) F)\<cdot>k))\<rparr>"
+  "combine_ext f X\<^sub>1 X\<^sub>2 = with_ext (combine f X\<^sub>1 X\<^sub>2) (\<lambda>D F k. lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd X\<^sub>2 F)\<cdot>k)))"
 
 lemma combine_ext_simps [simp]:
-  "erigid (combine_ext f X\<^sub>1 X\<^sub>2) = combine f (erigid X\<^sub>1) (erigid X\<^sub>2)"
+  "semilawful (combine_ext f X\<^sub>1 X\<^sub>2) \<longleftrightarrow> semilawful (combine f X\<^sub>1 X\<^sub>2)"
+  "emind (combine_ext f X\<^sub>1 X\<^sub>2) = emind (combine f X\<^sub>1 X\<^sub>2)" "eguards (combine_ext f X\<^sub>1 X\<^sub>2) = eguards (combine f X\<^sub>1 X\<^sub>2)" "evalues (combine_ext f X\<^sub>1 X\<^sub>2) = evalues (combine f X\<^sub>1 X\<^sub>2)"
+  "esem (combine_ext f X\<^sub>1 X\<^sub>2) = esem (combine f X\<^sub>1 X\<^sub>2)" "csem (combine_ext f X\<^sub>1 X\<^sub>2) = csem (combine f X\<^sub>1 X\<^sub>2)"
   "sem_ext (combine_ext f X\<^sub>1 X\<^sub>2) D F k =
-     lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd (erigid X\<^sub>1) F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd (erigid X\<^sub>2) F)\<cdot>k))"
+     lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd X\<^sub>2 F)\<cdot>k))"
   by (simp_all add: combine_ext_def)
 
 theorem ext_sound_combine:
@@ -337,12 +361,12 @@ theorem ext_sound_combine:
 proof (rule ext_soundI, simp only: combine_ext_simps combine_simps)
   fix D D' :: "('r, 'k) split_pd" and F k
   assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_definite (\<bottom>::'r) D'"
-    and d: "fconf (evalues (erigid X\<^sub>1) @ evalues (erigid X\<^sub>2)) (split_rows\<cdot>D') F"
-  have d1: "fconf (evalues (erigid X\<^sub>1)) (split_rows\<cdot>D') F" and d2: "fconf (evalues (erigid X\<^sub>2)) (split_rows\<cdot>D') F"
+    and d: "fconf (evalues X\<^sub>1 @ evalues X\<^sub>2) (split_rows\<cdot>D') F"
+  have d1: "fconf (evalues X\<^sub>1) (split_rows\<cdot>D') F" and d2: "fconf (evalues X\<^sub>2) (split_rows\<cdot>D') F"
     using d by (simp_all add: fconf_def)
-  show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd (erigid X\<^sub>1) F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd (erigid X\<^sub>2) F)\<cdot>k))
-      \<sqsubseteq> lift2_option_pd f\<cdot>(esem (erigid X\<^sub>1) (split_rows\<cdot>D') F (proj (kd (erigid X\<^sub>1) F)\<cdot>k))\<cdot>
-          (esem (erigid X\<^sub>2) (split_rows\<cdot>D') F (proj (kd (erigid X\<^sub>2) F)\<cdot>k))"
+  show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd X\<^sub>2 F)\<cdot>k))
+      \<sqsubseteq> lift2_option_pd f\<cdot>(esem X\<^sub>1 (split_rows\<cdot>D') F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>
+          (esem X\<^sub>2 (split_rows\<cdot>D') F (proj (kd X\<^sub>2 F)\<cdot>k))"
     by (rule monofun_cfun [OF monofun_cfun_arg ext_soundD [OF X\<^sub>2 DD cD nD d2 proj_idem]],
         rule ext_soundD [OF X\<^sub>1 DD cD nD d1 proj_idem])
 qed
