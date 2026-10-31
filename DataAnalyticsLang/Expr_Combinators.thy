@@ -501,14 +501,15 @@ lemma cstrict_present_at:
 proof (rule cstrictI)
   fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (present_at a \<rho> E))" and lx: "length Xs = length (evalues (present_at a \<rho> E))"
-    and c: "csem (present_at a \<rho> E) Gs\<cdot>Xs \<noteq> Absent"
+    and fin: "gfinite Gs" and c: "csem (present_at a \<rho> E) Gs\<cdot>Xs \<noteq> Absent"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
+  have fin': "gfinite Gs'" using fin by (simp add: Gs)
   have lx': "length Xs = length (evalues E)" using lx by simp
   obtain t where t: "G \<bottom> = Some t" and c': "t \<odot> csem E Gs'\<cdot>Xs \<noteq> Absent"
     using c by (cases "G \<bottom>") (simp_all add: Gs)
   have tF: "t \<noteq> FF" and cE: "csem E Gs'\<cdot>Xs \<noteq> Absent" using tr_mult_not_Absent[OF c'] by simp_all
-  have "\<not> gfalse G'" if "G' \<in> set Gs'" for G' using cstrictD[OF E l' lx' that] cE by blast
+  have "\<not> gfalse G'" if "G' \<in> set Gs'" for G' using cstrictD[OF E l' lx' fin' that] cE by blast
   moreover have "\<not> gfalse G" using t tF by (auto simp: gfalse_def)
   ultimately show "\<forall>G\<in>set Gs. \<not> gfalse G" by (simp add: Gs)
 qed
@@ -692,14 +693,14 @@ lemma cstrict_combine:
 proof (rule cstrictI)
   fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (combine f E\<^sub>1 E\<^sub>2))" and lx: "length Xs = length (evalues (combine f E\<^sub>1 E\<^sub>2))"
-    and c: "csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Xs \<noteq> Absent"
+    and fin: "gfinite Gs" and c: "csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Xs \<noteq> Absent"
   let ?n = "length (eguards E\<^sub>1)" and ?m = "length (evalues E\<^sub>1)"
   have c1: "csem E\<^sub>1 (take ?n Gs)\<cdot>(take ?m Xs) \<noteq> Absent" and c2: "csem E\<^sub>2 (drop ?n Gs)\<cdot>(drop ?m Xs) \<noteq> Absent"
     using c by (auto simp: combine_csem_def)
   have "\<not> gfalse G" if "G \<in> set (take ?n Gs)" for G
-    by (rule notI, rule c1[THEN notE], rule cstrictD[OF E\<^sub>1 _ _ that]) (use l lx in simp_all)
+    by (rule notI, rule c1[THEN notE], rule cstrictD[OF E\<^sub>1 _ _ gfinite_take[OF fin] that]) (use l lx in simp_all)
   moreover have "\<not> gfalse G" if "G \<in> set (drop ?n Gs)" for G
-    by (rule notI, rule c2[THEN notE], rule cstrictD[OF E\<^sub>2 _ _ that]) (use l lx in simp_all)
+    by (rule notI, rule c2[THEN notE], rule cstrictD[OF E\<^sub>2 _ _ gfinite_drop[OF fin] that]) (use l lx in simp_all)
   ultimately show "\<forall>G\<in>set Gs. \<not> gfalse G" using set_append[of "take ?n Gs" "drop ?n Gs"] by auto
 qed
 

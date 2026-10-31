@@ -181,6 +181,19 @@ definition gex :: "'a set \<Rightarrow> ('a \<Rightarrow> tr) \<Rightarrow> tr o
 definition gfalse :: "('k \<Rightarrow> tr option) \<Rightarrow> bool" where
   "gfalse G \<longleftrightarrow> (\<forall>q t. G q = Some t \<longrightarrow> t = FF)"
 
+text \<open>Guard contents are \<^emph>\<open>finite\<close> when each is defined at finitely many keys.  An aggregate
+  folds over the keys of its fold guard, and of infinitely many members it knows only presence.\<close>
+
+definition gfinite :: "('k \<Rightarrow> tr option) list \<Rightarrow> bool" where
+  "gfinite Gs \<longleftrightarrow> (\<forall>G\<in>set Gs. finite (dom G))"
+
+lemma gfinite_simps [simp]:
+  "gfinite []" "gfinite (G # Gs) \<longleftrightarrow> finite (dom G) \<and> gfinite Gs" "gfinite (Gs @ Hs) \<longleftrightarrow> gfinite Gs \<and> gfinite Hs"
+  by (auto simp: gfinite_def)
+
+lemma gfinite_take: "gfinite Gs \<Longrightarrow> gfinite (take n Gs)" and gfinite_drop: "gfinite Gs \<Longrightarrow> gfinite (drop n Gs)"
+  by (auto simp: gfinite_def dest: in_set_takeD in_set_dropD)
+
 lemma gex_None_iff [simp]: "gex S P = None \<longleftrightarrow> S = {}"
   by (simp add: gex_def)
 
@@ -836,15 +849,16 @@ abbreviation csem_at :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> 'r lower_
 
 definition cstrict :: "('k, 'f, 'r, 'v::bifinite) expr \<Rightarrow> bool" where
   "cstrict E \<longleftrightarrow> (\<forall>Gs Xs. length Gs = length (eguards E) \<longrightarrow> length Xs = length (evalues E) \<longrightarrow>
-     csem E Gs\<cdot>Xs \<noteq> Absent \<longrightarrow> (\<forall>G\<in>set Gs. \<not> gfalse G))"
+     gfinite Gs \<longrightarrow> csem E Gs\<cdot>Xs \<noteq> Absent \<longrightarrow> (\<forall>G\<in>set Gs. \<not> gfalse G))"
 
 lemma cstrictI:
-  "(\<And>Gs Xs. length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> csem E Gs\<cdot>Xs \<noteq> Absent \<Longrightarrow>
-     (\<forall>G\<in>set Gs. \<not> gfalse G)) \<Longrightarrow> cstrict E"
+  "(\<And>Gs Xs. length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> gfinite Gs \<Longrightarrow>
+     csem E Gs\<cdot>Xs \<noteq> Absent \<Longrightarrow> (\<forall>G\<in>set Gs. \<not> gfalse G)) \<Longrightarrow> cstrict E"
   unfolding cstrict_def by blast
 
 lemma cstrictD:
-  "cstrict E \<Longrightarrow> length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> G \<in> set Gs \<Longrightarrow> gfalse G \<Longrightarrow>
+  "cstrict E \<Longrightarrow> length Gs = length (eguards E) \<Longrightarrow> length Xs = length (evalues E) \<Longrightarrow> gfinite Gs \<Longrightarrow>
+     G \<in> set Gs \<Longrightarrow> gfalse G \<Longrightarrow>
      csem E Gs\<cdot>Xs = Absent"
   unfolding cstrict_def by blast
 

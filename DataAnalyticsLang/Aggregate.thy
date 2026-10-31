@@ -7,11 +7,15 @@ section \<open>Aggregation\<close>
 text \<open>An aggregate folds the entries of an inner expression over each fiber of the frame's LOD
   with a commutative semigroup operation.  The fold adjoins a unit for the empty fiber, which
   gives no entry; it is not \<open>\<bottom>\<close>: a monotone operation with unit \<open>\<bottom>\<close> would be inflationary
-  (\<open>x = x \<oplus> \<bottom> \<sqsubseteq> x \<oplus> y\<close>), which rules out sums on flat values.  Only finite folds are
-  supported: on infinitely many members the fold is the unit.\<close>
+  (\<open>x = x \<oplus> \<bottom> \<sqsubseteq> x \<oplus> y\<close>), which rules out sums on flat values.  Of infinitely
+  many members nothing is known but presence: the fold is a present value of which nothing is known
+  when some member is definitely present, and otherwise the least result.  This is the best a fold
+  can do that is continuous in the dataset, since no finite approximation of it bounds its keys.
+  Which case applies is decided by the index set alone, so the fold is continuous in the members.\<close>
 
 definition agg_fold :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('a \<Rightarrow> 'v option_pd) \<Rightarrow> 'a set \<Rightarrow> 'v option_pd" where
-  "agg_fold f v A = comm_monoid_set.F (\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y) Absent v A"
+  "agg_fold f v A = (if finite A then comm_monoid_set.F (\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y) Absent v A
+     else if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v a then Present\<cdot>\<bottom> else \<bottom>)"
 
 context
   fixes f :: "'v::bifinite \<rightarrow> 'v \<rightarrow> 'v"
@@ -21,35 +25,73 @@ begin
 interpretation agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
   unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd[OF f])
 
+lemma agg_fold_finite: "finite A \<Longrightarrow> agg_fold f v A = agg.F v A"
+  unfolding agg_fold_def by simp
+
 lemma agg_fold_empty: "agg_fold f v {} = Absent"
-  by (simp add: agg_fold_def)
+  by (simp add: agg_fold_finite)
 
 lemma agg_fold_singleton: "agg_fold f v {a} = v a"
-  by (simp add: agg_fold_def)
+  by (simp add: agg_fold_finite)
 
 lemma agg_fold_nonempty: "agg_fold f v A \<noteq> Absent \<Longrightarrow> A \<noteq> {}"
   by (auto simp: agg_fold_empty)
 
-lemma agg_fold_absent: "(\<And>a. a \<in> A \<Longrightarrow> v a = Absent) \<Longrightarrow> agg_fold f v A = Absent"
-  unfolding agg_fold_def by (rule agg.neutral) simp
+lemma agg_fold_absent: "finite A \<Longrightarrow> (\<And>a. a \<in> A \<Longrightarrow> v a = Absent) \<Longrightarrow> agg_fold f v A = Absent"
+  unfolding agg_fold_finite by (rule agg.neutral) simp
 
 lemma agg_fold_cong: "A = B \<Longrightarrow> (\<And>a. a \<in> B \<Longrightarrow> v a = w a) \<Longrightarrow> agg_fold f v A = agg_fold f w B"
-  unfolding agg_fold_def by (simp cong: agg.cong)
+proof -
+  assume AB: "A = B" and vw: "\<And>a. a \<in> B \<Longrightarrow> v a = w a"
+  have F: "agg.F v B = agg.F w B" by (rule agg.cong) (simp_all add: vw)
+  have e: "(\<exists>a\<in>B. Present\<cdot>\<bottom> \<sqsubseteq> v a) = (\<exists>a\<in>B. Present\<cdot>\<bottom> \<sqsubseteq> w a)" using vw by auto
+  show ?thesis unfolding agg_fold_def AB F e ..
+qed
 
-text \<open>The fold is continuous in the folded values.\<close>
+text \<open>The fold is continuous in the folded values: a finite fold is a composite of continuous
+  operations, and presence of a member is decided by a compact value.\<close>
+
+lemma cont_agg_fallback:
+  assumes v: "\<And>a. cont (\<lambda>x. v x a)"
+  shows "cont (\<lambda>x. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v x a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
+proof (rule contI2)
+  show m: "monofun (\<lambda>x. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v x a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
+    by (rule monofunI) (auto intro: below_trans[OF _ cont2monofunE[OF v]])
+  fix Y :: "nat \<Rightarrow> 'b" assume Y: "chain Y"
+  show "(if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (\<Squnion>i. Y i) a then Present\<cdot>\<bottom> else \<bottom>)
+      \<sqsubseteq> (\<Squnion>i. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
+  proof (cases "\<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (\<Squnion>i. Y i) a")
+    case True
+    then obtain a where a: "a \<in> A" and b: "Present\<cdot>\<bottom> \<sqsubseteq> (\<Squnion>i. v (Y i) a)" by (auto simp: cont2contlubE[OF v Y])
+    then obtain i where i: "Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a"
+      using compact_below_lub_iff[OF compact_Present_bottom ch2ch_cont[OF v Y]] by blast
+    have ub: "(if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else \<bottom>)
+        \<sqsubseteq> (\<Squnion>i. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
+      by (rule is_ub_thelub[OF ch2ch_monofun[OF m Y]])
+    have p: "(if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else \<bottom>) = (Present\<cdot>\<bottom> :: 'v option_pd)"
+      using a i by auto
+    have "Present\<cdot>\<bottom> \<sqsubseteq> (\<Squnion>i. if \<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (Y i) a then Present\<cdot>\<bottom> else (\<bottom> :: 'v option_pd))"
+      using ub unfolding p .
+    then show ?thesis by (subst if_P[OF True])
+  qed simp
+qed
 
 lemma cont_agg_fold:
   assumes v: "\<And>a. cont (\<lambda>x. v x a)"
   shows "cont (\<lambda>x. agg_fold f (v x) A)"
 proof (cases "finite A")
   case True
-  then show ?thesis unfolding agg_fold_def
+  have "cont (\<lambda>x. agg.F (v x) A)" using True
   proof (induct A rule: finite_induct)
     case (insert a B)
     show ?case unfolding agg.insert[OF insert(1,2)]
       by (rule cont2cont_APP[OF cont2cont_APP[OF cont_const v] insert(3)])
   qed simp
-qed (simp add: agg_fold_def)
+  then show ?thesis using True by (simp add: agg_fold_finite)
+next
+  case False
+  then show ?thesis unfolding agg_fold_def by (simp add: cont_agg_fallback[OF v])
+qed
 
 end
 
@@ -59,7 +101,11 @@ lemma agg_fold_bij:
 proof -
   interpret agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
     unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd[OF f])
-  show ?thesis unfolding agg_fold_def comp_def by (rule agg.reindex_bij_betw[OF h])
+  have hAB: "h ` A = B" by (rule bij_betw_imp_surj_on[OF h])
+  have fin: "finite A \<longleftrightarrow> finite B" by (rule bij_betw_finite[OF h])
+  have F: "agg.F (v \<circ> h) A = agg.F v B" unfolding comp_def by (rule agg.reindex_bij_betw[OF h])
+  have e: "(\<exists>a\<in>A. Present\<cdot>\<bottom> \<sqsubseteq> v (h a)) = (\<exists>b\<in>B. Present\<cdot>\<bottom> \<sqsubseteq> v b)" using hAB by auto
+  show ?thesis unfolding agg_fold_def comp_apply using fin F e by (simp add: comp_def)
 qed
 
 context dataspace
@@ -349,15 +395,27 @@ proof (induct Gs gs rule: list_induct2)
   then show ?case by (cases "G = G0") (auto simp: agg_gpick_gfalse)
 qed simp
 
+lemma dom_agg_gpick: "dom (agg_gpick e p G) \<subseteq> Rep_cfun (proj (ekeys e)) ` dom G"
+  by (auto simp: agg_gpick_def dom_def gex_def)
+
+lemma agg_ginner_gfinite: "length Gs = length gs \<Longrightarrow> gfinite Gs \<Longrightarrow> gfinite (agg_ginner gs Gs p)"
+  unfolding agg_ginner_def
+proof (induct Gs gs rule: list_induct2)
+  case (Cons G Gs e gs)
+  have "finite (dom (agg_gpick e p G))" using Cons(3) by (auto intro: finite_subset[OF dom_agg_gpick])
+  then show ?case using Cons by simp
+qed simp
+
 lemma cstrict_aggregate:
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and E: "cstrict E"
   shows "cstrict (aggregate f E)"
 proof (rule cstrictI)
   fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (aggregate f E))" and lx: "length Xs = length (evalues (aggregate f E))"
-    and c: "csem (aggregate f E) Gs\<cdot>Xs \<noteq> Absent"
+    and fin: "gfinite Gs" and c: "csem (aggregate f E) Gs\<cdot>Xs \<noteq> Absent"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
+  have fG: "finite {p \<in> dom G. the (G p) \<noteq> FF}" and fin': "gfinite Gs'" using fin by (simp_all add: Gs)
   have lx': "length Xs = length (evalues E)" using lx by simp
   let ?\<Phi> = "\<lambda>p. csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p)"
   have c': "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) {p \<in> dom G. the (G p) \<noteq> FF} \<noteq> Absent" using c unfolding aggregate_csem[OF f] agg_csem_def Gs list.sel .
@@ -365,7 +423,7 @@ proof (rule cstrictI)
   proof (rule ccontr)
     assume "\<not> (\<exists>p\<in>{p \<in> dom G. the (G p) \<noteq> FF}. the (G p) \<odot> ?\<Phi> p \<noteq> Absent)"
     then have "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) {p \<in> dom G. the (G p) \<noteq> FF} = Absent"
-      by (intro agg_fold_absent[OF f]) blast
+      by (intro agg_fold_absent[OF f fG]) blast
     then show False using c' by contradiction
   qed
   then obtain p t where p: "G p = Some t" and pt: "t \<odot> ?\<Phi> p \<noteq> Absent" by (auto simp: dom_def)
@@ -376,7 +434,7 @@ proof (rule cstrictI)
     obtain G'' where "G'' \<in> set (agg_ginner (eguards E) Gs' p)" "gfalse G''"
       using agg_ginner_gfalse[OF l' G' em] by blast
     then have "?\<Phi> p = Absent"
-      by (intro cstrictD[OF E]) (simp_all add: agg_ginner_def agg_inner_def l' lx')
+      by (intro cstrictD[OF E _ _ agg_ginner_gfinite[OF _ fin']]) (simp_all add: agg_ginner_def agg_inner_def l' lx')
     then show False using pt by simp
   qed
   ultimately show "\<forall>G\<in>set Gs. \<not> gfalse G" by (simp add: Gs)
