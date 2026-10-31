@@ -1,5 +1,5 @@
 theory Option_PD
-  imports HOLCF "HOLCF-Library.Option_Cpo" "HOLCF-Library.List_Predomain" "HOLCF-extra.Pointed_Profinite"
+  imports HOLCF "HOLCF-Library.Option_Cpo" "HOLCF-Library.List_Predomain" "HOLCF-extra.Pointed_Profinite" "HOLCF-extra.Bounded_Complete"
 begin
 
 section \<open>Results with possible absence\<close>
@@ -138,6 +138,31 @@ lemma least_option_pd: "Abs_option_pd upper_least \<sqsubseteq> y"
 
 instance option_pd :: (bifinite) pcpo
   by standard (rule exI, rule allI, rule least_option_pd)
+
+text \<open>Results are bounded-complete: the upper powerdomain is, and the lub of a nonempty bounded
+  set of results lies above a result, so it is one.\<close>
+
+instance option_pd :: (bifinite) bounded_complete
+proof
+  fix A :: "'a option_pd set" and b
+  assume ne: "A \<noteq> {}" and ub: "A <| b"
+  let ?L = "lub (Rep_option_pd ` A)"
+  have "Rep_option_pd ` A <| Rep_option_pd b" using ub by (auto simp: is_ub_def below_option_pd_def)
+  then have L: "Rep_option_pd ` A <<| ?L" by (rule ex_bound_lub)
+  obtain a where a: "a \<in> A" using ne by blast
+  have "Rep_option_pd a \<sqsubseteq> ?L" using L a by (blast dest: is_lubD1 is_ubD)
+  then have nb: "?L \<noteq> \<bottom>" using option_pd_Rep_nonbot [of a] by (auto simp: bottomI)
+  have "A <<| Abs_option_pd ?L"
+  proof (rule is_lubI)
+    show "A <| Abs_option_pd ?L"
+      using L by (auto simp: is_ub_def below_option_pd_def Rep_Abs_option_pd [OF nb] dest: is_lubD1 is_ubD)
+    fix c assume "A <| c"
+    then have "Rep_option_pd ` A <| Rep_option_pd c" by (auto simp: is_ub_def below_option_pd_def)
+    then show "Abs_option_pd ?L \<sqsubseteq> c"
+      unfolding below_option_pd_def Rep_Abs_option_pd [OF nb] by (rule is_lubD2 [OF L])
+  qed
+  then show "\<exists>x. A <<| x" ..
+qed
 
 lemma option_pd_bottom: "(\<bottom> :: 'v option_pd) = Abs_option_pd upper_least"
   by (rule below_antisym[OF minimal least_option_pd])

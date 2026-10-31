@@ -574,9 +574,9 @@ qed
 text \<open>An aggregate over a split dataset folds over the inner keys of the outer key that are
   definitely there, those maximal at the inner key LOD with a definite row, and those possibly
   there, the inner parts of possible keys in the conforming keyspace.  A definite inner key is
-  folded with its value, a possible one with its value or the unit.  Finitely many inner keys
-  give the least of the folds over the subsets possibly there; for infinitely many nothing is
-  known.\<close>
+  folded with its value, a possible one with its value or the unit.  The rows of a dataset above
+  are finitely many, so it is the greatest lower bound of the folds over the definite keys and
+  finitely many possible ones.\<close>
 
 definition agg_definite :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
   "agg_definite E D F k = {\<kappa>. maximal_at (kd E F) \<kappa> \<and> proj (flod F)\<cdot>\<kappa> = k \<and> (\<exists>y. split_definite y D \<and> rproj (kd E F) y = \<kappa>)}"
@@ -588,21 +588,19 @@ definition agg_member :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('r,
   "agg_member X D F k \<kappa> = (if \<kappa> \<in> agg_definite X D F k then populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa>
      else populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> + Absent)"
 
+definition agg_ext_sem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "agg_ext_sem f X D F k = glb {agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> C) | C. finite C \<and> C \<subseteq> agg_possible X D F k}"
+
 definition aggregate_ext :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
-  "aggregate_ext f X = with_ext (aggregate f X) (\<lambda>D F k.
-     if finite (agg_definite X D F k \<union> agg_possible X D F k)
-     then agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> agg_possible X D F k) else \<bottom>)"
+  "aggregate_ext f X = with_ext (aggregate f X) (agg_ext_sem f X)"
 
 lemma aggregate_ext_simps [simp]:
+  "semilawful (aggregate_ext f X) \<longleftrightarrow> semilawful (aggregate f X)"
   "emind (aggregate_ext f X) = emind (aggregate f X)" "eguards (aggregate_ext f X) = eguards (aggregate f X)"
   "evalues (aggregate_ext f X) = evalues (aggregate f X)"
   "esem (aggregate_ext f X) = esem (aggregate f X)" "csem (aggregate_ext f X) = csem (aggregate f X)"
-  "sem_ext (aggregate_ext f X) D F k = (if finite (agg_definite X D F k \<union> agg_possible X D F k)
-     then agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> agg_possible X D F k) else \<bottom>)"
+  "sem_ext (aggregate_ext f X) = agg_ext_sem f X"
   by (simp_all add: aggregate_ext_def)
-
-lemma semilawful_aggregate_ext [simp]: "semilawful (aggregate_ext f X) \<longleftrightarrow> semilawful (aggregate f X)"
-  by (simp add: aggregate_ext_def)
 
 theorem ext_sound_aggregate:
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_sound X"
@@ -613,7 +611,7 @@ proof (rule ext_soundI, simp only: aggregate_ext_simps aggregate_simps)
     and cf: "conforms data" and d0: "fconf (map release (evalues X)) data F"
   have d: "fconf (evalues X) data F" using d0 by (simp only: fconf_release)
   let ?K = "kd X F" and ?Z = "afiber data F (flod F) k"
-  let ?A = "rproj ?K ` ?Z" and ?S = "agg_definite X D F k \<union> agg_possible X D F k"
+  let ?A = "rproj ?K ` ?Z"
   let ?V = "\<lambda>\<kappa>. populated data (emind X) \<top> F \<kappa> \<odot> esem X data F \<kappa>"
   have FK: "flod F \<sqsubseteq> ?K" by (rule lattice_join_ge2)
   have pK: "proj (flod F)\<cdot>(rproj ?K y) = rproj (flod F) y" for y by (rule proj_le [OF FK])
@@ -649,33 +647,21 @@ proof (rule ext_soundI, simp only: aggregate_ext_simps aggregate_simps)
     have r: "rkey\<cdot>m \<in> conforming_keyspace" using universallyD [OF universally_keyspace cf] mm by blast
     show "\<kappa> \<in> agg_possible X D F k" unfolding agg_possible_def m(2) using p r pK mk by blast
   qed
-  show "(if finite ?S then agg_fold f (agg_member X D F k) ?S else \<bottom>) \<sqsubseteq> agg_fold f ?V (inner_keys X data F k)"
-  proof (cases "finite ?S")
-    case fS: True
-    have AS: "?A \<subseteq> ?S" using Apos by blast
-    have "agg_fold f (agg_member X D F k) ?S \<sqsubseteq> agg_fold f (agg_member X D F k) ?A"
-    proof (rule agg_fold_drop [OF f fS AS])
-      fix \<kappa> assume "\<kappa> \<in> ?S - ?A"
-      then have "\<kappa> \<notin> agg_definite X D F k" using defA by blast
-      then show "agg_member X D F k \<kappa> \<sqsubseteq> Absent" by (simp add: agg_member_def plus_option_pd_below2)
-    qed
-    also have "\<dots> \<sqsubseteq> agg_fold f ?V ?A"
-    proof (rule agg_fold_mono [OF f fA])
-      fix \<kappa> assume "\<kappa> \<in> ?A"
-      then obtain m where m: "\<kappa> = rproj ?K m" by blast
-      have kk: "proj (kd X F)\<cdot>\<kappa> = \<kappa>" by (simp only: m proj_idem)
-      have "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> \<sqsubseteq> ?V \<kappa>"
-        by (rule monofun_cfun [OF monofun_cfun_arg [OF populated_ext_sound [OF DD cD nD]] ext_soundD [OF X DD cD nD cf d kk]])
-      moreover have "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> + Absent \<sqsubseteq> populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa>"
-        by (rule plus_option_pd_below1)
-      ultimately show "agg_member X D F k \<kappa> \<sqsubseteq> ?V \<kappa>" unfolding agg_member_def by (auto intro: below_trans)
-    qed
-    finally have "agg_fold f (agg_member X D F k) ?S \<sqsubseteq> agg_fold f ?V (inner_keys X data F k)" by (simp only: rigid)
-    then show ?thesis by (simp only: if_P [OF fS])
-  next
-    case False
-    show ?thesis by (simp only: if_not_P [OF False] minimal)
+  have DA: "agg_definite X D F k \<union> ?A = ?A" using defA by blast
+  have "agg_ext_sem f X D F k \<sqsubseteq> agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> ?A)"
+    unfolding agg_ext_sem_def by (rule glb_below, rule CollectI, rule exI [of _ ?A]) (intro conjI refl fA Apos)
+  also have "\<dots> \<sqsubseteq> agg_fold f ?V ?A" unfolding DA
+  proof (rule agg_fold_mono [OF f fA])
+    fix \<kappa> assume "\<kappa> \<in> ?A"
+    then obtain m where m: "\<kappa> = rproj ?K m" by blast
+    have kk: "proj (kd X F)\<cdot>\<kappa> = \<kappa>" by (simp only: m proj_idem)
+    have "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> \<sqsubseteq> ?V \<kappa>"
+      by (rule monofun_cfun [OF monofun_cfun_arg [OF populated_ext_sound [OF DD cD nD]] ext_soundD [OF X DD cD nD cf d kk]])
+    moreover have "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> + Absent \<sqsubseteq> populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa>"
+      by (rule plus_option_pd_below1)
+    ultimately show "agg_member X D F k \<kappa> \<sqsubseteq> ?V \<kappa>" unfolding agg_member_def by (auto intro: below_trans)
   qed
+  finally show "agg_ext_sem f X D F k \<sqsubseteq> agg_fold f ?V (inner_keys X data F k)" by (simp only: rigid)
 qed
 
 theorem ext_lawful_aggregate:
