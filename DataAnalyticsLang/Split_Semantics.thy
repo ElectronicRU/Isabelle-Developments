@@ -668,6 +668,95 @@ theorem ext_lawful_aggregate:
   "semilawful X \<Longrightarrow> ext_sound X \<Longrightarrow> abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b) \<Longrightarrow> ext_lawful (aggregate_ext f X)"
   unfolding ext_lawful_def using lawful_aggregate [of X f] by (simp add: lawful_def ext_sound_aggregate)
 
+
+subsection \<open>Tuples\<close>
+
+primrec tuple_ext :: "('k, 'f, 'r, 'a::domain) expr_ext list \<Rightarrow> ('k, 'f, 'r, 'a list u) expr_ext" where
+  "tuple_ext [] = const_ext (up\<cdot>[])"
+| "tuple_ext (X # Xs) = combine_ext (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w) X (tuple_ext Xs)"
+
+theorem ext_sound_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_sound X) \<Longrightarrow> ext_sound (tuple_ext Xs)"
+proof (induct Xs)
+  case Nil
+  show ?case unfolding tuple_ext.simps const_ext_def by (rule ext_soundI) simp
+next
+  case (Cons X Xs)
+  then show ?case by (simp add: ext_sound_combine)
+qed
+
+
+subsection \<open>Rigid parts\<close>
+
+text \<open>The rigid combinators read only the rigid fields of their arguments, so an extended
+  expression's rigid part is the rigid combinator applied to the rigid parts.\<close>
+
+lemma truncate_with_ext [simp]: "expr.truncate (with_ext E s) = E"
+  by (simp add: with_ext_def expr.defs expr_ext.defs)
+
+lemma truncate_sel [simp]:
+  "emind (expr.truncate X) = emind X" "eguards (expr.truncate X) = eguards X" "evalues (expr.truncate X) = evalues X"
+  "esem (expr.truncate X) = esem X" "csem (expr.truncate X) = csem X"
+  by (simp_all add: expr.defs)
+
+lemma smap_truncate: "smap g (expr.truncate X) = smap g X"
+  by (simp add: smap_def)
+
+lemma restrict_truncate: "restrict \<gamma> (expr.truncate X) = restrict \<gamma> X"
+  by (simp add: restrict_def)
+
+lemma filtfor_truncate: "filtfor \<tau> G (expr.truncate X) = filtfor \<tau> G X"
+  by (simp add: filtfor_def)
+
+lemma include_dims_truncate: "include_dims M (expr.truncate X) = include_dims M X"
+  by (simp add: include_dims_def)
+
+lemma combine_truncate: "combine f (expr.truncate X\<^sub>1) (expr.truncate X\<^sub>2) = combine f X\<^sub>1 X\<^sub>2"
+  by (simp add: combine_def combine_csem_def)
+
+lemma aggregate_truncate: "aggregate f (expr.truncate X) = aggregate f X"
+  by (simp add: aggregate_def inner_keys_def agg_csem_def)
+
+lemma present_at_truncate: "present_at a \<rho> (expr.truncate X) = present_at a \<rho> X"
+  by (simp add: present_at_def cong: option.case_cong)
+
+lemma truncate_ext_simps:
+  "expr.truncate (key_at_ext b) = key_at b" "expr.truncate (column_ext c a v) = column c a v"
+  "expr.truncate (const_ext w) = const_expr w"
+  "expr.truncate (smap_ext g X) = smap g (expr.truncate X)"
+  "expr.truncate (restrict_ext \<gamma> X) = restrict \<gamma> (expr.truncate X)"
+  "expr.truncate (filtfor_ext \<tau> G X) = filtfor \<tau> G (expr.truncate X)"
+  "expr.truncate (include_dims_ext M X) = include_dims M (expr.truncate X)"
+  "expr.truncate (combine_ext f X\<^sub>1 X\<^sub>2) = combine f (expr.truncate X\<^sub>1) (expr.truncate X\<^sub>2)"
+  "expr.truncate (aggregate_ext h X) = aggregate h (expr.truncate X)"
+  "expr.truncate (present_at_ext a \<rho> X) = present_at a \<rho> (expr.truncate X)"
+  by (simp_all only: key_at_ext_def column_ext_def const_ext_def smap_ext_def restrict_ext_def filtfor_ext_def
+      include_dims_ext_def combine_ext_def aggregate_ext_def present_at_ext_def truncate_with_ext
+      smap_truncate restrict_truncate filtfor_truncate include_dims_truncate combine_truncate aggregate_truncate
+      present_at_truncate)
+
+lemma semilawful_truncate [simp]: "semilawful (expr.truncate X) \<longleftrightarrow> semilawful X"
+  by (simp add: semilawful_def cstrict_def)
+
+lemma truncate_tuple_ext: "expr.truncate (tuple_ext Xs) = tuple (map expr.truncate Xs)"
+proof (induct Xs)
+  case (Cons X Xs)
+  have "expr.truncate (tuple_ext (X # Xs)) = combine (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w) X (tuple_ext Xs)"
+    by (simp only: tuple_ext.simps combine_ext_def truncate_with_ext)
+  also have "\<dots> = combine (\<Lambda> v w. fup\<cdot>(\<Lambda> ys. up\<cdot>(v # ys))\<cdot>w) (expr.truncate X) (expr.truncate (tuple_ext Xs))"
+    by (rule combine_truncate [symmetric])
+  finally show ?case by (simp only: Cons list.map tuple.simps)
+qed (simp add: const_ext_def)
+
+theorem ext_lawful_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_lawful X) \<Longrightarrow> ext_lawful (tuple_ext Xs)"
+proof -
+  assume X: "\<And>X. X \<in> set Xs \<Longrightarrow> ext_lawful X"
+  have "semilawful (expr.truncate (tuple_ext Xs))" unfolding truncate_tuple_ext
+    by (rule semilawful_tuple) (auto dest: X simp: ext_lawful_def)
+  then have "semilawful (tuple_ext Xs)" by (simp only: semilawful_truncate)
+  moreover have "ext_sound (tuple_ext Xs)" by (rule ext_sound_tuple) (simp add: X [unfolded ext_lawful_def])
+  ultimately show ?thesis unfolding ext_lawful_def ..
+qed
+
 end
 
 end
