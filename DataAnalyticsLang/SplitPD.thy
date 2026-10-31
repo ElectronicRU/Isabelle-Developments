@@ -974,6 +974,48 @@ proof -
 qed
 
 
+subsection \<open>Conforming datasets\<close>
+
+text \<open>Definite rows conform when there are none or they form a conforming dataset.  The schema
+  need not let the lone bottom row conform (a chase rule may fire on it), so the bottom of the
+  conforming datasets is \<^emph>\<open>no rows\<close>.  Conforming rows, and split datasets with conforming
+  definite rows, are subdomains.\<close>
+
+definition conforming_rows :: "'r::schema lower_pd u \<Rightarrow> bool" where
+  "conforming_rows X \<longleftrightarrow> X = \<bottom> \<or> conforms (fup\<cdot>ID\<cdot>X)"
+
+lemma conforming_rows_bot [simp]: "conforming_rows \<bottom>"
+  by (simp add: conforming_rows_def)
+
+lemma conforming_rows_up [simp]: "conforming_rows (up\<cdot>X) \<longleftrightarrow> conforms X"
+  by (simp add: conforming_rows_def)
+
+lemma adm_conforming_rows: "adm conforming_rows"
+proof -
+  have b: "adm (\<lambda>X :: 'r lower_pd u. X = \<bottom>)" unfolding below_bottom_iff [symmetric] by (intro adm_below cont_id cont_const)
+  show ?thesis unfolding conforming_rows_def by (intro adm_disj b adm_subst [OF cont_Rep_cfun2 adm_conforms])
+qed
+
+pcpodef 'r::schema conf_rows = "{X :: 'r lower_pd u. conforming_rows X}"
+  by (simp_all add: adm_conforming_rows)
+
+pcpodef ('r::schema, 'k) conf_split = "{D :: ('r, 'k) split_pd. conforming_rows (split_rows\<cdot>D)}"
+  by (simp_all add: adm_subst [OF cont_Rep_cfun2 adm_conforming_rows])
+
+text \<open>The definite rows of a conforming split dataset conform.\<close>
+
+definition conf_split_rows :: "('r::schema, 'k) conf_split \<rightarrow> 'r conf_rows" where
+  "conf_split_rows = (\<Lambda> D. Abs_conf_rows (split_rows\<cdot>(Rep_conf_split D)))"
+
+lemma Rep_conf_split_rows: "Rep_conf_rows (conf_split_rows\<cdot>D) = split_rows\<cdot>(Rep_conf_split D)"
+proof -
+  have c: "cont (\<lambda>D. Abs_conf_rows (split_rows\<cdot>(Rep_conf_split D)))"
+    by (rule cont_Abs_conf_rows) (simp_all add: cont_Rep_conf_split Rep_conf_split [simplified])
+  show ?thesis unfolding conf_split_rows_def beta_cfun [OF c]
+    by (rule Abs_conf_rows_inverse) (simp add: Rep_conf_split [simplified])
+qed
+
+
 subsection \<open>Views act on datasets\<close>
 
 text \<open>For keyed rows, a view acts on datasets: it
