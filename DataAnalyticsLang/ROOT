@@ -17,6 +17,7 @@ session DataAnalyticsLang = "HOLCF-extra" +
     LOD
     Value
     Option_PD
+    SplitPD
     Content_Law
     Expr_Combinators
     Aggregate
