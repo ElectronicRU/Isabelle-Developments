@@ -2,6 +2,8 @@ theory SplitPD
   imports Views "HOLCF-extra.Top" "HOLCF-extra.UpperPD_Representation"
 begin
 
+default_sort bifinite
+
 section \<open>The split powerdomain\<close>
 
 text \<open>A dataset in the split powerdomain has two parts in different types: \<^emph>\<open>definite rows\<close>,
@@ -19,12 +21,12 @@ text \<open>A dataset in the split powerdomain has two parts in different types:
   types.  The split powerdomain is pointed; it is bifinite only for suitable keys (spectral ones),
   so no generic bifinite instance is given.\<close>
 
-consts split_key :: "'r::bifinite \<rightarrow> 'k::bifinite"
+consts split_key :: "'r \<rightarrow> 'k"
 
 
 subsection \<open>The basis\<close>
 
-definition split_consistent :: "'r::bifinite compact_basis set \<Rightarrow> 'k::bifinite compact_basis set \<Rightarrow> bool" where
+definition split_consistent :: "'r compact_basis set \<Rightarrow> 'k compact_basis set \<Rightarrow> bool" where
   "split_consistent X U \<longleftrightarrow> (\<forall>x\<in>X. \<exists>u\<in>U. Rep_compact_basis u \<sqsubseteq> split_key\<cdot>(Rep_compact_basis x))"
 
 lemma split_consistent_empty [simp]: "split_consistent {} U"
@@ -34,17 +36,17 @@ lemma split_consistent_Un:
   "split_consistent X U \<Longrightarrow> split_consistent Y V \<Longrightarrow> split_consistent (X \<union> Y) (U \<union> V)"
   unfolding split_consistent_def by blast
 
-typedef (overloaded) ('r::bifinite, 'k::bifinite) split_basis =
+typedef (overloaded) ('r, 'k) split_basis =
   "{(X, U). finite X \<and> finite U \<and> split_consistent X U} :: ('r compact_basis set \<times> 'k compact_basis set) set"
   by (rule exI [of _ "({}, {})"]) simp
 
-definition srows :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> 'r compact_basis set" where
+definition srows :: "('r, 'k) split_basis \<Rightarrow> 'r compact_basis set" where
   "srows t = fst (Rep_split_basis t)"
 
-definition skeys :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> 'k compact_basis set" where
+definition skeys :: "('r, 'k) split_basis \<Rightarrow> 'k compact_basis set" where
   "skeys t = snd (Rep_split_basis t)"
 
-definition SplitB :: "'r::bifinite compact_basis set \<Rightarrow> 'k::bifinite compact_basis set \<Rightarrow> ('r, 'k) split_basis" where
+definition SplitB :: "'r compact_basis set \<Rightarrow> 'k compact_basis set \<Rightarrow> ('r, 'k) split_basis" where
   "SplitB X U = Abs_split_basis (X, U)"
 
 lemma finite_srows [simp]: "finite (srows t)"
@@ -63,7 +65,7 @@ lemma srows_SplitB [simp]: "\<lbrakk>finite X; finite U; split_consistent X U\<r
   and skeys_SplitB [simp]: "\<lbrakk>finite X; finite U; split_consistent X U\<rbrakk> \<Longrightarrow> skeys (SplitB X U) = U"
   by (simp_all add: srows_def skeys_def SplitB_def Abs_split_basis_inverse)
 
-lemma split_basis_countable: "\<exists>f::('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> nat. inj f"
+lemma split_basis_countable: "\<exists>f::('r, 'k) split_basis \<Rightarrow> nat. inj f"
 proof -
   obtain g :: "'r compact_basis \<Rightarrow> nat" where g: "inj g"
     using compact_basis.countable ..
@@ -113,7 +115,7 @@ lemma hoare_le_Un: "\<lbrakk>hoare_le X Y; hoare_le X' Y'\<rbrakk> \<Longrightar
 lemma smyth_le_Un: "\<lbrakk>smyth_le U V; smyth_le U' V'\<rbrakk> \<Longrightarrow> smyth_le (U \<union> U') (V \<union> V')"
   unfolding smyth_le_def by (meson UnCI UnE)
 
-definition split_le :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> bool" where
+definition split_le :: "('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> bool" where
   "split_le s t \<longleftrightarrow> hoare_le (srows s) (srows t) \<and> smyth_le (skeys s) (skeys t)"
 
 lemma split_le_refl [simp]: "split_le t t"
@@ -128,7 +130,7 @@ interpretation split_le: preorder split_le
 
 subsection \<open>Type definition\<close>
 
-typedef (overloaded) ('r::bifinite, 'k::bifinite) split_pd =
+typedef (overloaded) ('r, 'k) split_pd =
   "{S::('r, 'k) split_basis set. split_le.ideal S}"
   by (rule split_le.ex_ideal)
 
@@ -149,7 +151,7 @@ instance split_pd :: (bifinite, bifinite) cpo
   using type_definition_split_pd below_split_pd_def
   by (rule split_le.typedef_ideal_cpo)
 
-definition split_principal :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> ('r, 'k) split_pd" where
+definition split_principal :: "('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_pd" where
   "split_principal t = Abs_split_pd {u. split_le u t}"
 
 interpretation split_pd: ideal_completion split_le split_principal Rep_split_pd
@@ -159,7 +161,7 @@ interpretation split_pd: ideal_completion split_le split_principal Rep_split_pd
 
 text \<open>The least element has no definite rows and the possible key \<open>\<bottom>\<close>: the open world.\<close>
 
-definition SBot :: "('r::bifinite, 'k::bifinite) split_basis" where
+definition SBot :: "('r, 'k) split_basis" where
   "SBot = SplitB {} {compact_bot}"
 
 lemma srows_SBot [simp]: "srows SBot = {}"
@@ -188,19 +190,19 @@ text \<open>The empty dataset (definitely no rows), the union, the weakening to 
   rows dropped), a row with an unconstrained key (the open unit), and a possible key without
   rows (the maybe-unit: whatever rows there are have keys above it).\<close>
 
-definition SEmpty :: "('r::bifinite, 'k::bifinite) split_basis" where
+definition SEmpty :: "('r, 'k) split_basis" where
   "SEmpty = SplitB {} {}"
 
-definition SPlus :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis" where
+definition SPlus :: "('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis" where
   "SPlus s t = SplitB (srows s \<union> srows t) (skeys s \<union> skeys t)"
 
-definition SMaybe :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> ('r, 'k) split_basis" where
+definition SMaybe :: "('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis" where
   "SMaybe t = SplitB {} (skeys t)"
 
-definition SOpen :: "'r::bifinite compact_basis \<Rightarrow> ('r, 'k::bifinite) split_basis" where
+definition SOpen :: "'r compact_basis \<Rightarrow> ('r, 'k) split_basis" where
   "SOpen a = SplitB {a} {compact_bot}"
 
-definition SKey :: "'k::bifinite compact_basis \<Rightarrow> ('r::bifinite, 'k) split_basis" where
+definition SKey :: "'k compact_basis \<Rightarrow> ('r, 'k) split_basis" where
   "SKey k = SplitB {} {k}"
 
 lemma srows_SEmpty [simp]: "srows SEmpty = {}"
@@ -246,23 +248,23 @@ lemma SMaybe_split_le_SEmpty: "split_le (SMaybe t) SEmpty"
 
 subsection \<open>Empty, plus, maybe, the open unit and the maybe-unit\<close>
 
-definition split_empty :: "('r::bifinite, 'k::bifinite) split_pd" where
+definition split_empty :: "('r, 'k) split_pd" where
   "split_empty = split_principal SEmpty"
 
-definition split_plus :: "('r::bifinite, 'k::bifinite) split_pd \<rightarrow> ('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" where
+definition split_plus :: "('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" where
   "split_plus = split_pd.extension (\<lambda>t. split_pd.extension (\<lambda>u. split_principal (SPlus t u)))"
 
-abbreviation split_add :: "('r::bifinite, 'k::bifinite) split_pd \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('r, 'k) split_pd"
+abbreviation split_add :: "('r, 'k) split_pd \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('r, 'k) split_pd"
     (infixl \<open>\<union>\<^sub>s\<close> 65) where
   "xs \<union>\<^sub>s ys \<equiv> split_plus\<cdot>xs\<cdot>ys"
 
-definition split_maybe :: "('r::bifinite, 'k::bifinite) split_pd \<rightarrow> ('r, 'k) split_pd" where
+definition split_maybe :: "('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" where
   "split_maybe = split_pd.extension (\<lambda>t. split_principal (SMaybe t))"
 
-definition split_open_unit :: "'r::bifinite \<rightarrow> ('r, 'k::bifinite) split_pd" where
+definition split_open_unit :: "'r \<rightarrow> ('r, 'k) split_pd" where
   "split_open_unit = compact_basis.extension (\<lambda>a. split_principal (SOpen a))"
 
-definition split_maybe_unit :: "'k::bifinite \<rightarrow> ('r::bifinite, 'k) split_pd" where
+definition split_maybe_unit :: "'k \<rightarrow> ('r, 'k) split_pd" where
   "split_maybe_unit = compact_basis.extension (\<lambda>k. split_principal (SKey k))"
 
 lemma split_plus_principal [simp]:
@@ -287,7 +289,7 @@ lemma split_maybe_unit_Rep_compact_basis [simp]:
 
 interpretation split_add: semilattice_neutr split_add split_empty
 proof
-  fix xs ys zs :: "('r::bifinite, 'k::bifinite) split_pd"
+  fix xs ys zs :: "('r, 'k) split_pd"
   show "(xs \<union>\<^sub>s ys) \<union>\<^sub>s zs = xs \<union>\<^sub>s (ys \<union>\<^sub>s zs)"
     apply (induct xs rule: split_pd.principal_induct, simp)
     apply (induct ys rule: split_pd.principal_induct, simp)
@@ -405,7 +407,7 @@ text \<open>The unit of a row has the row as its definite row and the row's key 
   of the basis elements with the row and an approximation of its key, along an approximation
   chain of the key type.\<close>
 
-definition split_approx :: "nat \<Rightarrow> 'a::bifinite \<rightarrow> 'a" where
+definition split_approx :: "nat \<Rightarrow> 'a \<rightarrow> 'a" where
   "split_approx = (SOME a. approx_chain a)"
 
 lemma approx_chain_split_approx: "approx_chain split_approx"
@@ -414,12 +416,12 @@ lemma approx_chain_split_approx: "approx_chain split_approx"
 interpretation split_approx: approx_chain split_approx
   by (rule approx_chain_split_approx)
 
-definition SUnit :: "'r::bifinite compact_basis \<Rightarrow> nat \<Rightarrow> ('r, 'k::bifinite) split_basis" where
+definition SUnit :: "'r compact_basis \<Rightarrow> nat \<Rightarrow> ('r, 'k) split_basis" where
   "SUnit a i = SplitB {a} {Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a)))}"
 
-lemma srows_SUnit [simp]: "srows (SUnit a i :: ('r::bifinite, 'k::bifinite) split_basis) = {a}"
+lemma srows_SUnit [simp]: "srows (SUnit a i :: ('r, 'k) split_basis) = {a}"
   and skeys_SUnit [simp]:
-    "skeys (SUnit a i :: ('r::bifinite, 'k::bifinite) split_basis)
+    "skeys (SUnit a i :: ('r, 'k) split_basis)
       = {Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a) :: 'k))}"
 proof -
   have "split_consistent {a} {Abs_compact_basis (split_approx i\<cdot>(split_key\<cdot>(Rep_compact_basis a) :: 'k))}"
@@ -432,7 +434,7 @@ qed
 
 lemma SUnit_split_mono:
   assumes ab: "a \<sqsubseteq> b" and ij: "i \<le> j"
-  shows "split_le (SUnit a i :: ('r::bifinite, 'k::bifinite) split_basis) (SUnit b j)"
+  shows "split_le (SUnit a i :: ('r, 'k) split_basis) (SUnit b j)"
 proof -
   have "split_approx i \<sqsubseteq> (split_approx j :: 'k \<rightarrow> 'k)"
     by (rule chain_mono [OF split_approx.chain_approx ij])
@@ -446,18 +448,18 @@ proof -
   then show ?thesis using ab unfolding split_le_def hoare_le_def smyth_le_def srows_SUnit skeys_SUnit by simp
 qed
 
-definition split_unit_basis :: "'r::bifinite compact_basis \<Rightarrow> ('r, 'k::bifinite) split_pd" where
+definition split_unit_basis :: "'r compact_basis \<Rightarrow> ('r, 'k) split_pd" where
   "split_unit_basis a = (\<Squnion>i. split_principal (SUnit a i))"
 
-lemma chain_split_unit_basis: "chain (\<lambda>i. split_principal (SUnit a i) :: ('r::bifinite, 'k::bifinite) split_pd)"
+lemma chain_split_unit_basis: "chain (\<lambda>i. split_principal (SUnit a i) :: ('r, 'k) split_pd)"
   by (rule chainI, rule split_pd.principal_mono, rule SUnit_split_mono) simp_all
 
-lemma split_unit_basis_mono: "a \<sqsubseteq> b \<Longrightarrow> split_unit_basis a \<sqsubseteq> (split_unit_basis b :: ('r::bifinite, 'k::bifinite) split_pd)"
+lemma split_unit_basis_mono: "a \<sqsubseteq> b \<Longrightarrow> split_unit_basis a \<sqsubseteq> (split_unit_basis b :: ('r, 'k) split_pd)"
   unfolding split_unit_basis_def
   by (rule lub_mono [OF chain_split_unit_basis chain_split_unit_basis],
       rule split_pd.principal_mono, rule SUnit_split_mono) simp_all
 
-definition split_unit :: "'r::bifinite \<rightarrow> ('r, 'k::bifinite) split_pd" where
+definition split_unit :: "'r \<rightarrow> ('r, 'k) split_pd" where
   "split_unit = compact_basis.extension split_unit_basis"
 
 lemma split_unit_Rep_compact_basis [simp]:
@@ -468,7 +470,7 @@ lemma split_unit_Rep_compact_basis [simp]:
 text \<open>The open unit is below the unit: it forgets the row's key.\<close>
 
 lemma split_open_unit_below_unit:
-  "split_open_unit\<cdot>x \<sqsubseteq> (split_unit\<cdot>x :: ('r::bifinite, 'k::bifinite) split_pd)"
+  "split_open_unit\<cdot>x \<sqsubseteq> (split_unit\<cdot>x :: ('r, 'k) split_pd)"
 proof (induct x rule: compact_basis.principal_induct)
   show "adm (\<lambda>x. split_open_unit\<cdot>x \<sqsubseteq> (split_unit\<cdot>x :: ('r, 'k) split_pd))" by simp
   fix a :: "'r compact_basis"
@@ -488,10 +490,59 @@ qed (simp add: split_empty_def split_le_def)
 
 subsection \<open>The definite rows\<close>
 
-text \<open>The definite rows of a dataset, as a lower powerdomain: no definite rows is its bottom.\<close>
+text \<open>HOLCF's lower powerdomain has no empty set: its bottom is the one row \<open>\<bottom>\<close>, which says that
+  some row exists.  The definite rows of a dataset are therefore a \<^emph>\<open>lifted\<close> lower powerdomain,
+  whose bottom is no rows.  Union is lifted non-strictly: no rows is its unit.\<close>
 
-definition srows_lower :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> 'r lower_pd" where
-  "srows_lower t = (if srows t = {} then \<bottom> else lower_principal (Abs_pd_basis (srows t)))"
+definition lower_union_fun :: "'a lower_pd u \<Rightarrow> 'a lower_pd u \<Rightarrow> 'a lower_pd u" where
+  "lower_union_fun X Y = (if X = \<bottom> \<and> Y = \<bottom> then \<bottom> else up\<cdot>(fup\<cdot>ID\<cdot>X \<union>\<flat> fup\<cdot>ID\<cdot>Y))"
+
+lemma lower_plus_bottom_right: "xs \<union>\<flat> \<bottom> = xs"
+  by (rule below_antisym [OF lower_plus_least [OF below_refl minimal] lower_plus_below1])
+
+lemma lower_plus_bottom_left: "\<bottom> \<union>\<flat> xs = xs"
+  by (rule below_antisym [OF lower_plus_least [OF minimal below_refl] lower_plus_below2])
+
+lemma lower_union_fun_bottom1: "lower_union_fun \<bottom> Y = Y"
+  by (cases Y) (simp_all add: lower_union_fun_def lower_plus_bottom_left)
+
+lemma lower_union_fun_bottom2: "lower_union_fun X \<bottom> = X"
+  by (cases X) (simp_all add: lower_union_fun_def lower_plus_bottom_right)
+
+lemma lower_union_fun_up: "lower_union_fun (up\<cdot>x) (up\<cdot>y) = up\<cdot>(x \<union>\<flat> y)"
+  by (simp add: lower_union_fun_def)
+
+lemma cont_lower_union_fun1: "cont (\<lambda>X. lower_union_fun X Y)"
+proof (cases Y)
+  case bottom
+  then show ?thesis by (simp add: lower_union_fun_bottom2)
+next
+  case (up y)
+  then show ?thesis by (simp add: lower_union_fun_def)
+qed
+
+lemma cont_lower_union_fun2: "cont (\<lambda>Y. lower_union_fun X Y)"
+proof (cases X)
+  case bottom
+  then show ?thesis by (simp add: lower_union_fun_bottom1)
+next
+  case (up x)
+  then show ?thesis by (simp add: lower_union_fun_def)
+qed
+
+definition lower_union :: "'a lower_pd u \<rightarrow> 'a lower_pd u \<rightarrow> 'a lower_pd u" where
+  "lower_union = (\<Lambda> X Y. lower_union_fun X Y)"
+
+lemma lower_union_beta: "lower_union\<cdot>X\<cdot>Y = lower_union_fun X Y"
+  unfolding lower_union_def by (simp add: cont2cont_LAM cont_lower_union_fun1 cont_lower_union_fun2)
+
+lemma lower_union_bottom1 [simp]: "lower_union\<cdot>\<bottom>\<cdot>Y = Y"
+  and lower_union_bottom2 [simp]: "lower_union\<cdot>X\<cdot>\<bottom> = X"
+  and lower_union_up [simp]: "lower_union\<cdot>(up\<cdot>x)\<cdot>(up\<cdot>y) = up\<cdot>(x \<union>\<flat> y)"
+  by (simp_all add: lower_union_beta lower_union_fun_bottom1 lower_union_fun_bottom2 lower_union_fun_up)
+
+definition srows_lower :: "('r, 'k) split_basis \<Rightarrow> 'r lower_pd u" where
+  "srows_lower t = (if srows t = {} then \<bottom> else up\<cdot>(lower_principal (Abs_pd_basis (srows t))))"
 
 lemma srows_lower_mono: "split_le s t \<Longrightarrow> srows_lower s \<sqsubseteq> srows_lower t"
 proof -
@@ -506,26 +557,26 @@ proof -
   qed (simp add: srows_lower_def)
 qed
 
-definition split_rows :: "('r::bifinite, 'k::bifinite) split_pd \<rightarrow> 'r lower_pd" where
+definition split_rows :: "('r, 'k) split_pd \<rightarrow> 'r lower_pd u" where
   "split_rows = split_pd.extension srows_lower"
 
 lemma split_rows_principal [simp]: "split_rows\<cdot>(split_principal t) = srows_lower t"
   unfolding split_rows_def by (simp add: split_pd.extension_principal srows_lower_mono)
 
-lemma split_rows_open_unit [simp]: "split_rows\<cdot>(split_open_unit\<cdot>x) = lower_unit\<cdot>x"
+lemma split_rows_open_unit [simp]: "split_rows\<cdot>(split_open_unit\<cdot>x) = up\<cdot>(lower_unit\<cdot>x)"
 proof (induct x rule: compact_basis.principal_induct)
-  show "adm (\<lambda>x. split_rows\<cdot>(split_open_unit\<cdot>x) = lower_unit\<cdot>x)" by simp
+  show "adm (\<lambda>x. split_rows\<cdot>(split_open_unit\<cdot>x) = up\<cdot>(lower_unit\<cdot>x))" by simp
 qed (simp add: srows_lower_def PDUnit_def)
 
-lemma split_rows_unit [simp]: "split_rows\<cdot>(split_unit\<cdot>x :: ('r::bifinite, 'k::bifinite) split_pd) = lower_unit\<cdot>x"
+lemma split_rows_unit [simp]: "split_rows\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = up\<cdot>(lower_unit\<cdot>x)"
 proof (induct x rule: compact_basis.principal_induct)
-  show "adm (\<lambda>x. split_rows\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = lower_unit\<cdot>x)" by simp
+  show "adm (\<lambda>x. split_rows\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = up\<cdot>(lower_unit\<cdot>x))" by simp
   fix a :: "'r compact_basis"
   have "split_rows\<cdot>(\<Squnion>i. split_principal (SUnit a i) :: ('r, 'k) split_pd) = (\<Squnion>i. srows_lower (SUnit a i :: ('r, 'k) split_basis))"
     by (simp add: contlub_cfun_arg [OF chain_split_unit_basis])
-  also have "\<dots> = lower_unit\<cdot>(Rep_compact_basis a)"
+  also have "\<dots> = up\<cdot>(lower_unit\<cdot>(Rep_compact_basis a))"
     by (simp add: srows_lower_def PDUnit_def)
-  finally show "split_rows\<cdot>(split_unit\<cdot>(Rep_compact_basis a) :: ('r, 'k) split_pd) = lower_unit\<cdot>(Rep_compact_basis a)"
+  finally show "split_rows\<cdot>(split_unit\<cdot>(Rep_compact_basis a) :: ('r, 'k) split_pd) = up\<cdot>(lower_unit\<cdot>(Rep_compact_basis a))"
     by simp
 qed
 
@@ -538,18 +589,23 @@ lemma split_rows_empty [simp]: "split_rows\<cdot>split_empty = \<bottom>"
 lemma split_rows_strict [simp]: "split_rows\<cdot>\<bottom> = \<bottom>"
   by (simp add: inst_split_pd_pcpo srows_lower_def)
 
-lemma split_rows_plus [simp]: "split_rows\<cdot>(xs \<union>\<^sub>s ys) = split_rows\<cdot>xs \<union>\<flat> split_rows\<cdot>ys"
+lemma split_rows_plus [simp]: "split_rows\<cdot>(xs \<union>\<^sub>s ys) = lower_union\<cdot>(split_rows\<cdot>xs)\<cdot>(split_rows\<cdot>ys)"
 proof (induct xs rule: split_pd.principal_induct)
   fix s
-  show "split_rows\<cdot>(split_principal s \<union>\<^sub>s ys) = split_rows\<cdot>(split_principal s) \<union>\<flat> split_rows\<cdot>ys"
+  show "split_rows\<cdot>(split_principal s \<union>\<^sub>s ys) = lower_union\<cdot>(split_rows\<cdot>(split_principal s))\<cdot>(split_rows\<cdot>ys)"
   proof (induct ys rule: split_pd.principal_induct)
     fix t
     show "split_rows\<cdot>(split_principal s \<union>\<^sub>s split_principal t)
-        = split_rows\<cdot>(split_principal s) \<union>\<flat> split_rows\<cdot>(split_principal t)"
+        = lower_union\<cdot>(split_rows\<cdot>(split_principal s))\<cdot>(split_rows\<cdot>(split_principal t))"
       by (cases "srows s = {}"; cases "srows t = {}")
         (simp_all add: srows_lower_def PDPlus_def Abs_pd_basis_inverse pd_basis_def)
   qed simp
 qed simp
+
+text \<open>A dataset has no definite rows exactly when it has no definite row \<open>\<bottom>\<close>.\<close>
+
+lemma split_rows_bottom_principal: "split_rows\<cdot>(split_principal t) = \<bottom> \<longleftrightarrow> srows t = {}"
+  by (simp add: srows_lower_def)
 
 
 subsection \<open>Opening\<close>
@@ -557,7 +613,7 @@ subsection \<open>Opening\<close>
 text \<open>Opening a dataset forgets its possible keys: the definite rows are kept and any key is
   possible.  The open unit is the opened unit.\<close>
 
-definition SOpenB :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> ('r, 'k) split_basis" where
+definition SOpenB :: "('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis" where
   "SOpenB t = SplitB (srows t) {compact_bot}"
 
 lemma srows_SOpenB [simp]: "srows (SOpenB t) = srows t"
@@ -567,7 +623,7 @@ lemma srows_SOpenB [simp]: "srows (SOpenB t) = srows t"
 lemma SOpenB_split_mono: "split_le s t \<Longrightarrow> split_le (SOpenB s) (SOpenB t)"
   unfolding split_le_def by (simp add: smyth_le_def)
 
-definition split_open :: "('r::bifinite, 'k::bifinite) split_pd \<rightarrow> ('r, 'k) split_pd" where
+definition split_open :: "('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" where
   "split_open = split_pd.extension (\<lambda>t. split_principal (SOpenB t))"
 
 lemma split_open_principal [simp]: "split_open\<cdot>(split_principal t) = split_principal (SOpenB t)"
@@ -599,7 +655,7 @@ lemma split_open_empty [simp]: "split_open\<cdot>split_empty = \<bottom>"
 lemma split_open_strict [simp]: "split_open\<cdot>\<bottom> = \<bottom>"
   by (simp add: inst_split_pd_pcpo, rule split_principal_eqI, simp_all)
 
-lemma split_open_unit_open: "split_open\<cdot>(split_unit\<cdot>x) = (split_open_unit\<cdot>x :: ('r::bifinite, 'k::bifinite) split_pd)"
+lemma split_open_unit_open: "split_open\<cdot>(split_unit\<cdot>x) = (split_open_unit\<cdot>x :: ('r, 'k) split_pd)"
 proof (induct x rule: compact_basis.principal_induct)
   show "adm (\<lambda>x. split_open\<cdot>(split_unit\<cdot>x) = (split_open_unit\<cdot>x :: ('r, 'k) split_pd))" by simp
   fix a :: "'r compact_basis"
@@ -626,7 +682,7 @@ text \<open>The possible keys of a dataset, as an upper powerdomain with a top a
 lemma Abs_pd_basis_singleton: "Abs_pd_basis {a} = PDUnit a"
   by (simp add: PDUnit_def)
 
-definition skeys_upper :: "('r::bifinite, 'k::bifinite) split_basis \<Rightarrow> 'k upper_pd top" where
+definition skeys_upper :: "('r, 'k) split_basis \<Rightarrow> 'k upper_pd top" where
   "skeys_upper t = (if skeys t = {} then Top else down\<cdot>(upper_principal (Abs_pd_basis (skeys t))))"
 
 lemma skeys_upper_mono: "split_le s t \<Longrightarrow> skeys_upper s \<sqsubseteq> skeys_upper t"
@@ -642,7 +698,7 @@ proof -
   qed (simp add: skeys_upper_def)
 qed
 
-definition split_keys :: "('r::bifinite, 'k::bifinite) split_pd \<rightarrow> 'k upper_pd top" where
+definition split_keys :: "('r, 'k) split_pd \<rightarrow> 'k upper_pd top" where
   "split_keys = split_pd.extension skeys_upper"
 
 lemma split_keys_principal [simp]: "split_keys\<cdot>(split_principal t) = skeys_upper t"
@@ -661,14 +717,14 @@ lemma split_keys_open [simp]: "split_keys\<cdot>(split_open\<cdot>xs) = down\<cd
   by (induct xs rule: split_pd.principal_induct, simp,
       simp add: skeys_upper_def Abs_pd_basis_singleton inst_upper_pd_pcpo)
 
-lemma split_keys_maybe_unit [simp]: "split_keys\<cdot>(split_maybe_unit\<cdot>k :: ('r::bifinite, 'k::bifinite) split_pd) = down\<cdot>(upper_unit\<cdot>k)"
+lemma split_keys_maybe_unit [simp]: "split_keys\<cdot>(split_maybe_unit\<cdot>k :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>k)"
 proof (induct k rule: compact_basis.principal_induct)
   show "adm (\<lambda>k. split_keys\<cdot>(split_maybe_unit\<cdot>k :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>k))"
     by simp
 qed (simp add: skeys_upper_def Abs_pd_basis_singleton)
 
 lemma split_keys_unit [simp]:
-  "split_keys\<cdot>(split_unit\<cdot>x :: ('r::bifinite, 'k::bifinite) split_pd) = down\<cdot>(upper_unit\<cdot>(split_key\<cdot>x :: 'k))"
+  "split_keys\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>(split_key\<cdot>x :: 'k))"
 proof (induct x rule: compact_basis.principal_induct)
   show "adm (\<lambda>x. split_keys\<cdot>(split_unit\<cdot>x :: ('r, 'k) split_pd) = down\<cdot>(upper_unit\<cdot>(split_key\<cdot>x :: 'k)))"
     by simp
@@ -690,7 +746,7 @@ proof (induct x rule: compact_basis.principal_induct)
     by simp
 qed
 
-lemma split_keys_open_unit [simp]: "split_keys\<cdot>(split_open_unit\<cdot>x :: ('r::bifinite, 'k::bifinite) split_pd) = down\<cdot>\<bottom>"
+lemma split_keys_open_unit [simp]: "split_keys\<cdot>(split_open_unit\<cdot>x :: ('r, 'k) split_pd) = down\<cdot>\<bottom>"
   by (simp only: split_open_unit_open [symmetric] split_keys_open)
 
 
@@ -702,7 +758,7 @@ text \<open>A dataset is \<^emph>\<open>included\<close> in another when adding 
   (monotone), the dataset is \<^emph>\<open>confined\<close> above a key when the maybe-unit of the key is below it
   (monotone), and a key is \<^emph>\<open>possible\<close> when its maybe-unit is included in the dataset.\<close>
 
-definition split_incl :: "('r::bifinite, 'k::bifinite) split_pd \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> bool" (infix \<open>\<subseteq>\<^sub>s\<close> 50) where
+definition split_incl :: "('r, 'k) split_pd \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> bool" (infix \<open>\<subseteq>\<^sub>s\<close> 50) where
   "xs \<subseteq>\<^sub>s ys \<longleftrightarrow> ys \<union>\<^sub>s xs = ys"
 
 lemma split_incl_refl [simp]: "xs \<subseteq>\<^sub>s xs"
@@ -730,13 +786,13 @@ proof -
   finally show ?thesis unfolding split_incl_def .
 qed
 
-definition split_definite :: "'r::bifinite \<Rightarrow> ('r, 'k::bifinite) split_pd \<Rightarrow> bool" where
+definition split_definite :: "'r \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> bool" where
   "split_definite x xs \<longleftrightarrow> split_open_unit\<cdot>x \<sqsubseteq> xs"
 
-definition split_confined :: "'k::bifinite \<Rightarrow> ('r::bifinite, 'k) split_pd \<Rightarrow> bool" where
+definition split_confined :: "'k \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> bool" where
   "split_confined k xs \<longleftrightarrow> split_maybe_unit\<cdot>k \<sqsubseteq> xs"
 
-definition split_possible :: "'k::bifinite \<Rightarrow> ('r::bifinite, 'k) split_pd \<Rightarrow> bool" where
+definition split_possible :: "'k \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> bool" where
   "split_possible k xs \<longleftrightarrow> split_maybe_unit\<cdot>k \<subseteq>\<^sub>s xs"
 
 lemma split_definite_mono: "split_definite x xs \<Longrightarrow> xs \<sqsubseteq> ys \<Longrightarrow> split_definite x ys"
@@ -744,15 +800,15 @@ lemma split_definite_mono: "split_definite x xs \<Longrightarrow> xs \<sqsubsete
   unfolding split_definite_def split_confined_def by (erule (1) below_trans)+
 
 lemma split_definite_principal:
-  "split_definite (Rep_compact_basis a) (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd) \<longleftrightarrow> (\<exists>x\<in>srows t. a \<sqsubseteq> x)"
+  "split_definite (Rep_compact_basis a) (split_principal t :: ('r, 'k) split_pd) \<longleftrightarrow> (\<exists>x\<in>srows t. a \<sqsubseteq> x)"
   unfolding split_definite_def by (simp add: split_le_def hoare_le_def smyth_le_def)
 
 lemma split_confined_principal:
-  "split_confined (Rep_compact_basis k) (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd) \<longleftrightarrow> (\<forall>v\<in>skeys t. k \<sqsubseteq> v)"
+  "split_confined (Rep_compact_basis k) (split_principal t :: ('r, 'k) split_pd) \<longleftrightarrow> (\<forall>v\<in>skeys t. k \<sqsubseteq> v)"
   unfolding split_confined_def by (simp add: split_le_def smyth_le_def)
 
 lemma split_possible_principal:
-  "split_possible (Rep_compact_basis k) (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd) \<longleftrightarrow> (\<exists>u\<in>skeys t. u \<sqsubseteq> k)"
+  "split_possible (Rep_compact_basis k) (split_principal t :: ('r, 'k) split_pd) \<longleftrightarrow> (\<exists>u\<in>skeys t. u \<sqsubseteq> k)"
   unfolding split_possible_def split_maybe_unit_Rep_compact_basis split_incl_principal
   by (simp add: hoare_le_def smyth_le_def)
 
@@ -776,7 +832,7 @@ proof (induct xs rule: split_pd.principal_induct)
   qed simp
 qed simp
 
-lemma split_possible_keys: "split_possible (k::'k::bifinite) (xs :: ('r::bifinite, 'k) split_pd) \<longleftrightarrow> split_keys\<cdot>xs \<sqsubseteq> down\<cdot>{k}\<sharp>"
+lemma split_possible_keys: "split_possible (k::'k) (xs :: ('r, 'k) split_pd) \<longleftrightarrow> split_keys\<cdot>xs \<sqsubseteq> down\<cdot>{k}\<sharp>"
 proof
   assume "split_possible k xs"
   then have "split_keys\<cdot>xs = split_keys\<cdot>(xs \<union>\<^sub>s split_maybe_unit\<cdot>k)" by (simp add: split_possible_def split_incl_def)
@@ -789,7 +845,7 @@ next
     by (simp add: contlub_cfun_fun [OF split_approx.chain_approx, symmetric])
   have le: "xs \<union>\<^sub>s split_maybe_unit\<cdot>k \<sqsubseteq> xs"
     using monofun_cfun_arg [OF split_maybe_unit_bottom_below [of k], of "split_plus\<cdot>xs"] by simp
-  have "split_keys\<cdot>ys \<sqsubseteq> down\<cdot>{k}\<sharp> \<longrightarrow> ys \<sqsubseteq> ys \<union>\<^sub>s split_maybe_unit\<cdot>k" for ys :: "('r::bifinite, 'k) split_pd"
+  have "split_keys\<cdot>ys \<sqsubseteq> down\<cdot>{k}\<sharp> \<longrightarrow> ys \<sqsubseteq> ys \<union>\<^sub>s split_maybe_unit\<cdot>k" for ys :: "('r, 'k) split_pd"
   proof (induct ys rule: split_pd.principal_induct)
     case 1
     show ?case by (intro adm_imp adm_not_below adm_below) simp_all
@@ -839,7 +895,7 @@ text \<open>\<^emph>\<open>Rigid presence\<close>: a row is present when its exa
   adding the row changes nothing.  This is neither monotone nor antitone.  It says that the row is
   definite and its key possible; on compact data the two together are equivalent to it.\<close>
 
-definition split_present :: "'r::bifinite \<Rightarrow> ('r, 'k::bifinite) split_pd \<Rightarrow> bool" where
+definition split_present :: "'r \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> bool" where
   "split_present x xs \<longleftrightarrow> split_unit\<cdot>x \<subseteq>\<^sub>s xs"
 
 lemma split_open_below_plus: "split_open\<cdot>ys \<sqsubseteq> xs \<union>\<^sub>s ys"
@@ -869,7 +925,7 @@ text \<open>On compact data, rigid presence reads off the generators: some defin
   row, and some possible key below the row's key.\<close>
 
 lemma split_present_principal:
-  "split_present (Rep_compact_basis a) (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd) \<longleftrightarrow>
+  "split_present (Rep_compact_basis a) (split_principal t :: ('r, 'k) split_pd) \<longleftrightarrow>
     (\<exists>x\<in>srows t. a \<sqsubseteq> x) \<and> (\<exists>u\<in>skeys t. Rep_compact_basis u \<sqsubseteq> split_key\<cdot>(Rep_compact_basis a))"
 proof -
   let ?k = "split_key\<cdot>(Rep_compact_basis a) :: 'k"

@@ -8,9 +8,9 @@ section \<open>Semantics over split datasets\<close>
 
 text \<open>The rigid semantics reads a dataset's definite rows, as a lower powerdomain.  The
   \<^emph>\<open>extended\<close> semantics reads a split dataset, definite rows and possible keys, and is defined
-  combinator by combinator.  Its law is soundness against the rigid one: below every compact
-  dataset above it that has rows, what it says is what the rigid semantics says on that dataset's
-  rows.  It need not be exact there.\<close>
+  combinator by combinator.  Its law is soundness against the rigid one: what it says is below
+  what the rigid semantics says on the definite rows of every compact dataset above it.  It need
+  not be exact there.\<close>
 
 subsection \<open>Rows of compact split datasets\<close>
 
@@ -32,55 +32,35 @@ next
 qed
 
 lemma split_rows_mem_principal:
-  "srows t \<noteq> {} \<Longrightarrow> x \<in>\<flat> split_rows\<cdot>(split_principal t) \<longleftrightarrow> (\<exists>s\<in>srows t. x \<sqsubseteq> Rep_compact_basis s)"
-  by (simp add: srows_lower_def lower_mem_Abs_pd_basis)
+  "split_rows\<cdot>(split_principal t) = up\<cdot>data \<Longrightarrow> x \<in>\<flat> data \<longleftrightarrow> (\<exists>s\<in>srows t. x \<sqsubseteq> Rep_compact_basis s)"
+proof (cases "srows t = {}")
+  case False
+  assume "split_rows\<cdot>(split_principal t) = up\<cdot>data"
+  then have "data = lower_principal (Abs_pd_basis (srows t))" using False by (simp add: srows_lower_def)
+  then show ?thesis by (simp add: lower_mem_Abs_pd_basis [OF finite_srows False])
+qed (simp add: srows_lower_def)
 
-lemma split_definite_rows_mem: "split_definite x xs \<Longrightarrow> x \<in>\<flat> split_rows\<cdot>xs"
+lemma split_definite_rows_mem: "split_definite x xs \<Longrightarrow> split_rows\<cdot>xs = up\<cdot>data \<Longrightarrow> x \<in>\<flat> data"
   unfolding split_definite_def lower_mem_equiv
   by (drule monofun_cfun_arg [of _ _ split_rows]) simp
 
-lemma split_definite_bottom_principal:
-  "split_definite \<bottom> (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd) \<longleftrightarrow> srows t \<noteq> {}"
-  using split_definite_principal [of compact_bot t] by (auto simp: compact_bot_minimal)
-
-text \<open>The maximal rows of a compact dataset with rows are among its generators.\<close>
+text \<open>The maximal rows of a compact dataset are among its generators.\<close>
 
 lemma split_maximal_row_generator:
-  assumes m: "x \<in> lower_maximal (split_rows\<cdot>(split_principal t))" and ne: "srows t \<noteq> {}"
+  assumes d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and m: "x \<in> lower_maximal data"
   shows "\<exists>s\<in>srows t. x = Rep_compact_basis s"
 proof -
-  have "x \<in>\<flat> split_rows\<cdot>(split_principal t)" using m by (simp add: lower_maximal_def)
-  then obtain s where s: "s \<in> srows t" "x \<sqsubseteq> Rep_compact_basis s" using split_rows_mem_principal [OF ne] by blast
-  have "Rep_compact_basis s \<in>\<flat> split_rows\<cdot>(split_principal t)" using split_rows_mem_principal [OF ne] s(1) by blast
+  have "x \<in>\<flat> data" using m by (simp add: lower_maximal_def)
+  then obtain s where s: "s \<in> srows t" "x \<sqsubseteq> Rep_compact_basis s" using split_rows_mem_principal [OF d] by blast
+  have "Rep_compact_basis s \<in>\<flat> data" using split_rows_mem_principal [OF d] s(1) by blast
   then have "Rep_compact_basis s = x" using m s(2) by (simp add: lower_maximal_def)
   then show ?thesis using s(1) by blast
 qed
 
-text \<open>A compact key possible in a compact dataset is possible below it.\<close>
+text \<open>Possibility is antitone: a key possible in a dataset is possible below it.\<close>
 
-lemma split_possible_below_principal:
-  assumes k: "split_possible (Rep_compact_basis k) (split_principal t :: ('r::bifinite, 'k::bifinite) split_pd)"
-    and D: "D \<sqsubseteq> split_principal t"
-  shows "split_possible (Rep_compact_basis k) D"
-proof -
-  obtain u where u: "u \<in> skeys t" "u \<sqsubseteq> k" using k by (auto simp: split_possible_principal)
-  have "D \<sqsubseteq> split_principal t \<longrightarrow> split_possible (Rep_compact_basis k) D"
-  proof (induct D rule: split_pd.principal_induct)
-    case 1
-    show ?case unfolding split_possible_def split_incl_def by (intro adm_imp adm_not_below adm_eq) simp_all
-  next
-    case (2 s)
-    show ?case
-    proof
-      assume "split_principal s \<sqsubseteq> split_principal t"
-      then have "smyth_le (skeys s) (skeys t)" by (simp add: split_le_def)
-      then obtain w where "w \<in> skeys s" "w \<sqsubseteq> u" using u(1) by (auto simp: smyth_le_def)
-      then show "split_possible (Rep_compact_basis k) (split_principal s)"
-        using u(2) by (auto simp: split_possible_principal intro: below_trans)
-    qed
-  qed
-  then show ?thesis using D by blast
-qed
+lemma split_possible_below: "split_possible k ys \<Longrightarrow> xs \<sqsubseteq> ys \<Longrightarrow> split_possible k xs"
+  unfolding split_possible_keys by (erule below_trans [rotated], erule monofun_cfun_arg)
 
 
 subsection \<open>Expressions with an extended semantics\<close>
@@ -112,27 +92,27 @@ locale split_dataspace = dataspace slicing rules keying + split_keyed keying
     and rules :: "'r::{domain, lod_domain} schema_rules" and keying :: "('r, 'k) keying"
 begin
 
-text \<open>\<^emph>\<open>Soundness\<close>: below a compact dataset with rows, conforming relative to the rigid
-  expression's value entries, the extended semantics is below the rigid semantics of that
-  dataset's rows, at every key of the key LOD.  Compact datasets with rows are where the rigid
-  semantics is meant: it reads no possible keys, and it cannot see the empty dataset, whose
-  rows are \<open>\<bottom>\<close>.  An \<^emph>\<open>extended-lawful\<close> expression is moreover semilawful.\<close>
+text \<open>\<^emph>\<open>Soundness\<close>: below a compact dataset whose definite rows are \<open>data\<close>, conforming
+  relative to the expression's value entries, the extended semantics is below the rigid semantics
+  of \<open>data\<close>, at every key of the key LOD.  Compact datasets with definite rows are where the rigid
+  semantics is meant: it reads no possible keys, and its datasets cannot be empty.  An
+  \<^emph>\<open>extended-lawful\<close> expression is moreover semilawful.\<close>
 
 definition ext_sound :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
-  "ext_sound X \<longleftrightarrow> (\<forall>D D' F k. D \<sqsubseteq> D' \<longrightarrow> compact D' \<longrightarrow> split_definite (\<bottom>::'r) D' \<longrightarrow>
-     fconf (evalues X) (split_rows\<cdot>D') F \<longrightarrow> proj (kd X F)\<cdot>k = k \<longrightarrow>
-     sem_ext X D F k \<sqsubseteq> esem X (split_rows\<cdot>D') F k)"
+  "ext_sound X \<longleftrightarrow> (\<forall>D D' data F k. D \<sqsubseteq> D' \<longrightarrow> compact D' \<longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<longrightarrow>
+     fconf (evalues X) data F \<longrightarrow> proj (kd X F)\<cdot>k = k \<longrightarrow>
+     sem_ext X D F k \<sqsubseteq> esem X data F k)"
 
 lemma ext_soundI:
-  "(\<And>D D' F k. D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_definite (\<bottom>::'r) D' \<Longrightarrow>
-     fconf (evalues X) (split_rows\<cdot>D') F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
-     sem_ext X D F k \<sqsubseteq> esem X (split_rows\<cdot>D') F k) \<Longrightarrow> ext_sound X"
+  "(\<And>D D' data F k. D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<Longrightarrow>
+     fconf (evalues X) data F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     sem_ext X D F k \<sqsubseteq> esem X data F k) \<Longrightarrow> ext_sound X"
   unfolding ext_sound_def by blast
 
 lemma ext_soundD:
-  "ext_sound X \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_definite (\<bottom>::'r) D' \<Longrightarrow>
-     fconf (evalues X) (split_rows\<cdot>D') F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
-     sem_ext X D F k \<sqsubseteq> esem X (split_rows\<cdot>D') F k"
+  "ext_sound X \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> compact D' \<Longrightarrow> split_rows\<cdot>D' = up\<cdot>data \<Longrightarrow>
+     fconf (evalues X) data F \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     sem_ext X D F k \<sqsubseteq> esem X data F k"
   unfolding ext_sound_def by blast
 
 lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarrow> semilawful E"
@@ -144,70 +124,98 @@ definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool
 
 subsection \<open>Keys\<close>
 
-text \<open>The key at an LOD \<open>c\<close> is present where some definite row has it, provided it is maximal
-  at \<open>c\<close> (a row at a partial key may still move up), and absent where no possible key projects
-  below it.  Otherwise it is undecided.\<close>
+text \<open>The key at an LOD \<open>c\<close> is present where some definite row has it.  Where the key is
+  maximal at \<open>c\<close> it stays present; where it is partial the row may still move up, so it is
+  present or absent, present with that key.  Where no definite row has the key, it is absent if no
+  possible key projects to it, and undecided otherwise.\<close>
+
+abbreviation key_at_sem :: "'k semi_factor \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'k option_pd" where
+  "key_at_sem c D k \<equiv> if \<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k
+     then (if maximal_at c (proj c\<cdot>k) then Present\<cdot>(proj c\<cdot>k) else Present\<cdot>(proj c\<cdot>k) + Absent)
+     else if \<exists>u. split_possible u D \<and> proj c\<cdot>u = proj c\<cdot>k then \<bottom> else Absent"
 
 definition key_at_ext :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'k) expr_ext" where
-  "key_at_ext c = with_ext (key_at c) (\<lambda>D F k. if maximal_at c (proj c\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k)
-       then Present\<cdot>(proj c\<cdot>k)
-       else if \<exists>u::'k. split_possible u D \<and> proj c\<cdot>u \<sqsubseteq> proj c\<cdot>k then \<bottom> else Absent)"
+  "key_at_ext c = with_ext (key_at c) (\<lambda>D F k. key_at_sem c D k)"
 
 lemma key_at_ext_simps [simp]:
   "semilawful (key_at_ext c) \<longleftrightarrow> semilawful (key_at c)"
   "emind (key_at_ext c) = emind (key_at c)" "eguards (key_at_ext c) = eguards (key_at c)" "evalues (key_at_ext c) = evalues (key_at c)"
   "esem (key_at_ext c) = esem (key_at c)" "csem (key_at_ext c) = csem (key_at c)"
-  "sem_ext (key_at_ext c) D F k = (if maximal_at c (proj c\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k)
-     then Present\<cdot>(proj c\<cdot>k)
-     else if \<exists>u::'k. split_possible u D \<and> proj c\<cdot>u \<sqsubseteq> proj c\<cdot>k then \<bottom> else Absent)"
+  "sem_ext (key_at_ext c) D F k = key_at_sem c D k"
   by (simp_all add: key_at_ext_def)
+
+text \<open>Below a compact dataset, a definite row at a key maximal at \<open>c\<close> lies below a data point with
+  that key, and a key no possible key projects to has no data point.\<close>
+
+lemma definite_maximal_point:
+  assumes DD: "D \<sqsubseteq> D'" and d: "split_rows\<cdot>D' = up\<cdot>data" and y: "split_definite y D"
+    and mx: "maximal_at c (rproj c y)"
+  obtains m where "m \<in> lower_maximal data" "y \<sqsubseteq> m" "rproj c m = rproj c y"
+proof -
+  have "y \<in>\<flat> data" by (rule split_definite_rows_mem [OF split_definite_mono [OF y DD] d])
+  then obtain m where m: "m \<in> lower_maximal data" "y \<sqsubseteq> m" by (rule lower_mem_maximal_above)
+  have "rproj c y \<sqsubseteq> rproj c m" by (intro monofun_cfun_arg m(2))
+  then have "rproj c m = rproj c y" by (rule maximal_at_eq [OF mx proj_idem])
+  with m that show ?thesis by blast
+qed
+
+lemma impossible_no_point:
+  assumes DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
+    and m: "m \<in> lower_maximal data"
+  shows "split_possible (rkey\<cdot>m) D"
+proof -
+  obtain t where t: "D' = split_principal t" using split_pd.compact_imp_principal [OF cD] by blast
+  obtain s where s: "s \<in> srows t" "m = Rep_compact_basis s"
+    using split_maximal_row_generator [OF d [unfolded t] m] by blast
+  obtain u where u: "u \<in> skeys t" "Rep_compact_basis u \<sqsubseteq> rkey\<cdot>m"
+    using split_basis_consistentD [OF s(1)] unfolding split_key_rkey s(2) by blast
+  have "split_possible (Rep_compact_basis u) D'" unfolding t using u(1) by (auto simp: split_possible_principal)
+  then have "split_possible (rkey\<cdot>m) D'" by (rule split_possible_up [OF _ u(2)])
+  then show ?thesis by (rule split_possible_below [OF _ DD])
+qed
 
 theorem ext_sound_key_at: "ext_sound (key_at_ext c)"
 proof (rule ext_soundI, simp only: key_at_ext_simps)
-  fix D D' :: "('r, 'k) split_pd" and F k
-  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_definite (\<bottom>::'r) D'"
-  let ?data = "split_rows\<cdot>D'"
-  have fib: "fiber ?data c c F k = {m \<in> lower_maximal ?data. rproj c m = proj c\<cdot>k}"
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
+  have fib: "fiber data c c F k = {m \<in> lower_maximal data. rproj c m = proj c\<cdot>k}"
     by (simp add: fiber_def join_meet_self)
-  obtain t where t: "D' = split_principal t" using split_pd.compact_imp_principal [OF cD] by blast
-  have ne: "srows t \<noteq> {}" using nD unfolding t split_definite_bottom_principal .
-  show "(if maximal_at c (proj c\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k) then Present\<cdot>(proj c\<cdot>k)
-      else if \<exists>u::'k. split_possible u D \<and> proj c\<cdot>u \<sqsubseteq> proj c\<cdot>k then \<bottom> else Absent)
-    \<sqsubseteq> esem (key_at c) ?data F k"
-  proof (cases "maximal_at c (proj c\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k)")
+  have esem: "esem (key_at c) data F k = (if fiber data c c F k = {} then Absent else Present\<cdot>(proj c\<cdot>k))"
+    by simp
+  show "key_at_sem c D k \<sqsubseteq> esem (key_at c) data F k"
+  proof (cases "\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k")
     case True
-    then obtain y where mx: "maximal_at c (proj c\<cdot>k)" and y: "split_definite y D" "rproj c y = proj c\<cdot>k" by blast
-    have "y \<in>\<flat> ?data" by (rule split_definite_rows_mem [OF split_definite_mono [OF y(1) DD]])
-    then obtain m where m: "m \<in> lower_maximal ?data" "y \<sqsubseteq> m" by (rule lower_mem_maximal_above)
-    have "proj c\<cdot>k \<sqsubseteq> rproj c m" unfolding y(2) [symmetric] by (intro monofun_cfun_arg m(2))
-    then have "rproj c m = proj c\<cdot>k" by (rule maximal_at_eq [OF mx proj_idem])
-    then have "fiber ?data c c F k \<noteq> {}" using m(1) fib by blast
-    then show ?thesis using True by simp
+    then obtain y where y: "split_definite y D" "rproj c y = proj c\<cdot>k" by blast
+    show ?thesis
+    proof (cases "maximal_at c (proj c\<cdot>k)")
+      case mx: True
+      have mx': "maximal_at c (rproj c y)" using mx y(2) by simp
+      obtain m where m: "m \<in> lower_maximal data" "rproj c m = rproj c y"
+        using definite_maximal_point [OF DD d y(1) mx'] by blast
+      have "fiber data c c F k \<noteq> {}" using fib m y(2) by auto
+      then show ?thesis using True mx by simp
+    next
+      case False
+      have "Present\<cdot>(proj c\<cdot>k) + Absent \<sqsubseteq> esem (key_at c) data F k"
+        unfolding esem by (simp add: plus_option_pd_below1 plus_option_pd_below2)
+      then show ?thesis using True False by simp
+    qed
   next
     case nP: False
     show ?thesis
-    proof (cases "\<exists>u. split_possible u D \<and> proj c\<cdot>u \<sqsubseteq> proj c\<cdot>k")
+    proof (cases "\<exists>u. split_possible u D \<and> proj c\<cdot>u = proj c\<cdot>k")
       case True
       show ?thesis by (simp only: if_not_P [OF nP] if_P [OF True] minimal)
     next
       case nA: False
-      have "fiber ?data c c F k = {}"
+      have "fiber data c c F k = {}"
       proof (rule ccontr)
-        assume "fiber ?data c c F k \<noteq> {}"
-        then obtain m where m: "m \<in> lower_maximal ?data" "rproj c m = proj c\<cdot>k" using fib by blast
-        obtain s where s: "s \<in> srows t" "m = Rep_compact_basis s"
-          using split_maximal_row_generator [OF m(1) [unfolded t] ne] by blast
-        obtain u where u: "u \<in> skeys t" "Rep_compact_basis u \<sqsubseteq> rkey\<cdot>m"
-          using split_basis_consistentD [OF s(1)] unfolding split_key_rkey s(2) by blast
-        have "split_possible (Rep_compact_basis u) (split_principal t :: ('r, 'k) split_pd)"
-          using u(1) by (auto simp: split_possible_principal)
-        then have "split_possible (Rep_compact_basis u) D"
-          by (rule split_possible_below_principal) (simp only: DD [unfolded t])
-        moreover have "proj c\<cdot>(Rep_compact_basis u) \<sqsubseteq> proj c\<cdot>k"
-          unfolding m(2) [symmetric] by (rule monofun_cfun_arg [OF u(2)])
-        ultimately show False using nA by blast
+        assume "fiber data c c F k \<noteq> {}"
+        then obtain m where m: "m \<in> lower_maximal data" "rproj c m = proj c\<cdot>k" using fib by blast
+        have "split_possible (rkey\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
+        then show False using nA m(2) by blast
       qed
-      then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] key_at_simps) simp
+      then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] esem) simp
     qed
   qed
 qed
@@ -281,12 +289,12 @@ lemma filtfor_ext_simps [simp]:
 
 theorem ext_sound_filtfor: "ext_sound X \<Longrightarrow> ext_sound (filtfor_ext \<tau> G X)"
 proof (rule ext_soundI, simp only: filtfor_ext_simps filtfor_simps)
-  fix D D' :: "('r, 'k) split_pd" and F k
-  assume X: "ext_sound X" and DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_definite (\<bottom>::'r) D'"
-    and d: "fconf (map (for_value \<tau>) (evalues X)) (split_rows\<cdot>D') F"
-  have d': "fconf (evalues X) (split_rows\<cdot>D') (ffor \<tau> G F)" using d by (simp only: fconf_filtfor [of _ _ _ _ G])
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume X: "ext_sound X" and DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+    and d: "fconf (map (for_value \<tau>) (evalues X)) data F"
+  have d': "fconf (evalues X) data (ffor \<tau> G F)" using d by (simp only: fconf_filtfor [of _ _ _ _ G])
   show "sem_ext X D (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)
-      \<sqsubseteq> esem X (split_rows\<cdot>D') (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)"
+      \<sqsubseteq> esem X data (ffor \<tau> G F) (proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k)"
     by (rule ext_soundD [OF X DD cD nD d' proj_idem])
 qed
 
@@ -327,13 +335,13 @@ theorem ext_sound_include_dims:
   assumes ES: "semilawful X" and X: "ext_sound X"
   shows "ext_sound (include_dims_ext M X)"
 proof (rule ext_soundI, simp only: include_dims_ext_simps include_dims_simps(3,4))
-  fix D D' :: "('r, 'k) split_pd" and F k
-  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_definite (\<bottom>::'r) D'"
-    and d: "fconf (map (include_entry M) (evalues X)) (split_rows\<cdot>D') F"
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+    and d: "fconf (map (include_entry M) (evalues X)) data F"
     and k: "proj (kd (include_dims M X) F)\<cdot>k = k"
-  have d': "fconf (evalues X) (split_rows\<cdot>D') (finclude M F)" using d by (simp only: fconf_include)
+  have d': "fconf (evalues X) data (finclude M F)" using d by (simp only: fconf_include)
   have k': "proj (kd X (finclude M F))\<cdot>k = k" by (rule proj_fix_mono [OF include_dims_kd_below [OF ES] k])
-  show "sem_ext X D (finclude M F) k \<sqsubseteq> esem X (split_rows\<cdot>D') (finclude M F) k"
+  show "sem_ext X D (finclude M F) k \<sqsubseteq> esem X data (finclude M F) k"
     by (rule ext_soundD [OF X DD cD nD d' k'])
 qed
 
@@ -359,14 +367,14 @@ theorem ext_sound_combine:
   assumes X\<^sub>1: "ext_sound X\<^sub>1" and X\<^sub>2: "ext_sound X\<^sub>2"
   shows "ext_sound (combine_ext f X\<^sub>1 X\<^sub>2)"
 proof (rule ext_soundI, simp only: combine_ext_simps combine_simps)
-  fix D D' :: "('r, 'k) split_pd" and F k
-  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_definite (\<bottom>::'r) D'"
-    and d: "fconf (evalues X\<^sub>1 @ evalues X\<^sub>2) (split_rows\<cdot>D') F"
-  have d1: "fconf (evalues X\<^sub>1) (split_rows\<cdot>D') F" and d2: "fconf (evalues X\<^sub>2) (split_rows\<cdot>D') F"
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+    and d: "fconf (evalues X\<^sub>1 @ evalues X\<^sub>2) data F"
+  have d1: "fconf (evalues X\<^sub>1) data F" and d2: "fconf (evalues X\<^sub>2) data F"
     using d by (simp_all add: fconf_def)
   show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd X\<^sub>2 F)\<cdot>k))
-      \<sqsubseteq> lift2_option_pd f\<cdot>(esem X\<^sub>1 (split_rows\<cdot>D') F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>
-          (esem X\<^sub>2 (split_rows\<cdot>D') F (proj (kd X\<^sub>2 F)\<cdot>k))"
+      \<sqsubseteq> lift2_option_pd f\<cdot>(esem X\<^sub>1 data F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>
+          (esem X\<^sub>2 data F (proj (kd X\<^sub>2 F)\<cdot>k))"
     by (rule monofun_cfun [OF monofun_cfun_arg ext_soundD [OF X\<^sub>2 DD cD nD d2 proj_idem]],
         rule ext_soundD [OF X\<^sub>1 DD cD nD d1 proj_idem])
 qed
