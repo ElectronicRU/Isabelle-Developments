@@ -716,6 +716,27 @@ proof -
     unfolding vcontent_ext_def sel_select_def by (simp add: split_view_view lattice_join_ge1)
 qed
 
+text \<open>The presence of an inner key is read off the fold guard's content, selected at the inner key.\<close>
+
+lemma inner_presence:
+  assumes kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj (kd X F)\<cdot>\<kappa> = \<kappa>" and c: "compact \<kappa>"
+  shows "populated_ext D (emind X) \<top> F \<kappa> =
+    split_present (split_select (kd X F) \<kappa>\<cdot>(gcontent_ext D (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k))"
+proof -
+  have T: "\<top> \<sqinter> L = L" for L :: "'k semi_factor" by (rule lattice_meet_top_left)
+  have K: "emind X \<squnion> (\<top> \<sqinter> flod F) = kd X F" by (simp only: T)
+  have B: "\<bottom> \<squnion> (\<top> \<sqinter> flod F) = flod F" by (simp only: T lattice_join_bot_left)
+  have kf: "proj (flod F)\<cdot>k = k" unfolding kk [symmetric] by (rule proj_idem)
+  have le: "flod F \<sqsubseteq> kd X F" by (rule lattice_join_ge2)
+  have sel: "split_select (kd X F) \<kappa>\<cdot>(split_select (flod F) k\<cdot>D) = split_select (kd X F) \<kappa>\<cdot>D"
+    by (rule split_select_compose [OF c le kk])
+  have pe: "populated_ext D (emind X) \<top> F \<kappa> = select_test (kd X F) \<kappa> (amb F) (sopen (coarsen \<top> (slice F))) D"
+    unfolding populated_ext_def K kK ..
+  show ?thesis
+    unfolding pe select_test_guarded [OF c] gcontent_ext_def sel_select_def
+    by (simp only: entry.select_convs selector.select_convs fst_conv snd_conv B kf split_select_keyguard_comm split_select_rowguard_comm sel gand_gtrue)
+qed
+
 end
 
 end
