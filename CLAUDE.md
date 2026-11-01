@@ -35,9 +35,9 @@ files (`ROOT`, `.tex`, `.bib`, docs).
 ROOT builds: `Top`, `FiniteCF`, `Bounded_Complete`, `Pointed_Profinite`, `Kleene_Logic`,
 `Distributive`, `Filter_Sum`, `DI`, `Lattice_Complete`, `Algebraic_Lattice`, `Domain_Order`,
 `Domain_Order_Derive`, `Directed`, `Definitions`, `MUB_Closure`, `Deflations`, `Koenigs`,
-`LowerPD_Representation`, `UpperPD_Representation`, `Cpo_Topology`, `BagPD`; session
+`LowerPD_Representation`, `UpperPD_Representation`, `Cpo_Topology`, `BagPD`, `MixPD`; session
 `HOLCF-extra-Examples` (in `Examples/`) has the derivation use cases.
-Not in ROOT: `Interval_Space`, `Attr_Space`, `MixPD`, `Repro`/`Repro2` (minimal-repro scratch).
+Not in ROOT: `Interval_Space`, `Attr_Space`, `Repro`/`Repro2` (minimal-repro scratch).
 
 ### `DataAnalyticsLang/` — a domain-theoretic data-analytics language
 Depends on session `HOLCF-extra`. ROOT builds, in dependency order:
@@ -50,8 +50,10 @@ Depends on session `HOLCF-extra`. ROOT builds, in dependency order:
 - rigid expression semantics: `Content_Law`, `Expr_Combinators`, `Aggregate`;
 - the query language: `Ast` (untyped AST: Dim, Col, Lit, Call, Aggr, GroupBy, For, Where),
   `Ast_Semantics` (`asem`; `wf` checks arities and row-level WHERE only, no value typing);
-- the extended semantics over partial datasets: `Split_Semantics` (sound, monotone and
-  continuous combinators), `Ast_Split_Semantics` (`asem_ext`).
+- the extended semantics over partial datasets: `Split_Content` (selection, guards on splits),
+  `Split_Semantics` (sound, monotone and continuous combinators), `Key_Mix` (guard contents as key
+  mixes in `HOLCF-extra/MixPD`), `Split_Csem` (extended semantics factors through contents, and the
+  content semantics is monotone; all combinators incl. aggregates), `Ast_Split_Semantics` (`asem_ext`).
 
 Not in ROOT: `Separated_Principal`, `SlicerToy`. A type system for the AST and the SQL lowering
 are planned, not started. Theme: powerdomains for partial information / approximate queries

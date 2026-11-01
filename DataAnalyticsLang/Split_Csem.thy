@@ -6,11 +6,13 @@ section \<open>Content semantics over split datasets\<close>
 
 text \<open>The contents of an expression over a split dataset, at a frame and a key, are the dataset as
   seen from each entry: selected at the entry's selector, exactly at the key's part.  A value entry
-  sees the selection through its view (its columns and key part).  A guard entry sees it filtered:
+  sees the selection through its view (its columns and key part).  A guard entry sees it filtered,
   by its key guard together with the frame's slice, coarsened to the entry's upper part, on the
   possible keys, and by its row guard together with the frame's ambient filter on the definite
-  rows.  The extended semantics \<^emph>\<open>factors through the contents\<close> when it is a function of them, the
-  frame and the key, wherever the selected parts are compact.\<close>
+  rows; and only for the presence of keys: its content is the key mix of the filtered selection at
+  the entry's keys together with its selected part.  The extended semantics \<^emph>\<open>factors through the
+  contents\<close> when it is a function of them, the frame and the key, wherever the selected parts are
+  compact.\<close>
 
 context split_dataspace
 begin
@@ -25,8 +27,14 @@ definition gcontent_ext :: "('r, 'k) split_pd \<Rightarrow> ('k, 'r guard \<time
 definition vcontent_ext :: "('r, 'k) split_pd \<Rightarrow> ('k, 'r semi_factor) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) split_pd" where
   "vcontent_ext D e F k = split_view (eview e)\<cdot>(sel_select (esel e) F k\<cdot>D)"
 
-abbreviation gcontents_ext :: "('r, 'k) split_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) split_pd list" where
-  "gcontents_ext D gs F k \<equiv> map (\<lambda>e. gcontent_ext D e F k) gs"
+abbreviation gkeys :: "('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor" where
+  "gkeys e F \<equiv> ekeys e \<squnion> sel_at (esel e) (flod F)"
+
+definition gmix_ext :: "('r, 'k) split_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k mix_pd" where
+  "gmix_ext D e F k = split_keymix (gkeys e F)\<cdot>(gcontent_ext D e F k)"
+
+abbreviation gcontents_ext :: "('r, 'k) split_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k mix_pd list" where
+  "gcontents_ext D gs F k \<equiv> map (\<lambda>e. gmix_ext D e F k) gs"
 
 abbreviation vcontents_ext :: "('r, 'k) split_pd \<Rightarrow> ('k, 'r semi_factor) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) split_pd list" where
   "vcontents_ext D es F k \<equiv> map (\<lambda>e. vcontent_ext D e F k) es"
@@ -41,7 +49,7 @@ abbreviation conf_bounded :: "('r, 'k) split_pd \<Rightarrow> bool" where
   "conf_bounded D \<equiv> \<exists>C. D \<sqsubseteq> C \<and> conforming_rows (split_rows\<cdot>C)"
 
 definition ext_csem :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
-    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow> bool" where
+    ('k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow> bool" where
   "ext_csem X c \<longleftrightarrow> (\<forall>D F k. conf_bounded D \<longrightarrow> sel_compact X F k \<longrightarrow>
      sem_ext X D F k = c (gcontents_ext D (eguards X) F k) (vcontents_ext D (evalues X) F k) F k)"
 
@@ -72,7 +80,7 @@ lemma contents_kd:
   assumes X: "semilawful X"
   shows "gcontents_ext D (eguards X) F (proj (kd X F)\<cdot>k) = gcontents_ext D (eguards X) F k"
     and "vcontents_ext D (evalues X) F (proj (kd X F)\<cdot>k) = vcontents_ext D (evalues X) F k"
-  by (auto simp: gcontent_ext_def vcontent_ext_def sel_select_proj [OF sel_below_kd [OF X]] esels_guardI esels_valueI)
+  by (auto simp: gmix_ext_def gcontent_ext_def vcontent_ext_def sel_select_proj [OF sel_below_kd [OF X]] esels_guardI esels_valueI)
 
 lemma sel_compact_kd: "semilawful X \<Longrightarrow> sel_compact X F k \<Longrightarrow> sel_compact X F (proj (kd X F)\<cdot>k)"
   by (simp add: proj_le sel_below_kd)
@@ -153,7 +161,7 @@ proof (rule ext_csemI)
   fix D F k assume c: "ext_csem X c" and Dc: "conf_bounded D" and comp: "sel_compact (restrict_ext \<gamma> X) F k"
   have comp': "sel_compact X (frestrict \<gamma> F) k" using comp by (simp add: comp_def)
   have g: "gcontents_ext D (eguards X) (frestrict \<gamma> F) k = gcontents_ext D (map (restrict_entry \<gamma>) (eguards X)) F k"
-    by (simp add: gcontent_ext_def sel_select_def gand_assoc)
+    by (simp add: gmix_ext_def gcontent_ext_def sel_select_def gand_assoc)
   have v: "vcontents_ext D (evalues X) (frestrict \<gamma> F) k = vcontents_ext D (evalues X) F k"
     by (simp add: vcontent_ext_def sel_select_def)
   show "sem_ext (restrict_ext \<gamma> X) D F k =
@@ -161,20 +169,36 @@ proof (rule ext_csemI)
     using ext_csemD [OF c Dc comp'] by (simp only: restrict_ext_simps restrict_simps g v)
 qed
 
+text \<open>A guard content is already selected; its presence at its own part is read off its key mix.\<close>
+
+lemma gcontent_selected:
+  "split_select (sel_at (esel e) (flod F)) (proj (sel_at (esel e) (flod F))\<cdot>k)\<cdot>(gcontent_ext D e F k) = gcontent_ext D e F k"
+  unfolding gcontent_ext_def sel_select_def by (simp add: split_select_keyguard_comm split_select_rowguard_comm split_select_idem)
+
+lemma gcontent_present:
+  assumes c: "compact (proj (sel_at (esel e) (flod F))\<cdot>k)" and e: "ekeys e = \<bottom>"
+  shows "split_present (gcontent_ext D e F k) = mix_present (sel_at (esel e) (flod F)) (proj (sel_at (esel e) (flod F))\<cdot>k) (gmix_ext D e F k)"
+proof -
+  have K: "gkeys e F = sel_at (esel e) (flod F)" by (simp only: e lattice_join_bot_left)
+  show ?thesis unfolding gmix_ext_def K present_select_keymix [OF c, symmetric] gcontent_selected ..
+qed
+
 theorem ext_csem_present_at:
   assumes c: "ext_csem X c" and X: "semilawful X"
   shows "ext_csem (present_at_ext a \<rho> X)
-    (\<lambda>Gs Xs F k. split_present (hd Gs) \<odot> c (tl Gs) Xs F (proj (kd X F)\<cdot>k))"
+    (\<lambda>Gs Xs F k. mix_present ((emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F)) (proj ((emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) (hd Gs) \<odot>
+       c (tl Gs) Xs F (proj (kd X F)\<cdot>k))"
 proof (rule ext_csemI)
   fix D F k assume Dc: "conf_bounded D" and comp: "sel_compact (present_at_ext a \<rho> X) F k"
-  let ?L = "(emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F)"
+  let ?L = "(emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F)" and ?e = "mk_guard (sel (emind X \<squnion> a) \<rho>) gtrue gtrue \<bottom>"
   have kc: "compact (proj ?L\<cdot>k)" using comp by simp
   have compX: "sel_compact X F k" using comp by simp
-  have p: "populated_ext D (emind X \<squnion> a) \<rho> F k
-      = split_present (gcontent_ext D (mk_guard (sel (emind X \<squnion> a) \<rho>) gtrue gtrue \<bottom>) F k)"
+  have p0: "populated_ext D (emind X \<squnion> a) \<rho> F k = split_present (gcontent_ext D ?e F k)"
     unfolding populated_ext_def select_test_guarded [OF kc] gcontent_ext_def sel_select_def by simp
+  have p: "populated_ext D (emind X \<squnion> a) \<rho> F k = mix_present ?L (proj ?L\<cdot>k) (gmix_ext D ?e F k)"
+    unfolding p0 using gcontent_present [of ?e F k D] kc by simp
   show "sem_ext (present_at_ext a \<rho> X) D F k =
-      split_present (hd (gcontents_ext D (eguards (present_at_ext a \<rho> X)) F k)) \<odot>
+      mix_present ?L (proj ?L\<cdot>k) (hd (gcontents_ext D (eguards (present_at_ext a \<rho> X)) F k)) \<odot>
         c (tl (gcontents_ext D (eguards (present_at_ext a \<rho> X)) F k)) (vcontents_ext D (evalues (present_at_ext a \<rho> X)) F k) F
           (proj (kd X F)\<cdot>k)"
     using ext_csemD_kd [OF c X Dc compX] by (simp add: p)
@@ -313,6 +337,9 @@ text \<open>Including dimensions and filtering for keys transform the selectors 
 lemma gcontent_ext_include: "gcontent_ext D (include_entry M e) F k = gcontent_ext D e (finclude M F) k"
   unfolding gcontent_ext_def sel_select_def include_entry_simps include_lod by simp
 
+lemma gmix_ext_include: "gmix_ext D (include_entry M e) F k = gmix_ext D e (finclude M F) k"
+  unfolding gmix_ext_def gcontent_ext_include include_entry_simps include_lod ..
+
 lemma vcontent_ext_include: "vcontent_ext D (include_entry M e) F k = vcontent_ext D e (finclude M F) k"
   unfolding vcontent_ext_def sel_select_def include_entry_simps include_lod by simp
 
@@ -329,7 +356,7 @@ proof (rule ext_csemI)
   qed
   show "sem_ext (include_dims_ext M X) D F k =
       c (gcontents_ext D (eguards (include_dims_ext M X)) F k) (vcontents_ext D (evalues (include_dims_ext M X)) F k) (finclude M F) k"
-    using ext_csemD [OF c Dc comp'] by (simp add: gcontent_ext_include vcontent_ext_include comp_def)
+    using ext_csemD [OF c Dc comp'] by (simp add: gmix_ext_include vcontent_ext_include comp_def)
 qed
 
 lemma sel_select_ffor:
@@ -341,6 +368,11 @@ lemma gcontent_ext_ffor:
   "elower e \<sqsubseteq> m \<Longrightarrow> gcontent_ext D e (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = gcontent_ext D (for_entry \<tau> G e) F k"
   unfolding gcontent_ext_def sel_select_ffor
   by (simp add: coarsen_conj coarsen_coarsen sopen_gand gand_assoc)
+
+lemma gmix_ext_ffor:
+  assumes am: "elower e \<sqsubseteq> m"
+  shows "gmix_ext D e (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = gmix_ext D (for_entry \<tau> G e) F k"
+  unfolding gmix_ext_def gcontent_ext_ffor [OF am] for_entry_simps trunc_sel_simps ffor_key [OF am] ..
 
 lemma vcontent_ext_ffor:
   "elower e \<sqsubseteq> m \<Longrightarrow> vcontent_ext D e (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = vcontent_ext D (for_value \<tau> e) F k"
@@ -363,7 +395,7 @@ proof (rule ext_csemI)
     ultimately show "compact (proj (sel_at S (flod (ffor \<tau> G F)))\<cdot>?k)" by simp
   qed
   have g: "gcontents_ext D (eguards X) (ffor \<tau> G F) ?k = gcontents_ext D (map (for_entry \<tau> G) (eguards X)) F k"
-    unfolding map_map comp_def by (rule map_cong [OF refl], rule gcontent_ext_ffor [OF lm [OF esels_guardI]])
+    unfolding map_map comp_def by (rule map_cong [OF refl], rule gmix_ext_ffor [OF lm [OF esels_guardI]])
   have v: "vcontents_ext D (evalues X) (ffor \<tau> G F) ?k = vcontents_ext D (map (for_value \<tau>) (evalues X)) F k"
     unfolding map_map comp_def by (rule map_cong [OF refl], rule vcontent_ext_ffor [OF lm [OF esels_valueI]])
   show "sem_ext (filtfor_ext \<tau> G X) D F k =
@@ -399,7 +431,7 @@ text \<open>A content semantics is \<^emph>\<open>monotone\<close> on the conten
   where the rows conform.\<close>
 
 definition csem_mono :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
-    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow> bool" where
+    ('k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow> bool" where
   "csem_mono X c \<longleftrightarrow> (\<forall>C F k Gs Gs' Xs Xs'. conforming_rows (split_rows\<cdot>C) \<longrightarrow> sel_compact X F k \<longrightarrow>
      list_all2 (\<sqsubseteq>) Gs Gs' \<longrightarrow> list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards X) F k) \<longrightarrow>
      list_all2 (\<sqsubseteq>) Xs Xs' \<longrightarrow> list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues X) F k) \<longrightarrow> c Gs Xs F k \<sqsubseteq> c Gs' Xs' F k)"
@@ -482,7 +514,7 @@ proof (rule csem_monoI)
 qed
 
 lemma gcontents_frestrict: "gcontents_ext D (eguards X) (frestrict \<gamma> F) k = gcontents_ext D (map (restrict_entry \<gamma>) (eguards X)) F k"
-  by (simp add: gcontent_ext_def sel_select_def gand_assoc)
+  by (simp add: gmix_ext_def gcontent_ext_def sel_select_def gand_assoc)
 
 lemma vcontents_frestrict: "vcontents_ext D es (frestrict \<gamma> F) k = vcontents_ext D es F k"
   by (simp add: vcontent_ext_def sel_select_def)
@@ -499,7 +531,7 @@ proof (rule csem_monoI)
 qed
 
 lemma gcontents_finclude: "gcontents_ext D (eguards X) (finclude M F) k = gcontents_ext D (map (include_entry M) (eguards X)) F k"
-  by (simp add: gcontent_ext_include)
+  by (simp add: gmix_ext_include)
 
 lemma vcontents_finclude: "vcontents_ext D (evalues X) (finclude M F) k = vcontents_ext D (map (include_entry M) (evalues X)) F k"
   by (simp add: vcontent_ext_include)
@@ -523,20 +555,30 @@ qed
 
 theorem csem_mono_present_at:
   assumes c: "csem_mono X c" and X: "semilawful X"
-  shows "csem_mono (present_at_ext a \<rho> X) (\<lambda>Gs Xs F k. split_present (hd Gs) \<odot> c (tl Gs) Xs F (proj (kd X F)\<cdot>k))"
+  shows "csem_mono (present_at_ext a \<rho> X)
+    (\<lambda>Gs Xs F k. mix_present ((emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F)) (proj ((emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) (hd Gs) \<odot>
+       c (tl Gs) Xs F (proj (kd X F)\<cdot>k))"
 proof (rule csem_monoI)
   fix C F k Gs Gs' Xs Xs'
   assume cC: "conforming_rows (split_rows\<cdot>C)" and comp: "sel_compact (present_at_ext a \<rho> X) F k"
     and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (present_at_ext a \<rho> X)) F k)"
     and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (present_at_ext a \<rho> X)) F k)"
+  let ?L = "(emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F)" and ?e = "mk_guard (sel (emind X \<squnion> a) \<rho>) gtrue gtrue \<bottom>"
+  have kc: "compact (proj ?L\<cdot>k)" using comp by simp
   have compX: "sel_compact X F (proj (kd X F)\<cdot>k)" by (rule sel_compact_kd [OF X]) (use comp in simp)
-  obtain g' Gt' where g': "Gs' = g' # Gt'" and Gt': "list_all2 (\<sqsubseteq>) Gt' (gcontents_ext C (eguards X) F k)"
+  obtain g' Gt' where g': "Gs' = g' # Gt'" and g'C: "g' \<sqsubseteq> gmix_ext C ?e F k"
+    and Gt': "list_all2 (\<sqsubseteq>) Gt' (gcontents_ext C (eguards X) F k)"
     using G' by (auto simp: list_all2_Cons2)
   obtain g Gt where g: "Gs = g # Gt" "g \<sqsubseteq> g'" and Gt: "list_all2 (\<sqsubseteq>) Gt Gt'" using G unfolding g' by (auto simp: list_all2_Cons2)
+  have K: "gkeys ?e F = ?L" by (simp only: entry.select_convs selector.select_convs lattice_join_bot_left)
+  have gK: "g' \<sqsubseteq> split_keymix ?L\<cdot>(gcontent_ext C ?e F k)" using g'C unfolding gmix_ext_def K .
+  have p: "mix_present ?L (proj ?L\<cdot>k) g \<sqsubseteq> mix_present ?L (proj ?L\<cdot>k) g'"
+    by (rule mix_present_mono_below [OF kc g(2) gK])
   have "c Gt Xs F (proj (kd X F)\<cdot>k) \<sqsubseteq> c Gt' Xs' F (proj (kd X F)\<cdot>k)"
     by (rule csem_monoD [OF c cC compX Gt _ V]) (use Gt' V' in \<open>simp_all only: contents_kd [OF X] present_at_ext_simps present_at_simps\<close>)
-  then show "split_present (hd Gs) \<odot> c (tl Gs) Xs F (proj (kd X F)\<cdot>k) \<sqsubseteq> split_present (hd Gs') \<odot> c (tl Gs') Xs' F (proj (kd X F)\<cdot>k)"
-    unfolding g g' by (simp add: monofun_cfun monofun_cfun_arg split_present_mono g(2))
+  then show "mix_present ?L (proj ?L\<cdot>k) (hd Gs) \<odot> c (tl Gs) Xs F (proj (kd X F)\<cdot>k)
+      \<sqsubseteq> mix_present ?L (proj ?L\<cdot>k) (hd Gs') \<odot> c (tl Gs') Xs' F (proj (kd X F)\<cdot>k)"
+    unfolding g g' list.sel by (rule monofun_cfun [OF monofun_cfun_arg [OF p]])
 qed
 
 theorem csem_mono_combine:
@@ -582,7 +624,7 @@ lemma contents_ffor:
   shows "gcontents_ext D (eguards X) (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k) = gcontents_ext D (map (for_entry \<tau> G) (eguards X)) F k"
     and "vcontents_ext D (evalues X) (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k) = vcontents_ext D (map (for_value \<tau>) (evalues X)) F k"
   unfolding map_map comp_def
-  by (rule map_cong [OF refl], rule gcontent_ext_ffor [OF lower_below_mind [OF X esels_guardI]], assumption,
+  by (rule map_cong [OF refl], rule gmix_ext_ffor [OF lower_below_mind [OF X esels_guardI]], assumption,
       rule map_cong [OF refl], rule vcontent_ext_ffor [OF lower_below_mind [OF X esels_valueI]], assumption)
 
 theorem csem_mono_filtfor:
@@ -829,32 +871,46 @@ lemma tr_mult_plus_Absent: "t \<noteq> TT \<Longrightarrow> t \<odot> x + Absent
 
 text \<open>The aggregate's argument contents at an inner key are read off its released contents at the
   outer key; the inner key's presence off the fold guard's content.  The content aggregate folds
-  these over the inner keys definite and possible in the fold guard's content.\<close>
+  these over the inner keys definite and possible in the fold guard's key mix.\<close>
+
+definition magg_definite :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> 'k mix_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
+  "magg_definite E M F k = {\<kappa>. maximal_at (kd E F) \<kappa> \<and> proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj (kd E F)) ` conforming_keyspace \<and>
+     mix_definite \<kappa> M}"
+
+definition magg_possible :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> 'k mix_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
+  "magg_possible E M F k = {\<kappa>. proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj (kd E F)) ` conforming_keyspace \<and> mix_possible \<kappa> M}"
 
 definition agg_inner_g :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow>
-    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list" where
-  "agg_inner_g X F \<kappa> Gr = map2 (\<lambda>e G. sel_select (esel e) F \<kappa>\<cdot>G) (eguards X) Gr"
+    'k mix_pd list \<Rightarrow> 'k mix_pd list" where
+  "agg_inner_g X F \<kappa> Gr = map2 (\<lambda>e G. mix_select (sel_at (esel e) (flod F)) (proj (sel_at (esel e) (flod F))\<cdot>\<kappa>)\<cdot>G) (eguards X) Gr"
 
 definition agg_inner_v :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> 'k \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list" where
   "agg_inner_v X \<kappa> Xr = map2 (\<lambda>e V. split_view (eview e)\<cdot>(split_select (elower e) (proj (elower e)\<cdot>\<kappa>)\<cdot>V)) (evalues X) Xr"
 
 definition cagg_value :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
-    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
-    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
-  "cagg_value X c Gs Xs F \<kappa> = split_present (split_select (kd X F) \<kappa>\<cdot>(hd Gs)) \<odot>
-     c (agg_inner_g X F \<kappa> (tl Gs)) (agg_inner_v X \<kappa> Xs) F \<kappa>"
+    ('k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    'k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "cagg_value X c Gs Xs F \<kappa> = mix_present (kd X F) \<kappa> (hd Gs) \<odot> c (agg_inner_g X F \<kappa> (tl Gs)) (agg_inner_v X \<kappa> Xs) F \<kappa>"
 
 definition cagg_member :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
-    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
-    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
-  "cagg_member X c Gs Xs F k \<kappa> = (if \<kappa> \<in> agg_definite X (hd Gs) F k then cagg_value X c Gs Xs F \<kappa>
+    ('k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    'k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "cagg_member X c Gs Xs F k \<kappa> = (if \<kappa> \<in> magg_definite X (hd Gs) F k then cagg_value X c Gs Xs F \<kappa>
      else cagg_value X c Gs Xs F \<kappa> + Absent)"
 
 definition cagg_glb :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow>
-    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
-    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
-  "cagg_glb f X c Gs Xs F k = glb {agg_fold f (cagg_member X c Gs Xs F k) (agg_definite X (hd Gs) F k \<union> C) | C.
-     finite C \<and> C \<subseteq> agg_possible X (hd Gs) F k}"
+    ('k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    'k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "cagg_glb f X c Gs Xs F k = glb {agg_fold f (cagg_member X c Gs Xs F k) (magg_definite X (hd Gs) F k \<union> C) | C.
+     finite C \<and> C \<subseteq> magg_possible X (hd Gs) F k}"
+
+text \<open>The fold guard's keys are the key LOD; a released entry keeps its keys with its selected part.\<close>
+
+lemma gkeys_fold: "gkeys (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F = kd X F"
+  by (simp only: entry.select_convs selector.select_convs lattice_meet_top_left lattice_join_bot_left)
+
+lemma gkeys_release: "gkeys (release e) F = gkeys e F"
+  by (simp add: lattice_join_bot_left lattice_join_ac)
 
 text \<open>The aggregate's selected parts at the outer key are compact.\<close>
 
@@ -899,9 +955,10 @@ proof -
     unfolding agg_inner_g_def map_map comp_def map2_map
   proof (rule map_cong [OF refl])
     fix e assume e: "e \<in> set (eguards X)"
-    show "sel_select (esel e) F \<kappa>\<cdot>(gcontent_ext D (release e) F k) = gcontent_ext D e F \<kappa>"
-      unfolding sel_select_def
-      by (rule inner_gcontent [OF kk cS agg_upper_compact [OF k esels_guardI [OF e]], symmetric])
+    have LK: "sel_at (esel e) (flod F) \<sqsubseteq> gkeys e F" by (rule lattice_join_ge2)
+    show "mix_select (sel_at (esel e) (flod F)) (proj (sel_at (esel e) (flod F))\<cdot>\<kappa>)\<cdot>(gmix_ext D (release e) F k) = gmix_ext D e F \<kappa>"
+      unfolding gmix_ext_def gkeys_release keymix_select [OF LK, symmetric]
+      by (simp only: inner_gcontent [OF kk cS agg_upper_compact [OF k esels_guardI [OF e]], symmetric])
   qed
   show "agg_inner_v X \<kappa> (vcontents_ext D (map release (evalues X)) F k) = vcontents_ext D (evalues X) F \<kappa>"
     unfolding agg_inner_v_def map_map comp_def map2_map
@@ -921,9 +978,11 @@ lemma agg_value_contents:
     cagg_value X c (gcontents_ext D (eguards (aggregate_ext f X)) F k) (vcontents_ext D (evalues (aggregate_ext f X)) F k) F \<kappa>"
 proof -
   have sk: "sel_compact X F \<kappa>" by (blast intro: compact_proj_compact [OF c\<kappa>])
+  have p: "populated_ext D (emind X) \<top> F \<kappa> = mix_present (kd X F) \<kappa> (gmix_ext D (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k)"
+    unfolding inner_presence [OF kk kK c\<kappa>] gmix_ext_def gkeys_fold by (rule present_select_keymix [OF c\<kappa>])
   show ?thesis
     unfolding cagg_value_def aggregate_ext_simps aggregate_simps list.map list.sel
-      agg_inner_contents [OF k kk c\<kappa>] inner_presence [OF kk kK c\<kappa>, symmetric] ext_csemD [OF c D sk] ..
+      agg_inner_contents [OF k kk c\<kappa>] p ext_csemD [OF c D sk] ..
 qed
 
 text \<open>The inner keys definite or possible at the outer key lie in the key LOD above the outer key.\<close>
@@ -933,18 +992,19 @@ lemma agg_keys_at:
   shows "proj (flod F)\<cdot>\<kappa> = k \<and> proj (kd X F)\<cdot>\<kappa> = \<kappa> \<and> \<kappa> \<in> Rep_cfun (proj (kd X F)) ` conforming_keyspace"
   using assms unfolding agg_definite_def agg_possible_def by (auto simp: maximal_at_lives proj_idem)
 
-lemma present_select_TT:
-  assumes c: "compact \<kappa>" and p: "split_present (split_select K \<kappa>\<cdot>G) = TT"
-  shows "\<exists>y. split_definite y G \<and> rproj K y = \<kappa>"
-proof -
-  have "select_test K \<kappa> (\<Lambda> _. TT) (\<Lambda> _. TT) G = TT" unfolding select_test_guarded [OF c] using p by simp
-  then show ?thesis unfolding select_test_def by (auto split: if_split_asm)
-qed
+lemma magg_keys_at:
+  assumes "\<kappa> \<in> magg_definite X M F k \<union> magg_possible X M F k"
+  shows "proj (flod F)\<cdot>\<kappa> = k \<and> proj (kd X F)\<cdot>\<kappa> = \<kappa> \<and> \<kappa> \<in> Rep_cfun (proj (kd X F)) ` conforming_keyspace"
+  using assms unfolding magg_definite_def magg_possible_def by (auto simp: maximal_at_lives proj_idem)
 
-lemma present_select_FF:
-  assumes c: "compact \<kappa>" and p: "\<not> split_possible_at K \<kappa> G"
-  shows "split_present (split_select K \<kappa>\<cdot>G) = FF"
-  using select_test_impossible [OF c p, where g = "\<Lambda> _. TT" and h = "\<Lambda> _. TT"] unfolding select_test_guarded [OF c] by simp
+lemma inner_key_compact':
+  assumes m: "lod_small (emind X)" and k: "sel_compact (aggregate_ext f X) F k"
+    and kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj (kd X F)\<cdot>\<kappa> = \<kappa>"
+  shows "compact \<kappa>"
+proof -
+  have "compact (proj (flod F)\<cdot>\<kappa>)" using agg_frame_compact [OF k] by (simp only: kk [symmetric] proj_idem)
+  then show ?thesis by (rule inner_key_compact [OF m kK])
+qed
 
 text \<open>At a compact dataset below a conforming one, the aggregate is the content aggregate of its
   contents.  The fold guard's content has fewer definite and possible inner keys than the dataset,
@@ -959,23 +1019,44 @@ theorem agg_glb_contents:
     (vcontents_ext D (evalues (aggregate_ext f X)) F k) F k"
 proof -
   let ?Gs = "gcontents_ext D (eguards (aggregate_ext f X)) F k" and ?Xs = "vcontents_ext D (evalues (aggregate_ext f X)) F k"
-  let ?G = "gcontent_ext D (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k" and ?K = "kd X F"
+  let ?e = "mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)" and ?K = "kd X F"
+  let ?gc = "gcontent_ext D ?e F k"
+  let ?G = "gmix_ext D ?e F k"
   have hG: "hd ?Gs = ?G" by simp
+  have GK: "?G = split_keymix ?K\<cdot>?gc" unfolding gmix_ext_def gkeys_fold ..
   let ?DefD = "agg_definite X D F k" and ?PosD = "agg_possible X D F k"
-  let ?DefG = "agg_definite X ?G F k" and ?PosG = "agg_possible X ?G F k"
+  let ?DefG = "magg_definite X ?G F k" and ?PosG = "magg_possible X ?G F k"
   let ?MD = "agg_member X D F k" and ?MG = "cagg_member X c ?Gs ?Xs F k"
-  let ?p = "\<lambda>\<kappa>. split_present (split_select ?K \<kappa>\<cdot>?G)"
-  have ck: "compact (proj (flod F)\<cdot>k)" by (rule agg_frame_compact [OF k])
+  let ?p = "\<lambda>\<kappa>. mix_present ?K \<kappa> ?G"
   have key: "proj (flod F)\<cdot>\<kappa> = k" "proj ?K\<cdot>\<kappa> = \<kappa>" "\<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace" "compact \<kappa>"
     if "\<kappa> \<in> ?DefD \<union> ?PosD" for \<kappa>
   proof -
     show kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj ?K\<cdot>\<kappa> = \<kappa>" and "\<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
       using agg_keys_at [OF that] by simp_all
-    have "compact (proj (flod F)\<cdot>\<kappa>)" using ck by (simp only: kk [symmetric] proj_idem)
-    then show "compact \<kappa>" by (rule inner_key_compact [OF m kK])
+    show "compact \<kappa>" by (rule inner_key_compact' [OF m k kk kK])
   qed
-  have defG: "?DefG \<subseteq> ?DefD" unfolding agg_definite_def using gcontent_definite by blast
-  have posG: "?PosG \<subseteq> ?PosD" unfolding agg_possible_def using gcontent_possible by blast
+  have keyG: "compact \<kappa>" if "\<kappa> \<in> ?DefG \<union> ?PosG" for \<kappa>
+  proof -
+    have kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj ?K\<cdot>\<kappa> = \<kappa>" using magg_keys_at [OF that] by simp_all
+    show ?thesis by (rule inner_key_compact' [OF m k kk kK])
+  qed
+  have defG: "?DefG \<subseteq> ?DefD"
+  proof
+    fix \<kappa> assume d: "\<kappa> \<in> ?DefG"
+    then have mx: "maximal_at ?K \<kappa>" and r: "proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
+      and md: "mix_definite \<kappa> (split_keymix ?K\<cdot>?gc)" unfolding magg_definite_def GK by simp_all
+    obtain y where y: "split_definite y ?gc" "\<kappa> \<sqsubseteq> rproj ?K y" using keymix_definite_imp [OF keyG [OF UnI1 [OF d]] md] by blast
+    have ky: "rproj ?K y = \<kappa>" by (rule maximal_at_eq [OF mx _ y(2)]) simp
+    show "\<kappa> \<in> ?DefD" unfolding agg_definite_def using mx r gcontent_definite [OF y(1)] ky by blast
+  qed
+  have posG: "?PosG \<subseteq> ?PosD"
+  proof
+    fix \<kappa> assume p: "\<kappa> \<in> ?PosG"
+    then have r: "proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
+      and mp: "mix_possible \<kappa> (split_keymix ?K\<cdot>?gc)" unfolding magg_possible_def GK by simp_all
+    have "split_possible_at ?K \<kappa> ?gc" using mp unfolding keymix_possible [OF keyG [OF UnI2 [OF p]]] .
+    then show "\<kappa> \<in> ?PosD" unfolding agg_possible_def using r gcontent_possible by blast
+  qed
   have val: "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> = cagg_value X c ?Gs ?Xs F \<kappa>"
     if "\<kappa> \<in> ?DefD \<union> ?PosD" for \<kappa>
     by (rule agg_value_contents [OF c D k key(1,2,4) [OF that]])
@@ -983,15 +1064,17 @@ proof -
     unfolding cagg_value_def hG ..
   have nTT: "?p \<kappa> \<noteq> TT" if d: "\<kappa> \<in> ?DefD" and n: "\<kappa> \<notin> ?DefG" for \<kappa>
   proof
-    assume T: "?p \<kappa> = TT"
-    obtain y where y: "split_definite y ?G" "rproj ?K y = \<kappa>"
-      using present_select_TT [OF key(4) [OF UnI1 [OF d]] T] by blast
-    have "\<kappa> \<in> ?DefG" using d y unfolding agg_definite_def by blast
+    assume "?p \<kappa> = TT"
+    then have "maximal_at ?K \<kappa> \<and> mix_definite \<kappa> ?G" unfolding mix_present_def by (auto split: if_split_asm)
+    then have "\<kappa> \<in> ?DefG" using key(1,3) [OF UnI1 [OF d]] unfolding magg_definite_def by blast
     then show False using n by blast
   qed
   have FF: "?p \<kappa> = FF" if "\<kappa> \<in> ?DefD \<union> ?PosD" "\<kappa> \<notin> ?PosG" for \<kappa>
-  proof (rule present_select_FF [OF key(4) [OF that(1)]])
-    show "\<not> split_possible_at ?K \<kappa> ?G" using that key(1,3) [OF that(1)] unfolding agg_possible_def by blast
+  proof -
+    have np: "\<not> mix_possible \<kappa> ?G" using that key(1,3) [OF that(1)] unfolding magg_possible_def by blast
+    have "\<not> (maximal_at ?K \<kappa> \<and> mix_definite \<kappa> ?G)"
+      using keymix_definite_possible [OF key(4) [OF that(1)]] np unfolding GK by blast
+    then show ?thesis using np unfolding mix_present_def by simp
   qed
   have mem: "?MD \<kappa> = ?MG \<kappa>" if "\<kappa> \<in> ?DefD \<union> ?PosD" for \<kappa>
   proof (cases "\<kappa> \<in> ?DefG")
@@ -1078,9 +1161,12 @@ lemma cagg_value_mono:
     and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (aggregate_ext f X)) F k)"
   shows "cagg_value X c Gs Xs F \<kappa> \<sqsubseteq> cagg_value X c Gs' Xs' F \<kappa>"
 proof -
-  obtain g' Gt' where g': "Gs' = g' # Gt'" and Gt': "list_all2 (\<sqsubseteq>) Gt' (gcontents_ext C (map release (eguards X)) F k)"
+  obtain g' Gt' where g': "Gs' = g' # Gt'" and g'C: "g' \<sqsubseteq> gmix_ext C (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k"
+    and Gt': "list_all2 (\<sqsubseteq>) Gt' (gcontents_ext C (map release (eguards X)) F k)"
     using G' by (auto simp: list_all2_Cons2)
   obtain g Gt where g: "Gs = g # Gt" "g \<sqsubseteq> g'" and Gt: "list_all2 (\<sqsubseteq>) Gt Gt'" using G unfolding g' by (auto simp: list_all2_Cons2)
+  have gK: "g' \<sqsubseteq> split_keymix (kd X F)\<cdot>(gcontent_ext C (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k)"
+    using g'C unfolding gmix_ext_def gkeys_fold .
   have Vt': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (map release (evalues X)) F k)"
     using V' by (simp only: aggregate_ext_simps aggregate_simps)
   have sk: "sel_compact X F \<kappa>" by (blast intro: compact_proj_compact [OF c\<kappa>])
@@ -1090,8 +1176,8 @@ proof -
     using agg_inner_v_mono [OF Vt', of X \<kappa>] unfolding agg_inner_contents(2) [OF k kk c\<kappa>] .
   have cc: "c (agg_inner_g X F \<kappa> Gt) (agg_inner_v X \<kappa> Xs) F \<kappa> \<sqsubseteq> c (agg_inner_g X F \<kappa> Gt') (agg_inner_v X \<kappa> Xs') F \<kappa>"
     by (rule csem_monoD [OF c cC sk agg_inner_g_mono [OF Gt] GI agg_inner_v_mono [OF V] VI])
-  have pp: "split_present (split_select (kd X F) \<kappa>\<cdot>g) \<sqsubseteq> split_present (split_select (kd X F) \<kappa>\<cdot>g')"
-    by (rule split_present_mono [OF monofun_cfun_arg [OF g(2)]])
+  have pp: "mix_present (kd X F) \<kappa> g \<sqsubseteq> mix_present (kd X F) \<kappa> g'"
+    by (rule mix_present_mono_below [OF c\<kappa> g(2) gK])
   show ?thesis unfolding cagg_value_def g g' list.sel by (rule monofun_cfun [OF monofun_cfun_arg [OF pp] cc])
 qed
 
@@ -1103,36 +1189,41 @@ theorem cagg_glb_mono:
     and cG: "compact (hd Gs')"
   shows "cagg_glb f X c Gs Xs F k \<sqsubseteq> cagg_glb f X c Gs' Xs' F k"
 proof -
-  obtain g' Gt' where g': "Gs' = g' # Gt'" using G' by (auto simp: list_all2_Cons2)
+  let ?K = "kd X F" and ?gc = "gcontent_ext C (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k"
+  obtain g' Gt' where g': "Gs' = g' # Gt'" and g'C: "g' \<sqsubseteq> gmix_ext C (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k"
+    using G' by (auto simp: list_all2_Cons2)
   obtain g Gt where g: "Gs = g # Gt" "g \<sqsubseteq> g'" using G unfolding g' by (auto simp: list_all2_Cons2)
+  have gK: "g' \<sqsubseteq> split_keymix ?K\<cdot>?gc" using g'C unfolding gmix_ext_def gkeys_fold .
   have hG: "hd Gs = g" and hG': "hd Gs' = g'" unfolding g g' by simp_all
-  let ?K = "kd X F"
-  let ?Def = "agg_definite X g F k" and ?Def' = "agg_definite X g' F k"
-  let ?Pos = "agg_possible X g F k" and ?Pos' = "agg_possible X g' F k"
+  let ?Def = "magg_definite X g F k" and ?Def' = "magg_definite X g' F k"
+  let ?Pos = "magg_possible X g F k" and ?Pos' = "magg_possible X g' F k"
   let ?M = "cagg_member X c Gs Xs F k" and ?M' = "cagg_member X c Gs' Xs' F k"
   let ?S = "{agg_fold f ?M (?Def \<union> C) | C. finite C \<and> C \<subseteq> ?Pos}"
   let ?S' = "{agg_fold f ?M' (?Def' \<union> C) | C. finite C \<and> C \<subseteq> ?Pos'}"
-  have ck: "compact (proj (flod F)\<cdot>k)" by (rule agg_frame_compact [OF k])
   have key: "proj (flod F)\<cdot>\<kappa> = k" "compact \<kappa>" if "\<kappa> \<in> ?Def' \<union> ?Pos'" for \<kappa>
   proof -
-    have kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj ?K\<cdot>\<kappa> = \<kappa>" using agg_keys_at [OF that] by simp_all
+    have kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj ?K\<cdot>\<kappa> = \<kappa>" using magg_keys_at [OF that] by simp_all
     show "proj (flod F)\<cdot>\<kappa> = k" by (rule kk)
-    have "compact (proj (flod F)\<cdot>\<kappa>)" using ck by (simp only: kk [symmetric] proj_idem)
-    then show "compact \<kappa>" by (rule inner_key_compact [OF m kK])
+    show "compact \<kappa>" by (rule inner_key_compact' [OF m k kk kK])
   qed
-  have dm: "?Def \<subseteq> ?Def'" by (rule agg_definite_mono [OF g(2)])
-  have pm: "?Pos' \<subseteq> ?Pos" by (rule agg_possible_mono [OF g(2)])
+  have dm: "?Def \<subseteq> ?Def'" unfolding magg_definite_def using mix_definite_mono [OF _ g(2)] by blast
+  have pm: "?Pos' \<subseteq> ?Pos" unfolding magg_possible_def using mix_possible_below [OF _ g(2)] by blast
   have dp: "?Def' \<subseteq> ?Pos'"
   proof
     fix \<kappa> assume d: "\<kappa> \<in> ?Def'"
-    then obtain y where mx: "maximal_at ?K \<kappa>" and kk: "proj (flod F)\<cdot>\<kappa> = k"
-      and r: "\<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
-      and y: "split_definite y g'" "rproj ?K y = \<kappa>" by (auto simp: agg_definite_def)
-    have cy: "compact (rproj ?K y)" using key(2) [OF UnI1 [OF d]] y(2) by simp
-    have "split_possible_at ?K \<kappa> g'" using definite_maximal_possible [OF y(1) cy] mx y(2) by simp
-    then show "\<kappa> \<in> ?Pos'" unfolding agg_possible_def using kk r by blast
+    then have mx: "maximal_at ?K \<kappa>" and r: "proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
+      and md: "mix_definite \<kappa> g'" unfolding magg_definite_def by simp_all
+    have "mix_possible \<kappa> (split_keymix ?K\<cdot>?gc)"
+      by (rule keymix_definite_possible [OF key(2) [OF UnI1 [OF d]] mx mix_definite_mono [OF md gK]])
+    then have "mix_possible \<kappa> g'" by (rule mix_possible_below [OF _ gK])
+    then show "\<kappa> \<in> ?Pos'" unfolding magg_possible_def using r by blast
   qed
-  have fD': "finite ?Def'" by (rule agg_definite_finite) (use cG g' in simp)
+  have fD': "finite ?Def'"
+  proof (rule finite_subset [OF _ mix_definite_finite [of g' ?K]])
+    show "?Def' \<subseteq> {\<kappa>. compact \<kappa> \<and> maximal_at ?K \<kappa> \<and> mix_definite \<kappa> g'}"
+      using key(2) unfolding magg_definite_def by blast
+    show "compact g'" using cG unfolding hG' .
+  qed
   have mem: "?M \<kappa> \<sqsubseteq> ?M' \<kappa>" if "\<kappa> \<in> ?Def' \<union> ?Pos'" for \<kappa>
   proof -
     have v: "cagg_value X c Gs Xs F \<kappa> \<sqsubseteq> cagg_value X c Gs' Xs' F \<kappa>"
@@ -1177,6 +1268,9 @@ qed
 
 text \<open>Contents are continuous in the dataset, and compact at a compact dataset.\<close>
 
+lemma cont_gmix_ext [simp, cont2cont]: "cont (\<lambda>D. gmix_ext D e F k)"
+  unfolding gmix_ext_def gcontent_ext_def by simp
+
 lemma cont_gcontent_ext [simp, cont2cont]: "cont (\<lambda>D. gcontent_ext D e F k)"
   unfolding gcontent_ext_def by simp
 
@@ -1185,6 +1279,9 @@ lemma cont_vcontent_ext [simp, cont2cont]: "cont (\<lambda>D. vcontent_ext D e F
 
 lemma compact_gcontent_ext: "compact D \<Longrightarrow> compact (gcontent_ext D e F k)"
   by (auto dest!: split_pd.compact_imp_principal simp: gcontent_ext_def sel_select_def split_pd.compact_principal)
+
+lemma compact_gmix_ext: "compact D \<Longrightarrow> compact (gmix_ext D e F k)"
+  unfolding gmix_ext_def by (rule compact_split_keymix [OF compact_gcontent_ext])
 
 lemma compact_vcontent_ext: "compact D \<Longrightarrow> compact (vcontent_ext D e F k)"
   by (auto dest!: split_pd.compact_imp_principal simp: vcontent_ext_def sel_select_def split_pd.compact_principal)
@@ -1225,8 +1322,8 @@ qed
 text \<open>The content aggregate at arbitrary contents is the lub over the compact contents below.\<close>
 
 definition cagg :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow>
-    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
-    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+    ('k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    'k mix_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
   "cagg f X c Gs Xs F k = lub {cagg_glb f X c Gs\<^sub>0 Xs\<^sub>0 F k | Gs\<^sub>0 Xs\<^sub>0. (\<forall>x\<in>set Gs\<^sub>0. compact x) \<and> (\<forall>x\<in>set Xs\<^sub>0. compact x) \<and>
      list_all2 (\<sqsubseteq>) Gs\<^sub>0 Gs \<and> list_all2 (\<sqsubseteq>) Xs\<^sub>0 Xs}"
 
@@ -1253,10 +1350,10 @@ proof (rule ext_csemI)
     have eq: "x = cagg_glb f X c (gcontents_ext D\<^sub>0 ?gs F k) (vcontents_ext D\<^sub>0 ?vs F k) F k"
       unfolding x by (rule agg_glb_contents [OF f c m D0 cD k])
     have lG: "list_all2 (\<sqsubseteq>) (gcontents_ext D\<^sub>0 ?gs F k) (gcontents_ext D ?gs F k)"
-      by (rule map_cont_below [OF cont_gcontent_ext le])
+      by (rule map_cont_below [OF cont_gmix_ext le])
     have lV: "list_all2 (\<sqsubseteq>) (vcontents_ext D\<^sub>0 ?vs F k) (vcontents_ext D ?vs F k)"
       by (rule map_cont_below [OF cont_vcontent_ext le])
-    have cG0: "\<forall>y\<in>set (gcontents_ext D\<^sub>0 ?gs F k). compact y" using compact_gcontent_ext [OF cD] by simp
+    have cG0: "\<forall>y\<in>set (gcontents_ext D\<^sub>0 ?gs F k). compact y" using compact_gmix_ext [OF cD] by simp
     have cX0: "\<forall>y\<in>set (vcontents_ext D\<^sub>0 ?vs F k). compact y" using compact_vcontent_ext [OF cD] by simp
     show ?thesis
       by (intro CollectI exI [of _ "gcontents_ext D\<^sub>0 ?gs F k"] exI [of _ "vcontents_ext D\<^sub>0 ?vs F k"] conjI eq cG0 cX0 lG lV)
@@ -1271,7 +1368,7 @@ proof (rule ext_csemI)
     let ?Y = "\<lambda>i. split_principal (Z i)"
     have ch: "chain ?Y" by (rule split_pd.ch2ch_principal [OF Z])
     obtain i\<^sub>1 where i1: "\<forall>n\<ge>i\<^sub>1. list_all2 (\<sqsubseteq>) Gs\<^sub>0 (gcontents_ext (?Y n) ?gs F k)"
-      using compact_list_below_chain [where \<phi> = "\<lambda>e D. gcontent_ext D e F k", OF ch cont_gcontent_ext cG] G unfolding DZ by blast
+      using compact_list_below_chain [where \<phi> = "\<lambda>e D. gmix_ext D e F k", OF ch cont_gmix_ext cG] G unfolding DZ by blast
     obtain i\<^sub>2 where i2: "\<forall>n\<ge>i\<^sub>2. list_all2 (\<sqsubseteq>) Xs\<^sub>0 (vcontents_ext (?Y n) ?vs F k)"
       using compact_list_below_chain [where \<phi> = "\<lambda>e D. vcontent_ext D e F k", OF ch cont_vcontent_ext cX] V unfolding DZ by blast
     let ?n = "max i\<^sub>1 i\<^sub>2"
@@ -1286,10 +1383,10 @@ proof (rule ext_csemI)
       show "list_all2 (\<sqsubseteq>) Gs\<^sub>0 (gcontents_ext ?D ?gs F k)" using i1 by simp
       show "list_all2 (\<sqsubseteq>) Xs\<^sub>0 (vcontents_ext ?D ?vs F k)" using i2 by simp
       show "list_all2 (\<sqsubseteq>) (gcontents_ext ?D ?gs F k) (gcontents_ext C ?gs F k)"
-        by (rule map_cont_below [OF cont_gcontent_ext DC'])
+        by (rule map_cont_below [OF cont_gmix_ext DC'])
       show "list_all2 (\<sqsubseteq>) (vcontents_ext ?D ?vs F k) (vcontents_ext C ?vs F k)"
         by (rule map_cont_below [OF cont_vcontent_ext DC'])
-      show "compact (hd (gcontents_ext ?D ?gs F k))" by (simp add: compact_gcontent_ext [OF cD])
+      show "compact (hd (gcontents_ext ?D ?gs F k))" by (simp add: compact_gmix_ext [OF cD])
     qed
     also have "\<dots> = agg_glb f X ?D F k" by (rule agg_glb_contents [OF f c m D0 cD k, symmetric])
     finally have xl: "x \<sqsubseteq> agg_glb f X ?D F k" .
@@ -1345,8 +1442,28 @@ proof -
       (simp_all add: split_pd.principal_below_iff_mem_rep)
 qed
 
-lemma split_compact_list_ub:
-  fixes Cs :: "('r, 'k) split_pd list"
+lemma mix_compact_ub:
+  fixes x y C :: "'k mix_pd"
+  assumes cx: "compact x" and cy: "compact y" and xC: "x \<sqsubseteq> C" and yC: "y \<sqsubseteq> C"
+  shows "\<exists>z. compact z \<and> z \<sqsubseteq> C \<and> x \<sqsubseteq> z \<and> y \<sqsubseteq> z"
+proof -
+  obtain s t where st: "x = mix_principal s" "y = mix_principal t"
+    using mix_pd.compact_imp_principal [OF cx] mix_pd.compact_imp_principal [OF cy] by blast
+  have "s \<in> Rep_mix_pd C" "t \<in> Rep_mix_pd C"
+    using xC yC unfolding st mix_pd.principal_below_iff_mem_rep by simp_all
+  then obtain u where u: "u \<in> Rep_mix_pd C" "mix_le s u" "mix_le t u"
+    using mix_le.idealD2 [OF mix_pd.ideal_rep] by blast
+  show ?thesis unfolding st using u
+    by (intro exI [of _ "mix_principal u"] conjI mix_pd.compact_principal mix_pd.principal_mono)
+      (simp_all add: mix_pd.principal_below_iff_mem_rep)
+qed
+
+text \<open>Two lists of compact elements below a list have a list of compact upper bounds below it,
+  where any two compact elements below an element do.\<close>
+
+lemma compact_list_ub:
+  fixes Cs :: "'a::cpo list"
+  assumes ub: "\<And>x y C :: 'a. compact x \<Longrightarrow> compact y \<Longrightarrow> x \<sqsubseteq> C \<Longrightarrow> y \<sqsubseteq> C \<Longrightarrow> \<exists>z. compact z \<and> z \<sqsubseteq> C \<and> x \<sqsubseteq> z \<and> y \<sqsubseteq> z"
   shows "\<forall>x\<in>set xs. compact x \<Longrightarrow> \<forall>x\<in>set ys. compact x \<Longrightarrow> list_all2 (\<sqsubseteq>) xs Cs \<Longrightarrow> list_all2 (\<sqsubseteq>) ys Cs \<Longrightarrow>
     \<exists>zs. (\<forall>z\<in>set zs. compact z) \<and> list_all2 (\<sqsubseteq>) zs Cs \<and> list_all2 (\<sqsubseteq>) xs zs \<and> list_all2 (\<sqsubseteq>) ys zs"
 proof (induct Cs arbitrary: xs ys)
@@ -1360,7 +1477,7 @@ next
   obtain zs where zs: "\<forall>z\<in>set zs. compact z" "list_all2 (\<sqsubseteq>) zs Cs" "list_all2 (\<sqsubseteq>) xs' zs" "list_all2 (\<sqsubseteq>) ys' zs"
     using Cons.hyps [of xs' ys'] Cons.prems(1,2) xs ys by auto
   obtain z where z: "compact z" "z \<sqsubseteq> C" "x \<sqsubseteq> z" "y \<sqsubseteq> z"
-    using split_compact_ub [of x y C] Cons.prems(1,2) xs ys by auto
+    using ub [of x y C] Cons.prems(1,2) xs ys by auto
   show ?case using zs z xs ys by (intro exI [of _ "z # zs"]) simp
 qed
 
@@ -1379,9 +1496,9 @@ proof (intro ballI)
     and y: "y = cagg_glb f X c Gs\<^sub>2 Xs\<^sub>2 F k" "\<forall>x\<in>set Gs\<^sub>2. compact x" "\<forall>x\<in>set Xs\<^sub>2. compact x"
       "list_all2 (\<sqsubseteq>) Gs\<^sub>2 Gs" "list_all2 (\<sqsubseteq>) Xs\<^sub>2 Xs" by blast
   obtain Gs\<^sub>3 where G3: "\<forall>z\<in>set Gs\<^sub>3. compact z" "list_all2 (\<sqsubseteq>) Gs\<^sub>3 Gs" "list_all2 (\<sqsubseteq>) Gs\<^sub>1 Gs\<^sub>3" "list_all2 (\<sqsubseteq>) Gs\<^sub>2 Gs\<^sub>3"
-    using split_compact_list_ub [OF x(2) y(2) x(4) y(4)] by blast
+    using compact_list_ub [OF mix_compact_ub x(2) y(2) x(4) y(4)] by blast
   obtain Xs\<^sub>3 where X3: "\<forall>z\<in>set Xs\<^sub>3. compact z" "list_all2 (\<sqsubseteq>) Xs\<^sub>3 Xs" "list_all2 (\<sqsubseteq>) Xs\<^sub>1 Xs\<^sub>3" "list_all2 (\<sqsubseteq>) Xs\<^sub>2 Xs\<^sub>3"
-    using split_compact_list_ub [OF x(3) y(3) x(5) y(5)] by blast
+    using compact_list_ub [OF split_compact_ub x(3) y(3) x(5) y(5)] by blast
   have G3C: "list_all2 (\<sqsubseteq>) Gs\<^sub>3 (gcontents_ext C (eguards (aggregate_ext f X)) F k)" by (rule list_all2_below_trans [OF G3(2) G'])
   have X3C: "list_all2 (\<sqsubseteq>) Xs\<^sub>3 (vcontents_ext C (evalues (aggregate_ext f X)) F k)" by (rule list_all2_below_trans [OF X3(2) V'])
   have "Gs\<^sub>3 \<noteq> []" using G3C by (cases Gs\<^sub>3) simp_all
