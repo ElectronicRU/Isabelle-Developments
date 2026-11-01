@@ -1206,6 +1206,153 @@ proof -
   then show ?thesis unfolding S S' .
 qed
 
+
+text \<open>Contents are continuous in the dataset, and compact at a compact dataset.\<close>
+
+lemma cont_gcontent_ext [simp, cont2cont]: "cont (\<lambda>D. gcontent_ext D e F k)"
+  unfolding gcontent_ext_def by simp
+
+lemma cont_vcontent_ext [simp, cont2cont]: "cont (\<lambda>D. vcontent_ext D e F k)"
+  unfolding vcontent_ext_def by simp
+
+lemma compact_gcontent_ext: "compact D \<Longrightarrow> compact (gcontent_ext D e F k)"
+  by (auto dest!: split_pd.compact_imp_principal simp: gcontent_ext_def sel_select_def split_pd.compact_principal)
+
+lemma compact_vcontent_ext: "compact D \<Longrightarrow> compact (vcontent_ext D e F k)"
+  by (auto dest!: split_pd.compact_imp_principal simp: vcontent_ext_def sel_select_def split_pd.compact_principal)
+
+lemma map_cont_below: "(\<And>e. cont (\<phi> e)) \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> list_all2 (\<sqsubseteq>) (map (\<lambda>e. \<phi> e x) es) (map (\<lambda>e. \<phi> e y) es)"
+  by (induct es) (simp_all add: cont2monofunE)
+
+text \<open>Finitely many compact elements below the contents at the lub of a chain are below the
+  contents at every late enough element of the chain.\<close>
+
+lemma compact_list_below_chain:
+  fixes \<phi> :: "'e \<Rightarrow> 'a::cpo \<Rightarrow> 'b::cpo"
+  assumes ch: "chain Y" and \<phi>: "\<And>e. cont (\<phi> e)"
+  shows "\<forall>x\<in>set xs. compact x \<Longrightarrow> list_all2 (\<sqsubseteq>) xs (map (\<lambda>e. \<phi> e (\<Squnion>i. Y i)) es) \<Longrightarrow>
+    \<exists>i. \<forall>n\<ge>i. list_all2 (\<sqsubseteq>) xs (map (\<lambda>e. \<phi> e (Y n)) es)"
+proof (induct es arbitrary: xs)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons e es)
+  obtain x xs' where xs: "xs = x # xs'" and x: "x \<sqsubseteq> \<phi> e (\<Squnion>i. Y i)" and r: "list_all2 (\<sqsubseteq>) xs' (map (\<lambda>e. \<phi> e (\<Squnion>i. Y i)) es)"
+    using Cons.prems(2) by (auto simp: list_all2_Cons2)
+  have "\<exists>j. \<forall>n\<ge>j. list_all2 (\<sqsubseteq>) xs' (map (\<lambda>e. \<phi> e (Y n)) es)"
+    by (rule Cons.hyps) (use Cons.prems(1) xs r in simp_all)
+  then obtain j where j: "\<forall>n\<ge>j. list_all2 (\<sqsubseteq>) xs' (map (\<lambda>e. \<phi> e (Y n)) es)" by blast
+  have ch\<phi>: "chain (\<lambda>i. \<phi> e (Y i))" by (rule ch2ch_cont [OF \<phi> ch])
+  have cx: "compact x" using Cons.prems(1) xs by simp
+  have "x \<sqsubseteq> (\<Squnion>i. \<phi> e (Y i))" using x cont2contlubE [OF \<phi> ch] by simp
+  then obtain i where i: "x \<sqsubseteq> \<phi> e (Y i)" using compact_below_lub_iff [OF cx ch\<phi>] by blast
+  have "list_all2 (\<sqsubseteq>) xs (map (\<lambda>e. \<phi> e (Y n)) (e # es))" if n: "max i j \<le> n" for n
+  proof -
+    have "x \<sqsubseteq> \<phi> e (Y n)" using n by (intro below_trans [OF i] cont2monofunE [OF \<phi> chain_mono [OF ch]]) simp
+    then show ?thesis using j n by (simp add: xs)
+  qed
+  then show ?case by blast
+qed
+
+text \<open>The content aggregate at arbitrary contents is the lub over the compact contents below.\<close>
+
+definition cagg :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow>
+    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "cagg f X c Gs Xs F k = lub {cagg_glb f X c Gs\<^sub>0 Xs\<^sub>0 F k | Gs\<^sub>0 Xs\<^sub>0. (\<forall>x\<in>set Gs\<^sub>0. compact x) \<and> (\<forall>x\<in>set Xs\<^sub>0. compact x) \<and>
+     list_all2 (\<sqsubseteq>) Gs\<^sub>0 Gs \<and> list_all2 (\<sqsubseteq>) Xs\<^sub>0 Xs}"
+
+text \<open>The aggregate factors through its contents.  The compact datasets below give compact contents
+  below; conversely compact contents below are below the contents of a compact dataset below, where
+  the content aggregate is monotone.  So both sets of stages have the same upper bounds.\<close>
+
+theorem ext_csem_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and c: "ext_csem X c" and cm: "csem_mono X c" and m: "lod_small (emind X)"
+  shows "ext_csem (aggregate_ext f X) (cagg f X c)"
+proof (rule ext_csemI)
+  fix D F k
+  assume D: "conf_bounded D" and k: "sel_compact (aggregate_ext f X) F k"
+  obtain C where DC: "D \<sqsubseteq> C" and cC: "conforming_rows (split_rows\<cdot>C)" using D by blast
+  let ?gs = "eguards (aggregate_ext f X)" and ?vs = "evalues (aggregate_ext f X)"
+  let ?A = "agg_approx f X D F k"
+  let ?B = "{cagg_glb f X c Gs\<^sub>0 Xs\<^sub>0 F k | Gs\<^sub>0 Xs\<^sub>0. (\<forall>x\<in>set Gs\<^sub>0. compact x) \<and> (\<forall>x\<in>set Xs\<^sub>0. compact x) \<and>
+     list_all2 (\<sqsubseteq>) Gs\<^sub>0 (gcontents_ext D ?gs F k) \<and> list_all2 (\<sqsubseteq>) Xs\<^sub>0 (vcontents_ext D ?vs F k)}"
+  have AB: "x \<in> ?B" if xA: "x \<in> ?A" for x
+  proof -
+    obtain D\<^sub>0 where x: "x = agg_glb f X D\<^sub>0 F k" and cD: "compact D\<^sub>0" and le: "D\<^sub>0 \<sqsubseteq> D"
+      using xA by (auto simp: agg_approx_def)
+    have D0: "conf_bounded D\<^sub>0" using below_trans [OF le DC] cC by blast
+    have eq: "x = cagg_glb f X c (gcontents_ext D\<^sub>0 ?gs F k) (vcontents_ext D\<^sub>0 ?vs F k) F k"
+      unfolding x by (rule agg_glb_contents [OF f c m D0 cD k])
+    have lG: "list_all2 (\<sqsubseteq>) (gcontents_ext D\<^sub>0 ?gs F k) (gcontents_ext D ?gs F k)"
+      by (rule map_cont_below [OF cont_gcontent_ext le])
+    have lV: "list_all2 (\<sqsubseteq>) (vcontents_ext D\<^sub>0 ?vs F k) (vcontents_ext D ?vs F k)"
+      by (rule map_cont_below [OF cont_vcontent_ext le])
+    have cG0: "\<forall>y\<in>set (gcontents_ext D\<^sub>0 ?gs F k). compact y" using compact_gcontent_ext [OF cD] by simp
+    have cX0: "\<forall>y\<in>set (vcontents_ext D\<^sub>0 ?vs F k). compact y" using compact_vcontent_ext [OF cD] by simp
+    show ?thesis
+      by (intro CollectI exI [of _ "gcontents_ext D\<^sub>0 ?gs F k"] exI [of _ "vcontents_ext D\<^sub>0 ?vs F k"] conjI eq cG0 cX0 lG lV)
+  qed
+  have BA: "\<exists>y\<in>?A. x \<sqsubseteq> y" if xB: "x \<in> ?B" for x
+  proof -
+    obtain Gs\<^sub>0 Xs\<^sub>0 where x: "x = cagg_glb f X c Gs\<^sub>0 Xs\<^sub>0 F k" and cG: "\<forall>x\<in>set Gs\<^sub>0. compact x" and cX: "\<forall>x\<in>set Xs\<^sub>0. compact x"
+      and G: "list_all2 (\<sqsubseteq>) Gs\<^sub>0 (gcontents_ext D ?gs F k)" and V: "list_all2 (\<sqsubseteq>) Xs\<^sub>0 (vcontents_ext D ?vs F k)"
+      using xB by blast
+    obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and DZ: "D = (\<Squnion>i. split_principal (Z i))"
+      by (rule split_pd.obtain_principal_chain)
+    let ?Y = "\<lambda>i. split_principal (Z i)"
+    have ch: "chain ?Y" by (rule split_pd.ch2ch_principal [OF Z])
+    obtain i\<^sub>1 where i1: "\<forall>n\<ge>i\<^sub>1. list_all2 (\<sqsubseteq>) Gs\<^sub>0 (gcontents_ext (?Y n) ?gs F k)"
+      using compact_list_below_chain [where \<phi> = "\<lambda>e D. gcontent_ext D e F k", OF ch cont_gcontent_ext cG] G unfolding DZ by blast
+    obtain i\<^sub>2 where i2: "\<forall>n\<ge>i\<^sub>2. list_all2 (\<sqsubseteq>) Xs\<^sub>0 (vcontents_ext (?Y n) ?vs F k)"
+      using compact_list_below_chain [where \<phi> = "\<lambda>e D. vcontent_ext D e F k", OF ch cont_vcontent_ext cX] V unfolding DZ by blast
+    let ?n = "max i\<^sub>1 i\<^sub>2"
+    let ?D = "?Y ?n"
+    have cD: "compact ?D" by (rule split_pd.compact_principal)
+    have le: "?D \<sqsubseteq> D" unfolding DZ by (rule is_ub_thelub [OF ch])
+    have DC': "?D \<sqsubseteq> C" by (rule below_trans [OF le DC])
+    have D0: "conf_bounded ?D" using DC' cC by blast
+    have "x \<sqsubseteq> cagg_glb f X c (gcontents_ext ?D ?gs F k) (vcontents_ext ?D ?vs F k) F k"
+      unfolding x
+    proof (rule cagg_glb_mono [OF f cm m cC k])
+      show "list_all2 (\<sqsubseteq>) Gs\<^sub>0 (gcontents_ext ?D ?gs F k)" using i1 by simp
+      show "list_all2 (\<sqsubseteq>) Xs\<^sub>0 (vcontents_ext ?D ?vs F k)" using i2 by simp
+      show "list_all2 (\<sqsubseteq>) (gcontents_ext ?D ?gs F k) (gcontents_ext C ?gs F k)"
+        by (rule map_cont_below [OF cont_gcontent_ext DC'])
+      show "list_all2 (\<sqsubseteq>) (vcontents_ext ?D ?vs F k) (vcontents_ext C ?vs F k)"
+        by (rule map_cont_below [OF cont_vcontent_ext DC'])
+      show "compact (hd (gcontents_ext ?D ?gs F k))" by (simp add: compact_gcontent_ext [OF cD])
+    qed
+    also have "\<dots> = agg_glb f X ?D F k" by (rule agg_glb_contents [OF f c m D0 cD k, symmetric])
+    finally have xl: "x \<sqsubseteq> agg_glb f X ?D F k" .
+    have "agg_glb f X ?D F k \<in> ?A" unfolding agg_approx_def using cD le by blast
+    then show ?thesis using xl by blast
+  qed
+  have "lub ?A = lub ?B"
+  proof (rule lub_same_ubs)
+    fix u
+    show "?A <| u \<longleftrightarrow> ?B <| u"
+    proof
+      assume A: "?A <| u"
+      show "?B <| u"
+      proof (rule is_ubI)
+        fix x assume "x \<in> ?B"
+        then obtain y where y: "y \<in> ?A" "x \<sqsubseteq> y" using BA by blast
+        show "x \<sqsubseteq> u" by (rule below_trans [OF y(2) is_ubD [OF A y(1)]])
+      qed
+    next
+      assume B: "?B <| u"
+      show "?A <| u"
+      proof (rule is_ubI)
+        fix x assume x: "x \<in> ?A"
+        show "x \<sqsubseteq> u" by (rule is_ubD [OF B AB [OF x]])
+      qed
+    qed
+  qed
+  then show "sem_ext (aggregate_ext f X) D F k = cagg f X c (gcontents_ext D ?gs F k) (vcontents_ext D ?vs F k) F k"
+    unfolding aggregate_ext_simps agg_ext_sem_def cagg_def .
+qed
+
 end
 
 end
