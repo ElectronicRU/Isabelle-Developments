@@ -34,18 +34,26 @@ abbreviation vcontents_ext :: "('r, 'k) split_pd \<Rightarrow> ('k, 'r semi_fact
 abbreviation sel_compact :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> bool" where
   "sel_compact X F k \<equiv> \<forall>S\<in>set (esels X). compact (proj (sel_at S (flod F))\<cdot>k)"
 
+text \<open>The factorisation is stated for datasets below a conforming one, where the semantics is
+  meant.\<close>
+
+abbreviation conf_bounded :: "('r, 'k) split_pd \<Rightarrow> bool" where
+  "conf_bounded D \<equiv> \<exists>C. D \<sqsubseteq> C \<and> conforming_rows (split_rows\<cdot>C)"
+
 definition ext_csem :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
     (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow> bool" where
-  "ext_csem X c \<longleftrightarrow> (\<forall>D F k. sel_compact X F k \<longrightarrow>
+  "ext_csem X c \<longleftrightarrow> (\<forall>D F k. conf_bounded D \<longrightarrow> sel_compact X F k \<longrightarrow>
      sem_ext X D F k = c (gcontents_ext D (eguards X) F k) (vcontents_ext D (evalues X) F k) F k)"
 
 lemma ext_csemI:
-  "(\<And>D F k. sel_compact X F k \<Longrightarrow> sem_ext X D F k = c (gcontents_ext D (eguards X) F k) (vcontents_ext D (evalues X) F k) F k) \<Longrightarrow>
+  "(\<And>D F k. conf_bounded D \<Longrightarrow> sel_compact X F k \<Longrightarrow>
+      sem_ext X D F k = c (gcontents_ext D (eguards X) F k) (vcontents_ext D (evalues X) F k) F k) \<Longrightarrow>
      ext_csem X c"
   unfolding ext_csem_def by blast
 
 lemma ext_csemD:
-  "ext_csem X c \<Longrightarrow> sel_compact X F k \<Longrightarrow> sem_ext X D F k = c (gcontents_ext D (eguards X) F k) (vcontents_ext D (evalues X) F k) F k"
+  "ext_csem X c \<Longrightarrow> conf_bounded D \<Longrightarrow> sel_compact X F k \<Longrightarrow>
+     sem_ext X D F k = c (gcontents_ext D (eguards X) F k) (vcontents_ext D (evalues X) F k) F k"
   unfolding ext_csem_def by blast
 
 
@@ -70,9 +78,9 @@ lemma sel_compact_kd: "semilawful X \<Longrightarrow> sel_compact X F k \<Longri
   by (simp add: proj_le sel_below_kd)
 
 lemma ext_csemD_kd:
-  assumes c: "ext_csem X c" and X: "semilawful X" and k: "sel_compact X F k"
+  assumes c: "ext_csem X c" and X: "semilawful X" and D: "conf_bounded D" and k: "sel_compact X F k"
   shows "sem_ext X D F (proj (kd X F)\<cdot>k) = c (gcontents_ext D (eguards X) F k) (vcontents_ext D (evalues X) F k) F (proj (kd X F)\<cdot>k)"
-  using ext_csemD [OF c sel_compact_kd [OF X k]] by (simp only: contents_kd [OF X])
+  using ext_csemD [OF c D sel_compact_kd [OF X k]] by (simp only: contents_kd [OF X])
 
 
 subsection \<open>Presence on views and trivial guards\<close>
@@ -134,11 +142,11 @@ theorem ext_csem_const: "ext_csem (const_ext v) (\<lambda>Gs Xs F k. Present\<cd
 
 theorem ext_csem_smap:
   "ext_csem X c \<Longrightarrow> ext_csem (smap_ext g X) (\<lambda>Gs Xs F k. map_option_pd g\<cdot>(c Gs Xs F k))"
-  by (rule ext_csemI) (simp add: ext_csemD)
+  by (rule ext_csemI) (simp add: ext_csemD del: ex_simps)
 
 theorem ext_csem_key_at: "ext_csem (key_at_ext c) (\<lambda>Gs Xs F k. split_present (hd Xs) \<odot> Present\<cdot>(proj c\<cdot>k))"
 proof (rule ext_csemI)
-  fix D F k assume comp: "sel_compact (key_at_ext c) F k"
+  fix D F k assume Dc: "conf_bounded D" and comp: "sel_compact (key_at_ext c) F k"
   have L: "sel_at (sel c c) (flod F) = c" by (simp add: join_meet_self)
   have kc: "compact (proj c\<cdot>k)" using comp by (simp add: L)
   have "key_at_sem c D k = split_present (split_select c (proj c\<cdot>k)\<cdot>D) \<odot> Present\<cdot>(proj c\<cdot>k)"
@@ -151,7 +159,7 @@ qed
 theorem ext_csem_restrict:
   "ext_csem X c \<Longrightarrow> ext_csem (restrict_ext \<gamma> X) (\<lambda>Gs Xs F k. c Gs Xs (frestrict \<gamma> F) k)"
 proof (rule ext_csemI)
-  fix D F k assume c: "ext_csem X c" and comp: "sel_compact (restrict_ext \<gamma> X) F k"
+  fix D F k assume c: "ext_csem X c" and Dc: "conf_bounded D" and comp: "sel_compact (restrict_ext \<gamma> X) F k"
   have comp': "sel_compact X (frestrict \<gamma> F) k" using comp by (simp add: comp_def)
   have g: "gcontents_ext D (eguards X) (frestrict \<gamma> F) k = gcontents_ext D (map (restrict_entry \<gamma>) (eguards X)) F k"
     by (simp add: gcontent_ext_def sel_select_def gand_assoc)
@@ -159,7 +167,7 @@ proof (rule ext_csemI)
     by (simp add: vcontent_ext_def sel_select_def)
   show "sem_ext (restrict_ext \<gamma> X) D F k =
       c (gcontents_ext D (eguards (restrict_ext \<gamma> X)) F k) (vcontents_ext D (evalues (restrict_ext \<gamma> X)) F k) (frestrict \<gamma> F) k"
-    using ext_csemD [OF c comp', of D] by (simp only: restrict_ext_simps restrict_simps g v)
+    using ext_csemD [OF c Dc comp'] by (simp only: restrict_ext_simps restrict_simps g v)
 qed
 
 theorem ext_csem_present_at:
@@ -167,7 +175,7 @@ theorem ext_csem_present_at:
   shows "ext_csem (present_at_ext a \<rho> X)
     (\<lambda>Gs Xs F k. split_present (hd Gs) \<odot> c (tl Gs) Xs F (proj (kd X F)\<cdot>k))"
 proof (rule ext_csemI)
-  fix D F k assume comp: "sel_compact (present_at_ext a \<rho> X) F k"
+  fix D F k assume Dc: "conf_bounded D" and comp: "sel_compact (present_at_ext a \<rho> X) F k"
   let ?L = "(emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F)"
   have kc: "compact (proj ?L\<cdot>k)" using comp by simp
   have compX: "sel_compact X F k" using comp by simp
@@ -178,7 +186,7 @@ proof (rule ext_csemI)
       split_present (hd (gcontents_ext D (eguards (present_at_ext a \<rho> X)) F k)) \<odot>
         c (tl (gcontents_ext D (eguards (present_at_ext a \<rho> X)) F k)) (vcontents_ext D (evalues (present_at_ext a \<rho> X)) F k) F
           (proj (kd X F)\<cdot>k)"
-    using ext_csemD_kd [OF c X compX, of D] by (simp add: p)
+    using ext_csemD_kd [OF c X Dc compX] by (simp add: p)
 qed
 
 theorem ext_csem_combine:
@@ -187,14 +195,14 @@ theorem ext_csem_combine:
      (c\<^sub>1 (take (length (eguards X\<^sub>1)) Gs) (take (length (evalues X\<^sub>1)) Xs) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>
      (c\<^sub>2 (drop (length (eguards X\<^sub>1)) Gs) (drop (length (evalues X\<^sub>1)) Xs) F (proj (kd X\<^sub>2 F)\<cdot>k)))"
 proof (rule ext_csemI)
-  fix D F k assume comp: "sel_compact (combine_ext f X\<^sub>1 X\<^sub>2) F k"
+  fix D F k assume Dc: "conf_bounded D" and comp: "sel_compact (combine_ext f X\<^sub>1 X\<^sub>2) F k"
   have comp1: "sel_compact X\<^sub>1 F k" and comp2: "sel_compact X\<^sub>2 F k" using comp by auto
   show "sem_ext (combine_ext f X\<^sub>1 X\<^sub>2) D F k = lift2_option_pd f\<cdot>
      (c\<^sub>1 (take (length (eguards X\<^sub>1)) (gcontents_ext D (eguards (combine_ext f X\<^sub>1 X\<^sub>2)) F k))
         (take (length (evalues X\<^sub>1)) (vcontents_ext D (evalues (combine_ext f X\<^sub>1 X\<^sub>2)) F k)) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>
      (c\<^sub>2 (drop (length (eguards X\<^sub>1)) (gcontents_ext D (eguards (combine_ext f X\<^sub>1 X\<^sub>2)) F k))
         (drop (length (evalues X\<^sub>1)) (vcontents_ext D (evalues (combine_ext f X\<^sub>1 X\<^sub>2)) F k)) F (proj (kd X\<^sub>2 F)\<cdot>k))"
-    using ext_csemD_kd [OF c\<^sub>1 X\<^sub>1 comp1, of D] ext_csemD_kd [OF c\<^sub>2 X\<^sub>2 comp2, of D] by simp
+    using ext_csemD_kd [OF c\<^sub>1 X\<^sub>1 Dc comp1] ext_csemD_kd [OF c\<^sub>2 X\<^sub>2 Dc comp2] by simp
 qed
 
 text \<open>A column reads the join of the sections of the selected definite rows, through its view.
@@ -292,7 +300,7 @@ theorem ext_csem_column:
   "ext_csem (column_ext c a v)
      (\<lambda>Gs Xs F k. split_present (hd Xs) \<odot> Present\<cdot>(v\<cdot>(col_content_value c a (hd Xs) k)))"
 proof (rule ext_csemI)
-  fix D F k assume comp: "sel_compact (column_ext c a v) F k"
+  fix D F k assume Dc: "conf_bounded D" and comp: "sel_compact (column_ext c a v) F k"
   have L: "sel_at (sel a a) (flod F) = a" by (simp add: join_meet_self)
   have kc: "compact (proj a\<cdot>k)" using comp by (simp add: L)
   show "sem_ext (column_ext c a v) D F k =
@@ -312,7 +320,7 @@ lemma vcontent_ext_include: "vcontent_ext D (include_entry M e) F k = vcontent_e
 theorem ext_csem_include_dims:
   "ext_csem X c \<Longrightarrow> ext_csem (include_dims_ext M X) (\<lambda>Gs Xs F k. c Gs Xs (finclude M F) k)"
 proof (rule ext_csemI)
-  fix D F k assume c: "ext_csem X c" and comp: "sel_compact (include_dims_ext M X) F k"
+  fix D F k assume c: "ext_csem X c" and Dc: "conf_bounded D" and comp: "sel_compact (include_dims_ext M X) F k"
   have comp': "sel_compact X (finclude M F) k"
   proof
     fix S assume "S \<in> set (esels X)"
@@ -322,7 +330,7 @@ proof (rule ext_csemI)
   qed
   show "sem_ext (include_dims_ext M X) D F k =
       c (gcontents_ext D (eguards (include_dims_ext M X)) F k) (vcontents_ext D (evalues (include_dims_ext M X)) F k) (finclude M F) k"
-    using ext_csemD [OF c comp', of D] by (simp add: gcontent_ext_include vcontent_ext_include comp_def)
+    using ext_csemD [OF c Dc comp'] by (simp add: gcontent_ext_include vcontent_ext_include comp_def)
 qed
 
 lemma sel_select_ffor:
@@ -343,7 +351,7 @@ theorem ext_csem_filtfor:
   assumes c: "ext_csem X c" and X: "semilawful X"
   shows "ext_csem (filtfor_ext \<tau> G X) (\<lambda>Gs Xs F k. c Gs Xs (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k))"
 proof (rule ext_csemI)
-  fix D F k assume comp: "sel_compact (filtfor_ext \<tau> G X) F k"
+  fix D F k assume Dc: "conf_bounded D" and comp: "sel_compact (filtfor_ext \<tau> G X) F k"
   let ?k = "proj (kd X (ffor \<tau> G F))\<cdot>k"
   have lm: "lower_part S \<sqsubseteq> emind X" if "S \<in> set (esels X)" for S by (rule lower_below_mind [OF X that])
   have comp': "sel_compact X (ffor \<tau> G F) ?k"
@@ -361,7 +369,7 @@ proof (rule ext_csemI)
     unfolding map_map comp_def by (rule map_cong [OF refl], rule vcontent_ext_ffor [OF lm [OF esels_valueI]])
   show "sem_ext (filtfor_ext \<tau> G X) D F k =
       c (gcontents_ext D (eguards (filtfor_ext \<tau> G X)) F k) (vcontents_ext D (evalues (filtfor_ext \<tau> G X)) F k) (ffor \<tau> G F) ?k"
-    using ext_csemD [OF c comp', of D] by (simp only: filtfor_ext_simps filtfor_simps g v)
+    using ext_csemD [OF c Dc comp'] by (simp only: filtfor_ext_simps filtfor_simps g v)
 qed
 
 text \<open>An expression \<^emph>\<open>factors\<close> when some function of the contents gives its extended semantics.\<close>
