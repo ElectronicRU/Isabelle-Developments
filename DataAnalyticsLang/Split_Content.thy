@@ -1,5 +1,5 @@
 theory Split_Content
-  imports SplitPD
+  imports SplitPD "HOLCF-extra.Kleene_Logic"
 begin
 
 default_sort bifinite
@@ -297,6 +297,113 @@ definition split_keyguard :: "('k \<rightarrow> tr) \<Rightarrow> ('r, 'k) split
 
 lemma split_keyguard_principal [simp]: "split_keyguard h\<cdot>(split_principal t) = split_principal (SKeyGuard h t)"
   unfolding split_keyguard_def by (simp add: split_pd.extension_principal SKeyGuard_split_mono)
+
+subsection \<open>Selection as a key guard\<close>
+
+text \<open>Selecting exactly the part \<open>\<kappa>\<close> at the LOD \<open>s\<close> is the key guard that best approximates the
+  test whether a key's part is \<open>\<kappa>\<close>: true on the interior of the keys with that part, false on the
+  interior of the others, undecided in between.  The keys with part \<open>\<kappa>\<close> form an open set only
+  when \<open>\<kappa>\<close> is compact and maximal at \<open>s\<close> (otherwise a key there may move up, or is not finitely
+  witnessed), and the interior of the others is the keys whose part is not below \<open>\<kappa>\<close> (a part
+  below \<open>\<kappa>\<close> may still rise to it).  A slicer cannot ask for a part exactly, so it never meets the
+  maximality condition.\<close>
+
+definition part_test :: "'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> tr" where
+  "part_test s \<kappa> k = (if compact \<kappa> \<and> maximal_at s \<kappa> \<and> proj s\<cdot>k = \<kappa> then TT else if proj s\<cdot>k \<sqsubseteq> \<kappa> then \<bottom> else FF)"
+
+lemma part_test_mono:
+  assumes le: "k \<sqsubseteq> k'"
+  shows "part_test s \<kappa> k \<sqsubseteq> part_test s \<kappa> k'"
+proof -
+  have pk: "proj s\<cdot>k \<sqsubseteq> proj s\<cdot>k'" by (rule monofun_cfun_arg [OF le])
+  show ?thesis
+  proof (cases "compact \<kappa> \<and> maximal_at s \<kappa> \<and> proj s\<cdot>k = \<kappa>")
+    case True
+    then have "proj s\<cdot>k' = \<kappa>" using maximal_at_eq [of s \<kappa> "proj s\<cdot>k'"] pk by auto
+    then show ?thesis using True unfolding part_test_def by simp
+  next
+    case nT: False
+    show ?thesis
+    proof (cases "proj s\<cdot>k \<sqsubseteq> \<kappa>")
+      case True
+      then have "part_test s \<kappa> k = \<bottom>" using nT unfolding part_test_def by simp
+      then show ?thesis by simp
+    next
+      case False
+      then have "\<not> proj s\<cdot>k' \<sqsubseteq> \<kappa>" using pk below_trans by blast
+      then show ?thesis using nT False unfolding part_test_def by auto
+    qed
+  qed
+qed
+
+lemma cont_part_test: "cont (part_test s \<kappa>)"
+proof (rule contI2 [OF monofunI [OF part_test_mono]])
+  fix Y :: "nat \<Rightarrow> 'k" assume Y: "chain Y" and ch: "chain (\<lambda>i. part_test s \<kappa> (Y i))"
+  have pY: "chain (\<lambda>i. proj s\<cdot>(Y i))" by (rule ch2ch_Rep_cfunR [OF Y])
+  have pl: "proj s\<cdot>(\<Squnion>i. Y i) = (\<Squnion>i. proj s\<cdot>(Y i))" by (rule contlub_cfun_arg [OF Y])
+  have stage: "part_test s \<kappa> (\<Squnion>i. Y i) \<sqsubseteq> (\<Squnion>i. part_test s \<kappa> (Y i))"
+    if "part_test s \<kappa> (\<Squnion>i. Y i) = part_test s \<kappa> (Y i)" for i
+    unfolding that by (rule is_ub_thelub [OF ch])
+  show "part_test s \<kappa> (\<Squnion>i. Y i) \<sqsubseteq> (\<Squnion>i. part_test s \<kappa> (Y i))"
+  proof (cases "compact \<kappa> \<and> maximal_at s \<kappa> \<and> proj s\<cdot>(\<Squnion>i. Y i) = \<kappa>")
+    case True
+    then have c: "compact \<kappa>" and mx: "maximal_at s \<kappa>" and e: "proj s\<cdot>(\<Squnion>i. Y i) = \<kappa>" by simp_all
+    have "\<kappa> \<sqsubseteq> (\<Squnion>i. proj s\<cdot>(Y i))" using e pl by simp
+    then obtain i where "\<kappa> \<sqsubseteq> proj s\<cdot>(Y i)" using compact_below_lub_iff [OF c pY] by blast
+    then have "proj s\<cdot>(Y i) = \<kappa>" using maximal_at_eq [OF mx proj_idem] by blast
+    then show ?thesis by (intro stage [of i]) (simp add: part_test_def c mx e)
+  next
+    case nT: False
+    show ?thesis
+    proof (cases "proj s\<cdot>(\<Squnion>i. Y i) \<sqsubseteq> \<kappa>")
+      case True
+      then have "part_test s \<kappa> (\<Squnion>i. Y i) = \<bottom>" using nT unfolding part_test_def by simp
+      then show ?thesis by simp
+    next
+      case nB: False
+      have "\<exists>i. \<not> proj s\<cdot>(Y i) \<sqsubseteq> \<kappa>"
+      proof (rule ccontr)
+        assume "\<not> (\<exists>i. \<not> proj s\<cdot>(Y i) \<sqsubseteq> \<kappa>)"
+        then have "(\<Squnion>i. proj s\<cdot>(Y i)) \<sqsubseteq> \<kappa>" by (intro lub_below pY) simp
+        then show False using nB pl by simp
+      qed
+      then obtain i where i: "\<not> proj s\<cdot>(Y i) \<sqsubseteq> \<kappa>" by blast
+      have "part_test s \<kappa> (Y i) = FF" using i unfolding part_test_def by auto
+      moreover have "part_test s \<kappa> (\<Squnion>i. Y i) = FF" using nT nB unfolding part_test_def by auto
+      ultimately show ?thesis by (intro stage [of i]) simp
+    qed
+  qed
+qed
+
+definition at_part :: "'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'k \<rightarrow> tr" where
+  "at_part s \<kappa> = (\<Lambda> k. part_test s \<kappa> k)"
+
+lemma at_part_apply: "at_part s \<kappa>\<cdot>k = part_test s \<kappa> k"
+  unfolding at_part_def by (simp add: cont_part_test)
+
+lemma at_part_TT_iff: "at_part s \<kappa>\<cdot>k = TT \<longleftrightarrow> compact \<kappa> \<and> maximal_at s \<kappa> \<and> proj s\<cdot>k = \<kappa>"
+  and at_part_FF_iff: "at_part s \<kappa>\<cdot>k = FF \<longleftrightarrow> \<not> proj s\<cdot>k \<sqsubseteq> \<kappa>"
+  unfolding at_part_apply part_test_def by auto
+
+text \<open>At a compact part, selection is the key guard of the part test.\<close>
+
+lemma SSelect_keyguard: "compact \<kappa> \<Longrightarrow> SSelect s \<kappa> t = SKeyGuard (at_part s \<kappa>) t"
+  by (rule split_basis_eqI) (auto simp: at_part_TT_iff at_part_FF_iff)
+
+lemma split_select_keyguard: "compact \<kappa> \<Longrightarrow> split_select s \<kappa> = split_keyguard (at_part s \<kappa>)"
+  by (rule cfun_eqI, induct_tac x rule: split_pd.principal_induct) (simp_all add: SSelect_keyguard)
+
+text \<open>Key guards compose by conjunction.\<close>
+
+lemma SKeyGuard_pand: "SKeyGuard h\<^sub>1 (SKeyGuard h\<^sub>2 t) = SKeyGuard (\<Lambda> k. pand\<cdot>(h\<^sub>1\<cdot>k)\<cdot>(h\<^sub>2\<cdot>k)) t"
+  by (rule split_basis_eqI) (auto simp: pand_TT_iff pand_FF_iff)
+
+lemma split_keyguard_pand:
+  "split_keyguard h\<^sub>1\<cdot>(split_keyguard h\<^sub>2\<cdot>D) = split_keyguard (\<Lambda> k. pand\<cdot>(h\<^sub>1\<cdot>k)\<cdot>(h\<^sub>2\<cdot>k))\<cdot>D"
+proof (induct D rule: split_pd.principal_induct)
+  case (2 t)
+  show ?case unfolding split_keyguard_principal by (rule arg_cong [where f = split_principal], rule SKeyGuard_pand)
+qed simp
 
 subsection \<open>Refutation by a key test\<close>
 
