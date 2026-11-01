@@ -32,16 +32,30 @@ files (`ROOT`, `.tex`, `.bib`, docs).
 ## Repository layout
 
 ### `HOLCF-extra/` — HOLCF library extensions
-ROOT builds: `Top`, `FiniteCF`, `Bounded_Complete`, `Directed`.
-Other theories present (WIP / not yet in ROOT): `Cpo_Topology`, `Interval_Space`,
-`Attr_Space`, `Koenigs`, `LowerPD_Representation`, `UpperPD_Representation`,
-`Compact_Cfun`, `Definitions`, `Repro`/`Repro2` (minimal-repro scratch).
+ROOT builds: `Top`, `FiniteCF`, `Bounded_Complete`, `Pointed_Profinite`, `Kleene_Logic`,
+`Distributive`, `Filter_Sum`, `DI`, `Lattice_Complete`, `Algebraic_Lattice`, `Domain_Order`,
+`Domain_Order_Derive`, `Directed`, `Definitions`, `MUB_Closure`, `Deflations`, `Koenigs`,
+`LowerPD_Representation`, `UpperPD_Representation`, `Cpo_Topology`, `BagPD`; session
+`HOLCF-extra-Examples` (in `Examples/`) has the derivation use cases.
+Not in ROOT: `Interval_Space`, `Attr_Space`, `MixPD`, `Repro`/`Repro2` (minimal-repro scratch).
 
 ### `DataAnalyticsLang/` — a domain-theoretic data-analytics language
-ROOT builds: `Typing`, `Domain`, `Interp`. Depends on session `HOLCF-extra`.
-Other theories present (WIP): `Subdomain`, `StrongIdeal`, `Row`, `Valsets`.
-Theme: powerdomains for partial information / approximate queries (cf. the
-Buneman–Jung–Ohori & Libkin papers indexed below).
+Depends on session `HOLCF-extra`. ROOT builds, in dependency order:
+- foundations: `Typing` (an old generic lattice-subtyping locale, *not* the query
+  language's type system), `Domain`, `Interp`, `Subdomain`, `Algebraic_Semi_Factor`, `Row`;
+- datasets and levels of detail: `Slicer`, `Schema` (class of row types with schema rules),
+  `Views` (row keys, key support), `Frame`, `LOD` (semi-factor LODs, small = finitary);
+- values: `Value`, `Option_PD` (results: presence/absence in the Smyth powerdomain), `SplitPD`
+  (partial datasets: Hoare rows + Smyth possible keys);
+- rigid expression semantics: `Content_Law`, `Expr_Combinators`, `Aggregate`;
+- the query language: `Ast` (untyped AST: Dim, Col, Lit, Call, Aggr, GroupBy, For, Where),
+  `Ast_Semantics` (`asem`; `wf` checks arities and row-level WHERE only, no value typing);
+- the extended semantics over partial datasets: `Split_Semantics` (sound, monotone and
+  continuous combinators), `Ast_Split_Semantics` (`asem_ext`).
+
+Not in ROOT: `Separated_Principal`, `SlicerToy`. A type system for the AST and the SQL lowering
+are planned, not started. Theme: powerdomains for partial information / approximate queries
+(cf. the Buneman–Jung–Ohori & Libkin papers indexed below).
 
 ## Building
 `isabelle build -d DataAnalyticsLang -d HOLCF-extra DataAnalyticsLang` (or per-session; there is
