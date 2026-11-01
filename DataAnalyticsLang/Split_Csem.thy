@@ -197,6 +197,110 @@ proof (rule ext_csemI)
     using ext_csemD_kd [OF c\<^sub>1 X\<^sub>1 comp1, of D] ext_csemD_kd [OF c\<^sub>2 X\<^sub>2 comp2, of D] by simp
 qed
 
+text \<open>A column reads the join of the sections of the selected definite rows, through its view.
+  The rows of the viewed selection approximate the selected rows of the dataset and conversely, so
+  both have the same upper bounds and the same join.\<close>
+
+definition col_content_value :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'r" where
+  "col_content_value c a X k = (if maximal_at a (proj a\<cdot>k) then lub {z \<downharpoonright> c | z. split_definite z X} else \<bottom>)"
+
+lemma lub_same_ubs: "(\<And>u. S <| u \<longleftrightarrow> T <| u) \<Longrightarrow> lub S = lub T"
+  unfolding lub_def is_lub_def by simp
+
+lemma col_value_content:
+  assumes kc: "compact (proj a\<cdot>k)"
+  shows "col_value c a D k = col_content_value c a (split_view (c, a)\<cdot>(split_select a (proj a\<cdot>k)\<cdot>D)) k"
+proof (cases "maximal_at a (proj a\<cdot>k)")
+  case False
+  then show ?thesis by (simp add: col_value_def col_content_value_def)
+next
+  case mx: True
+  let ?\<kappa> = "proj a\<cdot>k" and ?v = "(c, a) :: ('r, 'k) view"
+  let ?X = "split_view ?v\<cdot>(split_select a ?\<kappa>\<cdot>D)"
+  let ?A = "col_sections c a D k" and ?B = "{z \<downharpoonright> c | z. split_definite z ?X}"
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and DZ: "D = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  have ZS: "\<forall>i. split_le (SView ?v (SSelect a ?\<kappa> (Z i))) (SView ?v (SSelect a ?\<kappa> (Z (Suc i))))"
+    using Z by (blast intro: SView_split_mono SSelect_split_mono)
+  have chS: "chain (\<lambda>i. split_principal (SSelect a ?\<kappa> (Z i)))"
+    by (rule split_pd.ch2ch_principal) (blast intro: Z [rule_format] SSelect_split_mono)
+  have X: "?X = (\<Squnion>i. split_principal (SView ?v (SSelect a ?\<kappa> (Z i))))"
+  proof -
+    have "split_select a ?\<kappa>\<cdot>D = (\<Squnion>i. split_principal (SSelect a ?\<kappa> (Z i)))" unfolding DZ contlub_cfun_arg [OF ch] by simp
+    then show ?thesis by (simp only: contlub_cfun_arg [OF chS] split_view_principal)
+  qed
+  obtain r :: "nat \<Rightarrow> 'r \<rightarrow> 'r" where r: "approx_chain r" using bifinite by blast
+  interpret R: approx_chain r by (fact r)
+  have rc: "compact (r n\<cdot>x)" for n x by (rule finite_deflation.compact [OF R.finite_deflation_approx])
+  have rb: "r n\<cdot>x \<sqsubseteq> x" for n x by (rule deflation.below [OF finite_deflation_imp_deflation [OF R.finite_deflation_approx]])
+  have sec: "(x \<downharpoonright> (c \<squnion> key_supp\<cdot>a)) \<downharpoonright> c = x \<downharpoonright> c" for x :: 'r by (rule proj_le [OF lattice_join_ge1])
+  have BA: "\<exists>w\<in>?A. r n\<cdot>b \<sqsubseteq> w" if b: "b \<in> ?B" for b n
+  proof -
+    obtain z where z: "split_definite z ?X" and bz: "b = z \<downharpoonright> c" using b by blast
+    let ?f = "\<Lambda> z. r n\<cdot>(z \<downharpoonright> c)"
+    obtain z' where z': "compact z'" "z' \<sqsubseteq> z" "?f\<cdot>z' = ?f\<cdot>z" by (rule compact_approx_value [of ?f z]) (simp add: rc)
+    have "split_definite z' (\<Squnion>i. split_principal (SView ?v (SSelect a ?\<kappa> (Z i))))"
+      using split_definite_below [OF z z'(2)] unfolding X .
+    then obtain i x' where x': "x' \<in> srows (SView ?v (SSelect a ?\<kappa> (Z i)))" "z' \<sqsubseteq> Rep_compact_basis x'"
+      by (rule definite_chain_generator [OF ZS _ z'(1)])
+    then obtain x where x: "x \<in> srows (Z i)" "rproj a (Rep_compact_basis x) = ?\<kappa>" and xx: "x' = vrow ?v x" by auto
+    have "split_definite (Rep_compact_basis x) D"
+      by (rule split_definite_mono [OF generator_definite [OF x(1)]]) (simp only: DZ is_ub_thelub [OF ch])
+    then have w: "Rep_compact_basis x \<downharpoonright> c \<in> ?A" using x(2) by (auto simp: col_sections_def)
+    have "r n\<cdot>b = r n\<cdot>(z' \<downharpoonright> c)" using z'(3) bz by simp
+    also have "\<dots> \<sqsubseteq> z' \<downharpoonright> c" by (rule rb)
+    also have "\<dots> \<sqsubseteq> Rep_compact_basis x' \<downharpoonright> c" by (intro monofun_cfun_arg x'(2))
+    also have "\<dots> = Rep_compact_basis x \<downharpoonright> c" unfolding xx Rep_vrow by (simp add: sec)
+    finally show ?thesis using w by blast
+  qed
+  have AB: "\<exists>w\<in>?B. r n\<cdot>y \<sqsubseteq> w" if y: "y \<in> ?A" for y n
+  proof -
+    obtain y0 where y0: "split_definite y0 D" "rproj a y0 = ?\<kappa>" and yy: "y = y0 \<downharpoonright> c"
+      using y by (auto simp: col_sections_def)
+    let ?f = "\<Lambda> y. (rproj a y, r n\<cdot>(y \<downharpoonright> c))"
+    obtain y' where y': "compact y'" "y' \<sqsubseteq> y0" "?f\<cdot>y' = ?f\<cdot>y0"
+      by (rule compact_approx_value [of ?f y0]) (simp add: y0(2) kc rc)
+    have "split_definite y' (\<Squnion>i. split_principal (Z i))" using split_definite_below [OF y0(1) y'(2)] unfolding DZ .
+    then obtain i x where x: "x \<in> srows (Z i)" "y' \<sqsubseteq> Rep_compact_basis x"
+      by (rule definite_chain_generator [OF Z _ y'(1)])
+    have ky': "rproj a y' = ?\<kappa>" using y'(3) y0(2) by simp
+    have "rproj a y' \<sqsubseteq> rproj a (Rep_compact_basis x)" by (intro monofun_cfun_arg x(2))
+    then have xk: "rproj a (Rep_compact_basis x) = ?\<kappa>" unfolding ky' by (rule maximal_at_eq [OF mx proj_idem])
+    have "vrow ?v x \<in> srows (SView ?v (SSelect a ?\<kappa> (Z i)))" using x(1) xk mx kc by auto
+    then have "split_definite (Rep_compact_basis (vrow ?v x)) ?X"
+      by (rule split_definite_mono [OF generator_definite]) (simp only: X is_ub_thelub [OF split_pd.ch2ch_principal [OF ZS]])
+    then have "split_definite (Rep_compact_basis x \<downharpoonright> (c \<squnion> key_supp\<cdot>a)) ?X" by simp
+    then have w: "Rep_compact_basis x \<downharpoonright> c \<in> ?B" by (blast intro: sec [symmetric])
+    have "r n\<cdot>y = r n\<cdot>(y' \<downharpoonright> c)" using y'(3) yy by simp
+    also have "\<dots> \<sqsubseteq> y' \<downharpoonright> c" by (rule rb)
+    also have "\<dots> \<sqsubseteq> Rep_compact_basis x \<downharpoonright> c" by (intro monofun_cfun_arg x(2))
+    finally show ?thesis using w by blast
+  qed
+  have ub: "S <| u" if ST: "\<And>s n. s \<in> S \<Longrightarrow> \<exists>w\<in>T. r n\<cdot>s \<sqsubseteq> w" and T: "T <| u" for S T u
+  proof (rule is_ubI)
+    fix s assume s: "s \<in> S"
+    have "r n\<cdot>s \<sqsubseteq> u" for n using ST [OF s, of n] T by (blast intro: below_trans is_ubD)
+    then have "(\<Squnion>n. r n\<cdot>s) \<sqsubseteq> u" by (intro lub_below ch2ch_Rep_cfunL R.chain_approx)
+    then show "s \<sqsubseteq> u" by (simp add: contlub_cfun_fun [OF R.chain_approx, symmetric] R.lub_approx)
+  qed
+  have "lub ?A = lub ?B" by (rule lub_same_ubs) (blast intro: ub [OF BA] ub [OF AB])
+  then show ?thesis by (simp add: col_value_def col_content_value_def mx)
+qed
+
+theorem ext_csem_column:
+  "ext_csem (column_ext c a v)
+     (\<lambda>Gs Xs F k. split_present (hd Xs) \<odot> Present\<cdot>(v\<cdot>(col_content_value c a (hd Xs) k)))"
+proof (rule ext_csemI)
+  fix D F k assume comp: "sel_compact (column_ext c a v) F k"
+  have L: "sel_at (sel a a) (flod F) = a" by (simp add: join_meet_self)
+  have kc: "compact (proj a\<cdot>k)" using comp by (simp add: L)
+  show "sem_ext (column_ext c a v) D F k =
+      split_present (hd (vcontents_ext D (evalues (column_ext c a v)) F k)) \<odot>
+        Present\<cdot>(v\<cdot>(col_content_value c a (hd (vcontents_ext D (evalues (column_ext c a v)) F k)) k))"
+    by (simp add: vcontent_ext_def sel_select_def L select_test_guarded [OF kc] col_value_content [OF kc])
+qed
+
 text \<open>Including dimensions and filtering for keys transform the selectors as the frame changes.\<close>
 
 lemma gcontent_ext_include: "gcontent_ext D (include_entry M e) F k = gcontent_ext D e (finclude M F) k"
