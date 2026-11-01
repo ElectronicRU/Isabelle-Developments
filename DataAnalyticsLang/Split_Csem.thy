@@ -1353,6 +1353,102 @@ proof (rule ext_csemI)
     unfolding aggregate_ext_simps agg_ext_sem_def cagg_def .
 qed
 
+
+text \<open>The content aggregate's stages are directed below the contents of a conforming dataset: two
+  compact contents below have a compact upper bound below, at which the content aggregate is
+  larger.  This needs no bound on the frame's LOD, unlike the stages at compact datasets.\<close>
+
+lemma list_all2_below_trans: fixes xs :: "'a::po list" shows "list_all2 (\<sqsubseteq>) xs ys \<Longrightarrow> list_all2 (\<sqsubseteq>) ys zs \<Longrightarrow> list_all2 (\<sqsubseteq>) xs zs"
+  by (induct xs ys arbitrary: zs rule: list_all2_induct) (auto simp: list_all2_Cons1 intro: below_trans)
+
+lemma split_compact_ub:
+  fixes x y C :: "('r, 'k) split_pd"
+  assumes cx: "compact x" and cy: "compact y" and xC: "x \<sqsubseteq> C" and yC: "y \<sqsubseteq> C"
+  shows "\<exists>z. compact z \<and> z \<sqsubseteq> C \<and> x \<sqsubseteq> z \<and> y \<sqsubseteq> z"
+proof -
+  obtain s t where st: "x = split_principal s" "y = split_principal t"
+    using split_pd.compact_imp_principal [OF cx] split_pd.compact_imp_principal [OF cy] by blast
+  have "s \<in> Rep_split_pd C" "t \<in> Rep_split_pd C"
+    using xC yC unfolding st split_pd.principal_below_iff_mem_rep by simp_all
+  then obtain u where u: "u \<in> Rep_split_pd C" "split_le s u" "split_le t u"
+    using split_le.idealD2 [OF split_pd.ideal_rep] by blast
+  show ?thesis unfolding st using u
+    by (intro exI [of _ "split_principal u"] conjI split_pd.compact_principal split_pd.principal_mono)
+      (simp_all add: split_pd.principal_below_iff_mem_rep)
+qed
+
+lemma split_compact_list_ub:
+  fixes Cs :: "('r, 'k) split_pd list"
+  shows "\<forall>x\<in>set xs. compact x \<Longrightarrow> \<forall>x\<in>set ys. compact x \<Longrightarrow> list_all2 (\<sqsubseteq>) xs Cs \<Longrightarrow> list_all2 (\<sqsubseteq>) ys Cs \<Longrightarrow>
+    \<exists>zs. (\<forall>z\<in>set zs. compact z) \<and> list_all2 (\<sqsubseteq>) zs Cs \<and> list_all2 (\<sqsubseteq>) xs zs \<and> list_all2 (\<sqsubseteq>) ys zs"
+proof (induct Cs arbitrary: xs ys)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons C Cs)
+  obtain x xs' y ys' where xs: "xs = x # xs'" "x \<sqsubseteq> C" "list_all2 (\<sqsubseteq>) xs' Cs"
+    and ys: "ys = y # ys'" "y \<sqsubseteq> C" "list_all2 (\<sqsubseteq>) ys' Cs"
+    using Cons.prems(3,4) by (auto simp: list_all2_Cons2)
+  obtain zs where zs: "\<forall>z\<in>set zs. compact z" "list_all2 (\<sqsubseteq>) zs Cs" "list_all2 (\<sqsubseteq>) xs' zs" "list_all2 (\<sqsubseteq>) ys' zs"
+    using Cons.hyps [of xs' ys'] Cons.prems(1,2) xs ys by auto
+  obtain z where z: "compact z" "z \<sqsubseteq> C" "x \<sqsubseteq> z" "y \<sqsubseteq> z"
+    using split_compact_ub [of x y C] Cons.prems(1,2) xs ys by auto
+  show ?case using zs z xs ys by (intro exI [of _ "z # zs"]) simp
+qed
+
+lemma cagg_directed:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and cm: "csem_mono X c" and m: "lod_small (emind X)"
+    and cC: "conforming_rows (split_rows\<cdot>C)" and k: "sel_compact (aggregate_ext f X) F k"
+    and G': "list_all2 (\<sqsubseteq>) Gs (gcontents_ext C (eguards (aggregate_ext f X)) F k)"
+    and V': "list_all2 (\<sqsubseteq>) Xs (vcontents_ext C (evalues (aggregate_ext f X)) F k)"
+  shows "directed {cagg_glb f X c Gs\<^sub>0 Xs\<^sub>0 F k | Gs\<^sub>0 Xs\<^sub>0. (\<forall>x\<in>set Gs\<^sub>0. compact x) \<and> (\<forall>x\<in>set Xs\<^sub>0. compact x) \<and>
+     list_all2 (\<sqsubseteq>) Gs\<^sub>0 Gs \<and> list_all2 (\<sqsubseteq>) Xs\<^sub>0 Xs}" (is "directed ?S")
+  unfolding directed_def
+proof (intro ballI)
+  fix x y assume "x \<in> ?S" "y \<in> ?S"
+  then obtain Gs\<^sub>1 Xs\<^sub>1 Gs\<^sub>2 Xs\<^sub>2 where x: "x = cagg_glb f X c Gs\<^sub>1 Xs\<^sub>1 F k" "\<forall>x\<in>set Gs\<^sub>1. compact x" "\<forall>x\<in>set Xs\<^sub>1. compact x"
+      "list_all2 (\<sqsubseteq>) Gs\<^sub>1 Gs" "list_all2 (\<sqsubseteq>) Xs\<^sub>1 Xs"
+    and y: "y = cagg_glb f X c Gs\<^sub>2 Xs\<^sub>2 F k" "\<forall>x\<in>set Gs\<^sub>2. compact x" "\<forall>x\<in>set Xs\<^sub>2. compact x"
+      "list_all2 (\<sqsubseteq>) Gs\<^sub>2 Gs" "list_all2 (\<sqsubseteq>) Xs\<^sub>2 Xs" by blast
+  obtain Gs\<^sub>3 where G3: "\<forall>z\<in>set Gs\<^sub>3. compact z" "list_all2 (\<sqsubseteq>) Gs\<^sub>3 Gs" "list_all2 (\<sqsubseteq>) Gs\<^sub>1 Gs\<^sub>3" "list_all2 (\<sqsubseteq>) Gs\<^sub>2 Gs\<^sub>3"
+    using split_compact_list_ub [OF x(2) y(2) x(4) y(4)] by blast
+  obtain Xs\<^sub>3 where X3: "\<forall>z\<in>set Xs\<^sub>3. compact z" "list_all2 (\<sqsubseteq>) Xs\<^sub>3 Xs" "list_all2 (\<sqsubseteq>) Xs\<^sub>1 Xs\<^sub>3" "list_all2 (\<sqsubseteq>) Xs\<^sub>2 Xs\<^sub>3"
+    using split_compact_list_ub [OF x(3) y(3) x(5) y(5)] by blast
+  have G3C: "list_all2 (\<sqsubseteq>) Gs\<^sub>3 (gcontents_ext C (eguards (aggregate_ext f X)) F k)" by (rule list_all2_below_trans [OF G3(2) G'])
+  have X3C: "list_all2 (\<sqsubseteq>) Xs\<^sub>3 (vcontents_ext C (evalues (aggregate_ext f X)) F k)" by (rule list_all2_below_trans [OF X3(2) V'])
+  have "Gs\<^sub>3 \<noteq> []" using G3C by (cases Gs\<^sub>3) simp_all
+  then have cH: "compact (hd Gs\<^sub>3)" using G3(1) by simp
+  have "x \<sqsubseteq> cagg_glb f X c Gs\<^sub>3 Xs\<^sub>3 F k" unfolding x(1) by (rule cagg_glb_mono [OF f cm m cC k G3(3) G3C X3(3) X3C cH])
+  moreover have "y \<sqsubseteq> cagg_glb f X c Gs\<^sub>3 Xs\<^sub>3 F k" unfolding y(1) by (rule cagg_glb_mono [OF f cm m cC k G3(4) G3C X3(4) X3C cH])
+  moreover have "cagg_glb f X c Gs\<^sub>3 Xs\<^sub>3 F k \<in> ?S" using G3(1,2) X3(1,2) by blast
+  ultimately show "\<exists>z\<in>?S. x \<sqsubseteq> z \<and> y \<sqsubseteq> z" by blast
+qed
+
+text \<open>So the content aggregate is monotone: aggregates nest.\<close>
+
+theorem csem_mono_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and cm: "csem_mono X c" and m: "lod_small (emind X)"
+  shows "csem_mono (aggregate_ext f X) (cagg f X c)"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' Xs Xs'
+  assume cC: "conforming_rows (split_rows\<cdot>C)" and k: "sel_compact (aggregate_ext f X) F k"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (aggregate_ext f X)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (aggregate_ext f X)) F k)"
+  let ?S = "\<lambda>Gs Xs. {cagg_glb f X c Gs\<^sub>0 Xs\<^sub>0 F k | Gs\<^sub>0 Xs\<^sub>0. (\<forall>x\<in>set Gs\<^sub>0. compact x) \<and> (\<forall>x\<in>set Xs\<^sub>0. compact x) \<and>
+     list_all2 (\<sqsubseteq>) Gs\<^sub>0 Gs \<and> list_all2 (\<sqsubseteq>) Xs\<^sub>0 Xs}"
+  have d: "?S Gs Xs <<| lub (?S Gs Xs)"
+    by (rule directed_lub [OF cagg_directed [OF f cm m cC k list_all2_below_trans [OF G G'] list_all2_below_trans [OF V V']]])
+  have d': "?S Gs' Xs' <<| lub (?S Gs' Xs')"
+    by (rule directed_lub [OF cagg_directed [OF f cm m cC k G' V']])
+  have sub: "?S Gs Xs \<subseteq> ?S Gs' Xs'" using list_all2_below_trans [OF _ G] list_all2_below_trans [OF _ V] by blast
+  have "?S Gs Xs <| lub (?S Gs' Xs')"
+  proof (rule is_ubI)
+    fix x assume "x \<in> ?S Gs Xs"
+    then show "x \<sqsubseteq> lub (?S Gs' Xs')" by (rule is_ubD [OF is_lubD1 [OF d'] subsetD [OF sub]])
+  qed
+  then show "cagg f X c Gs Xs F k \<sqsubseteq> cagg f X c Gs' Xs' F k" unfolding cagg_def by (rule is_lubD2 [OF d])
+qed
+
 end
 
 end
