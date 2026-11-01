@@ -411,6 +411,50 @@ proof (induct D rule: split_pd.principal_induct)
   show ?case unfolding split_keyguard_principal by (rule arg_cong [where f = split_principal], rule SKeyGuard_pand)
 qed simp
 
+text \<open>Selections compose: selecting a finer part after the coarser part it projects to is selecting
+  the finer part.  A key exactly at the finer part is exactly at the coarser one, which is maximal
+  there as well; a key whose coarser part is not below the coarser part has a finer part not below
+  the finer one.\<close>
+
+lemma at_part_pand:
+  assumes LL: "L \<sqsubseteq> L'" and kk: "proj L\<cdot>\<kappa>' = \<kappa>"
+  shows "pand\<cdot>(at_part L' \<kappa>'\<cdot>k)\<cdot>(at_part L \<kappa>\<cdot>k) = at_part L' \<kappa>'\<cdot>k"
+proof (cases "at_part L' \<kappa>'\<cdot>k = TT")
+  case True
+  then have c: "compact \<kappa>'" and mx: "maximal_at L' \<kappa>'" and e: "proj L'\<cdot>k = \<kappa>'" by (simp_all add: at_part_TT_iff)
+  have "proj L\<cdot>k = \<kappa>" using proj_le [OF LL, of k] e kk by simp
+  moreover have "compact \<kappa>" unfolding kk [symmetric] by (rule compact_proj_compact [OF c])
+  moreover have "maximal_at L \<kappa>" unfolding kk [symmetric] by (rule maximal_at_proj [OF LL mx])
+  ultimately have "at_part L \<kappa>\<cdot>k = TT" by (simp add: at_part_TT_iff)
+  then show ?thesis using True by simp
+next
+  case nT: False
+  show ?thesis
+  proof (cases "at_part L' \<kappa>'\<cdot>k = FF")
+    case True
+    then show ?thesis by simp
+  next
+    case nF: False
+    then have "proj L'\<cdot>k \<sqsubseteq> \<kappa>'" by (simp add: at_part_FF_iff)
+    then have "proj L\<cdot>(proj L'\<cdot>k) \<sqsubseteq> proj L\<cdot>\<kappa>'" by (rule monofun_cfun_arg)
+    then have "proj L\<cdot>k \<sqsubseteq> \<kappa>" by (simp only: proj_le [OF LL] kk)
+    then have "at_part L \<kappa>\<cdot>k \<noteq> FF" by (simp add: at_part_FF_iff)
+    moreover have "at_part L' \<kappa>'\<cdot>k = \<bottom>" using nT nF by (cases "at_part L' \<kappa>'\<cdot>k" rule: trE) simp_all
+    ultimately show ?thesis by (cases "at_part L \<kappa>\<cdot>k" rule: trE) simp_all
+  qed
+qed
+
+lemma split_select_compose:
+  assumes c: "compact \<kappa>'" and LL: "L \<sqsubseteq> L'" and kk: "proj L\<cdot>\<kappa>' = \<kappa>"
+  shows "split_select L' \<kappa>'\<cdot>(split_select L \<kappa>\<cdot>D) = split_select L' \<kappa>'\<cdot>D"
+proof -
+  have ck: "compact \<kappa>" unfolding kk [symmetric] by (rule compact_proj_compact [OF c])
+  have e: "(\<Lambda> k. pand\<cdot>(at_part L' \<kappa>'\<cdot>k)\<cdot>(at_part L \<kappa>\<cdot>k)) = at_part L' \<kappa>'"
+    by (rule cfun_eqI) (simp add: at_part_pand [OF LL kk])
+  show ?thesis
+    unfolding split_select_keyguard [OF c] split_select_keyguard [OF ck] split_keyguard_pand e ..
+qed
+
 subsection \<open>Refutation by a key test\<close>
 
 text \<open>A key test refutes the part when it is false on every selected possible key: the selected
