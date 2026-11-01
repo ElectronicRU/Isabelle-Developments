@@ -215,14 +215,10 @@ definition col_content_value :: "'r semi_factor \<Rightarrow> 'k semi_factor \<R
 lemma lub_same_ubs: "(\<And>u. S <| u \<longleftrightarrow> T <| u) \<Longrightarrow> lub S = lub T"
   unfolding lub_def is_lub_def by simp
 
-lemma col_value_content:
-  assumes kc: "compact (proj a\<cdot>k)"
-  shows "col_value c a D k = col_content_value c a (split_view (c, a)\<cdot>(split_select a (proj a\<cdot>k)\<cdot>D)) k"
-proof (cases "maximal_at a (proj a\<cdot>k)")
-  case False
-  then show ?thesis by (simp add: col_value_def col_content_value_def)
-next
-  case mx: True
+lemma col_content_ubs:
+  assumes kc: "compact (proj a\<cdot>k)" and mx: "maximal_at a (proj a\<cdot>k)"
+  shows "col_sections c a D k <| u \<longleftrightarrow> {z \<downharpoonright> c | z. split_definite z (split_view (c, a)\<cdot>(split_select a (proj a\<cdot>k)\<cdot>D))} <| u"
+proof -
   let ?\<kappa> = "proj a\<cdot>k" and ?v = "(c, a) :: ('r, 'k) view"
   let ?X = "split_view ?v\<cdot>(split_select a ?\<kappa>\<cdot>D)"
   let ?A = "col_sections c a D k" and ?B = "{z \<downharpoonright> c | z. split_definite z ?X}"
@@ -292,7 +288,19 @@ next
     then have "(\<Squnion>n. r n\<cdot>s) \<sqsubseteq> u" by (intro lub_below ch2ch_Rep_cfunL R.chain_approx)
     then show "s \<sqsubseteq> u" by (simp add: contlub_cfun_fun [OF R.chain_approx, symmetric] R.lub_approx)
   qed
-  have "lub ?A = lub ?B" by (rule lub_same_ubs) (blast intro: ub [OF BA] ub [OF AB])
+  show ?thesis by (blast intro: ub [OF BA] ub [OF AB])
+qed
+
+lemma col_value_content:
+  assumes kc: "compact (proj a\<cdot>k)"
+  shows "col_value c a D k = col_content_value c a (split_view (c, a)\<cdot>(split_select a (proj a\<cdot>k)\<cdot>D)) k"
+proof (cases "maximal_at a (proj a\<cdot>k)")
+  case False
+  then show ?thesis by (simp add: col_value_def col_content_value_def)
+next
+  case mx: True
+  have "lub (col_sections c a D k) = lub {z \<downharpoonright> c | z. split_definite z (split_view (c, a)\<cdot>(split_select a (proj a\<cdot>k)\<cdot>D))}"
+    by (rule lub_same_ubs) (rule col_content_ubs [OF kc mx])
   then show ?thesis by (simp add: col_value_def col_content_value_def mx)
 qed
 
@@ -563,6 +571,90 @@ proof (rule csem_monoI)
       \<sqsubseteq> lift2_option_pd f\<cdot>(c\<^sub>1 (take ?n Gs') (take ?m Xs') F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(c\<^sub>2 (drop ?n Gs') (drop ?m Xs') F (proj (kd X\<^sub>2 F)\<cdot>k))"
     by (intro monofun_cfun monofun_cfun_arg csem_monoD [OF c\<^sub>1 cC comp1 _ G1 _ V1] csem_monoD [OF c\<^sub>2 cC comp2 _ G2 _ V2]
         list_all2_takeI list_all2_dropI G V)
+qed
+
+lemma sel_compact_ffor:
+  assumes X: "semilawful X" and comp: "sel_compact (filtfor_ext \<tau> G X) F k"
+  shows "sel_compact X (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k)"
+proof
+  fix S assume S: "S \<in> set (esels X)"
+  have lm: "lower_part S \<sqsubseteq> emind X" by (rule lower_below_mind [OF X S])
+  have "trunc_sel \<tau> S \<in> set (esels (filtfor_ext \<tau> G X))" using S by (auto simp: comp_def)
+  then have "compact (proj (sel_at (trunc_sel \<tau> S) (flod F))\<cdot>k)" using comp by blast
+  moreover have "proj (sel_at S (flod (ffor \<tau> G F)))\<cdot>(proj (kd X (ffor \<tau> G F))\<cdot>k) = proj (sel_at (trunc_sel \<tau> S) (flod F))\<cdot>k"
+    by (simp only: ffor_key [OF lm] trunc_sel_simps)
+  ultimately show "compact (proj (sel_at S (flod (ffor \<tau> G F)))\<cdot>(proj (kd X (ffor \<tau> G F))\<cdot>k))" by simp
+qed
+
+lemma contents_ffor:
+  assumes X: "semilawful X"
+  shows "gcontents_ext D (eguards X) (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k) = gcontents_ext D (map (for_entry \<tau> G) (eguards X)) F k"
+    and "vcontents_ext D (evalues X) (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k) = vcontents_ext D (map (for_value \<tau>) (evalues X)) F k"
+  unfolding map_map comp_def
+  by (rule map_cong [OF refl], rule gcontent_ext_ffor [OF lower_below_mind [OF X esels_guardI]], assumption,
+      rule map_cong [OF refl], rule vcontent_ext_ffor [OF lower_below_mind [OF X esels_valueI]], assumption)
+
+theorem csem_mono_filtfor:
+  assumes c: "csem_mono X c" and X: "semilawful X"
+  shows "csem_mono (filtfor_ext \<tau> G X) (\<lambda>Gs Xs F k. c Gs Xs (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k))"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' Xs Xs'
+  assume cC: "conforming_rows (split_rows\<cdot>C)" and comp: "sel_compact (filtfor_ext \<tau> G X) F k"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (filtfor_ext \<tau> G X)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (filtfor_ext \<tau> G X)) F k)"
+  show "c Gs Xs (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k) \<sqsubseteq> c Gs' Xs' (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k)"
+    by (rule csem_monoD [OF c cC sel_compact_ffor [OF X comp] G _ V])
+      (use G' V' in \<open>simp_all only: contents_ffor [OF X] filtfor_ext_simps filtfor_simps\<close>)
+qed
+
+text \<open>The sections of the selected rows of a conforming dataset are bounded, so the column's
+  content value is monotone below it.\<close>
+
+lemma col_content_bounded:
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and cC: "conforming_rows (split_rows\<cdot>C)"
+    and kc: "compact (proj a\<cdot>k)" and mx: "maximal_at a (proj a\<cdot>k)"
+  shows "\<exists>b. {z \<downharpoonright> c | z. split_definite z (split_view (c, a)\<cdot>(split_select a (proj a\<cdot>k)\<cdot>C))} <| b"
+proof (cases "col_sections c a C k = {}")
+  case True
+  then have "col_sections c a C k <| \<bottom>" by simp
+  then show ?thesis using col_content_ubs [OF kc mx] by blast
+next
+  case False
+  then obtain b where "col_sections c a C k <| b" using col_sections_ub [OF fd cC mx] by blast
+  then show ?thesis using col_content_ubs [OF kc mx] by blast
+qed
+
+theorem csem_mono_column:
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))"
+  shows "csem_mono (column_ext c a v) (\<lambda>Gs Xs F k. split_present (hd Xs) \<odot> Present\<cdot>(v\<cdot>(col_content_value c a (hd Xs) k)))"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' and Xs Xs' :: "('r, 'k) split_pd list"
+  assume cC: "conforming_rows (split_rows\<cdot>C)" and comp: "sel_compact (column_ext c a v) F k"
+    and X: "list_all2 (\<sqsubseteq>) Xs Xs'" and X': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (column_ext c a v)) F k)"
+  have L: "sel_at (sel a a) (flod F) = a" by (simp add: join_meet_self)
+  have kc: "compact (proj a\<cdot>k)" using comp by (simp add: L)
+  let ?XC = "split_view (c, a)\<cdot>(split_select a (proj a\<cdot>k)\<cdot>C)"
+  obtain x' where x': "Xs' = [x']" and xC: "x' \<sqsubseteq> ?XC"
+    using X' by (auto simp: list_all2_Cons2 vcontent_ext_def sel_select_def L)
+  obtain x where x: "Xs = [x]" and xx: "x \<sqsubseteq> x'" using X unfolding x' by (auto simp: list_all2_Cons2)
+  have cv: "col_content_value c a x k \<sqsubseteq> col_content_value c a x' k"
+  proof (cases "maximal_at a (proj a\<cdot>k) \<and> {z \<downharpoonright> c | z. split_definite z x} \<noteq> {}")
+    case True
+    then have mx: "maximal_at a (proj a\<cdot>k)" and ne: "{z \<downharpoonright> c | z. split_definite z x} \<noteq> {}" by simp_all
+    obtain b where b: "{z \<downharpoonright> c | z. split_definite z ?XC} <| b" using col_content_bounded [OF fd cC kc mx] by blast
+    have s1: "{z \<downharpoonright> c | z. split_definite z x} \<subseteq> {z \<downharpoonright> c | z. split_definite z x'}"
+      using split_definite_mono [OF _ xx] by blast
+    have "{z \<downharpoonright> c | z. split_definite z x'} \<subseteq> {z \<downharpoonright> c | z. split_definite z ?XC}"
+      using split_definite_mono [OF _ xC] by blast
+    then have b': "{z \<downharpoonright> c | z. split_definite z x'} <| b" using b by (auto simp: is_ub_def)
+    show ?thesis unfolding col_content_value_def by (simp only: if_P [OF mx]) (rule lub_subset_below [OF ne s1 b'])
+  next
+    case False
+    then show ?thesis unfolding col_content_value_def by (auto simp: lub_empty)
+  qed
+  show "split_present (hd Xs) \<odot> Present\<cdot>(v\<cdot>(col_content_value c a (hd Xs) k)) \<sqsubseteq>
+      split_present (hd Xs') \<odot> Present\<cdot>(v\<cdot>(col_content_value c a (hd Xs') k))"
+    unfolding x x' by (simp add: monofun_cfun monofun_cfun_arg split_present_mono xx cv)
 qed
 
 end
