@@ -170,39 +170,19 @@ lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarro
 definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_lawful X \<longleftrightarrow> semilawful X \<and> ext_sound X"
 
-text \<open>An LOD is \<^emph>\<open>small\<close> when it lies below a compact one, and a frame is \<^emph>\<open>LOD-bounded\<close>
-  when its LOD is small; keys then have compact parts at small LODs.\<close>
-
-definition lod_small :: "'k semi_factor \<Rightarrow> bool" where
-  "lod_small a \<longleftrightarrow> (\<exists>M. compact M \<and> a \<sqsubseteq> M)"
-
-lemma lod_small_compact: "compact a \<Longrightarrow> lod_small a"
-  unfolding lod_small_def by blast
-
-lemma lod_small_sup: "lod_small a \<Longrightarrow> lod_small b \<Longrightarrow> lod_small (a \<squnion> b)"
-  unfolding lod_small_def by (blast intro: compact_semi_factor_sup lattice_join_mono)
-
-lemma lod_small_below: "lod_small b \<Longrightarrow> a \<sqsubseteq> b \<Longrightarrow> lod_small a"
-  unfolding lod_small_def by (blast intro: below_trans)
+text \<open>A frame is \<^emph>\<open>LOD-bounded\<close> when its LOD is small.\<close>
 
 definition lod_bounded :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
-  "lod_bounded F \<longleftrightarrow> (\<exists>M. compact M \<and> flod F \<sqsubseteq> M)"
+  "lod_bounded F \<longleftrightarrow> lod_small (flod F)"
 
 lemma lod_bounded_frestrict [simp]: "lod_bounded (frestrict \<gamma> F) \<longleftrightarrow> lod_bounded F"
   by (simp add: lod_bounded_def)
 
 lemma lod_bounded_ffor: "lod_bounded F \<Longrightarrow> lod_bounded (ffor \<tau> G F)"
-  unfolding lod_bounded_def by (auto intro: below_trans [OF lattice_meet_le2])
+  unfolding lod_bounded_def flod_ffor by (erule lod_small_below) (rule lattice_meet_le2)
 
-lemma lod_bounded_finclude: "lod_bounded F \<Longrightarrow> compact M \<Longrightarrow> lod_bounded (finclude M F)"
-  unfolding lod_bounded_def flod_finclude by (blast intro: compact_semi_factor_sup lattice_join_mono)
-
-lemma compact_proj_bounded: "compact B \<Longrightarrow> L \<sqsubseteq> B \<Longrightarrow> compact (proj L\<cdot>(k::'k))"
-proof -
-  assume B: "compact B" and LB: "L \<sqsubseteq> B"
-  have "proj L\<cdot>k = proj L\<cdot>(proj B\<cdot>k)" by (rule proj_le [OF LB, symmetric])
-  then show ?thesis using compact_proj_compact [OF proj_compact [OF B, of k], of L] by simp
-qed
+lemma lod_bounded_finclude: "lod_bounded F \<Longrightarrow> lod_small M \<Longrightarrow> lod_bounded (finclude M F)"
+  unfolding lod_bounded_def flod_finclude by (rule lod_small_sup)
 
 text \<open>\<^emph>\<open>Monotonicity below conforming datasets\<close>: the extended semantics grows along datasets
   below a split dataset with conforming definite rows.  Their compact approximants need not
@@ -984,7 +964,7 @@ theorem ext_mono_restrict: "ext_mono X \<Longrightarrow> ext_mono (restrict_ext 
 theorem ext_mono_filtfor: "ext_mono X \<Longrightarrow> ext_mono (filtfor_ext \<tau> G X)"
   unfolding ext_mono_def by (simp add: lod_bounded_ffor)
 
-theorem ext_mono_include_dims: "compact M \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (include_dims_ext M X)"
+theorem ext_mono_include_dims: "lod_small M \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (include_dims_ext M X)"
   unfolding ext_mono_def by (simp add: lod_bounded_finclude)
 
 theorem ext_mono_combine: "ext_mono X\<^sub>1 \<Longrightarrow> ext_mono X\<^sub>2 \<Longrightarrow> ext_mono (combine_ext f X\<^sub>1 X\<^sub>2)"
@@ -1014,7 +994,7 @@ theorem ext_cont_restrict: "ext_cont X \<Longrightarrow> ext_cont (restrict_ext 
 theorem ext_cont_filtfor: "ext_cont X \<Longrightarrow> ext_cont (filtfor_ext \<tau> G X)"
   unfolding ext_cont_def by (simp add: lod_bounded_ffor)
 
-theorem ext_cont_include_dims: "compact M \<Longrightarrow> ext_cont X \<Longrightarrow> ext_cont (include_dims_ext M X)"
+theorem ext_cont_include_dims: "lod_small M \<Longrightarrow> ext_cont X \<Longrightarrow> ext_cont (include_dims_ext M X)"
   unfolding ext_cont_def by (simp add: lod_bounded_finclude)
 
 theorem ext_cont_combine:
@@ -1081,7 +1061,7 @@ proof -
 qed
 
 lemma key_at_sem_mono:
-  assumes c: "compact c" and le: "D \<sqsubseteq> D'"
+  assumes c: "lod_small c" and le: "D \<sqsubseteq> D'"
   shows "key_at_sem c D k \<sqsubseteq> key_at_sem c D' k"
 proof (cases "split_possible_at c (proj c\<cdot>k) D")
   case nP: False
@@ -1098,7 +1078,7 @@ next
     proof (cases "maximal_at c (proj c\<cdot>k)")
       case mx: True
       have "split_possible_at c (rproj c y) D'"
-        by (rule definite_maximal_possible [OF split_definite_mono [OF y(1) le]]) (simp_all add: y(2) mx proj_compact [OF c])
+        by (rule definite_maximal_possible [OF split_definite_mono [OF y(1) le]]) (simp_all add: y(2) mx lod_small_proj [OF c])
       then have P': "split_possible_at c (proj c\<cdot>k) D'" by (simp only: y(2))
       show ?thesis by (simp only: not_not [THEN iffD2, OF P] not_not [THEN iffD2, OF P'] if_False if_P [OF A] if_P [OF A'] if_P [OF mx] below_refl)
     next
@@ -1111,11 +1091,11 @@ next
   qed
 qed
 
-theorem ext_mono_key_at: "compact c \<Longrightarrow> ext_mono (key_at_ext c)"
+theorem ext_mono_key_at: "lod_small c \<Longrightarrow> ext_mono (key_at_ext c)"
   by (rule ext_monoI) (simp add: key_at_sem_mono)
 
 theorem ext_cont_key_at:
-  assumes c: "compact c"
+  assumes c: "lod_small c"
   shows "ext_cont (key_at_ext c)"
 proof (rule ext_contI2 [OF ext_mono_key_at [OF c]], simp only: key_at_ext_simps)
   fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and k
@@ -1136,7 +1116,7 @@ proof (rule ext_contI2 [OF ext_mono_key_at [OF c]], simp only: key_at_ext_simps)
       case True
       then obtain y where y: "split_definite y (\<Squnion>i. Y i)" "rproj c y = proj c\<cdot>k" by blast
       obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "(proj c oo row_key)\<cdot>y' = (proj c oo row_key)\<cdot>y"
-        by (rule compact_approx_value [of "proj c oo row_key" y]) (simp add: y(2) proj_compact [OF c])
+        by (rule compact_approx_value [of "proj c oo row_key" y]) (simp add: y(2) lod_small_proj [OF c])
       obtain i where i: "split_definite y' (Y i)"
         by (rule split_definite_lub_compact [OF Y y'(1) split_definite_below [OF y(1) y'(2)]])
       have Ai: "\<exists>y. split_definite y (Y i) \<and> rproj c y = proj c\<cdot>k" using i y'(3) y(2) by auto
@@ -1154,12 +1134,8 @@ text \<open>At an LOD-bounded frame and a small lower part, the fiber's key part
 lemma compact_fiber_key:
   assumes a: "lod_small a" and F: "lod_bounded F"
   shows "compact (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k)"
-proof -
-  obtain M where M: "compact M" "flod F \<sqsubseteq> M" using F by (auto simp: lod_bounded_def)
-  obtain A where A: "compact A" "a \<sqsubseteq> A" using a by (auto simp: lod_small_def)
-  have "a \<squnion> (\<rho> \<sqinter> flod F) \<sqsubseteq> A \<squnion> M" by (rule lattice_join_mono [OF A(2) below_trans [OF lattice_meet_le2 M(2)]])
-  then show ?thesis by (rule compact_proj_bounded [OF compact_semi_factor_sup [OF A(1) M(1)]])
-qed
+  using F unfolding lod_bounded_def
+  by (intro lod_small_proj lod_small_sup [OF a] lod_small_below [OF _ lattice_meet_le2])
 
 lemma populated_ext_mono:
   assumes a: "lod_small a" and F: "lod_bounded F" and le: "D \<sqsubseteq> D'"
@@ -1301,7 +1277,7 @@ lemma lub_subset_below: "S \<noteq> {} \<Longrightarrow> S \<subseteq> T \<Longr
   by (rule lub_belowI) (auto intro: below_lubI is_ub_upward simp: is_ub_def)
 
 lemma column_sem_mono_below:
-  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "compact a"
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "lod_small a"
     and cf: "conforming_rows (split_rows\<cdot>C)" and le: "D \<sqsubseteq> D'" and le': "D' \<sqsubseteq> C"
   shows "column_sem c a v D k \<sqsubseteq> column_sem c a v D' k"
 proof -
@@ -1313,7 +1289,7 @@ proof -
     then obtain y where y: "split_definite y D'" "rproj a y = proj a\<cdot>k" and mx: "maximal_at a (proj a\<cdot>k)"
       by (auto simp: col_sections_def)
     have "split_possible_at a (rproj a y) D'"
-      by (rule definite_maximal_possible [OF y(1)]) (simp_all only: y(2) mx proj_compact [OF ca])
+      by (rule definite_maximal_possible [OF y(1)]) (simp_all only: y(2) mx lod_small_proj [OF ca])
     then show ?thesis by (simp only: y(2))
   qed
   show ?thesis
@@ -1342,16 +1318,16 @@ proof -
 qed
 
 lemma column_sem_mono:
-  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> compact a \<Longrightarrow> conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow>
+  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> lod_small a \<Longrightarrow> conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow>
     column_sem c a v D k \<sqsubseteq> column_sem c a v D' k"
   by (rule column_sem_mono_below [OF _ _ _ _ below_refl])
 
 theorem ext_mono_column:
-  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> compact a \<Longrightarrow> ext_mono (column_ext c a v)"
+  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> lod_small a \<Longrightarrow> ext_mono (column_ext c a v)"
   by (rule ext_monoI) (simp add: column_sem_mono_below)
 
 theorem ext_cont_column:
-  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "compact a"
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "lod_small a"
   shows "ext_cont (column_ext c a v)"
 proof (rule ext_contI2 [OF ext_mono_column [OF fd ca]], simp only: column_ext_simps)
   fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C k
@@ -1367,7 +1343,7 @@ proof (rule ext_contI2 [OF ext_mono_column [OF fd ca]], simp only: column_ext_si
   proof (cases "?C ?L")
     case True
     then have mx: "maximal_at a (proj a\<cdot>k)" and ne: "col_sections c a ?L k \<noteq> {}" by simp_all
-    have kc: "compact (proj a\<cdot>k)" by (rule proj_compact [OF ca])
+    have kc: "compact (proj a\<cdot>k)" by (rule lod_small_proj [OF ca])
     text \<open>Each section at the lub is approximated by sections at the stages, at the same key.\<close>
     obtain r :: "nat \<Rightarrow> 'r \<rightarrow> 'r" where r: "approx_chain r" using bifinite by blast
     interpret R: approx_chain r by (fact r)
@@ -1490,10 +1466,8 @@ proof
   then obtain y where mx: "maximal_at (kd X F) \<kappa>" and k: "proj (flod F)\<cdot>\<kappa> = k"
     and r: "\<kappa> \<in> Rep_cfun (proj (kd X F)) ` conforming_keyspace"
     and y: "split_definite y D" "rproj (kd X F) y = \<kappa>" by (auto simp: agg_definite_def)
-  obtain M where M: "compact M" "flod F \<sqsubseteq> M" using F by (auto simp: lod_bounded_def)
-  obtain A where A: "compact A" "emind X \<sqsubseteq> A" using m by (auto simp: lod_small_def)
   have c: "compact (rproj (kd X F) y)"
-    by (rule compact_proj_bounded [OF compact_semi_factor_sup [OF A(1) M(1)] lattice_join_mono [OF A(2) M(2)]])
+    using F unfolding lod_bounded_def by (intro lod_small_proj lod_small_sup [OF m])
   have "split_possible_at (kd X F) \<kappa> D"
     using definite_maximal_possible [OF y(1) c] mx y(2) by simp
   then show "\<kappa> \<in> agg_possible X D F k" unfolding agg_possible_def using k r by blast

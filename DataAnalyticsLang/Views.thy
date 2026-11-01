@@ -28,7 +28,7 @@ text \<open>Rows carry keys: the \<^emph>\<open>row key\<close> of a row type at
 consts row_key :: "'r::cpo \<rightarrow> 'k::cpo"
 consts key_supp :: "'k semi_factor \<rightarrow> 'r semi_factor"
 
-text \<open>Keyed rows: a key part is read off the section at its support, and supports are compact and
+text \<open>Keyed rows: a key part is read off the section at its support, and supports are
   join-preserving.  Keyed rows have a schema.  In the locale the constants are fixed at its row and
   key types.\<close>
 
@@ -36,7 +36,6 @@ locale keyed =
   assumes key_supp_reads: "proj a\<cdot>(row_key\<cdot>((x::'r::{domain, lod_domain, schema}) \<downharpoonright> key_supp\<cdot>a)) = proj a\<cdot>(row_key\<cdot>x :: 'k::{domain, lod_domain})"
     and key_supp_bot: "key_supp\<cdot>(\<bottom> :: 'k semi_factor) = (\<bottom> :: 'r semi_factor)"
     and key_supp_sup: "key_supp\<cdot>(a \<squnion> b :: 'k semi_factor) = (key_supp\<cdot>a \<squnion> key_supp\<cdot>b :: 'r semi_factor)"
-    and key_supp_compact: "compact (a :: 'k semi_factor) \<Longrightarrow> compact (key_supp\<cdot>a :: 'r semi_factor)"
 begin
 
 abbreviation row_key :: "'r \<rightarrow> 'k" where "row_key \<equiv> Views.row_key"
@@ -271,7 +270,7 @@ qed
 
 text \<open>In general a function factors continuously through the view's parts, read as a pair, into
   the values with a top adjoined: the least upper bound of what rows reading at most a given pair
-  give (a left Kan extension along the view part).  For a compact view it is continuous and reads
+  give (a left Kan extension along the view part).  For a view with a small key part it is continuous and reads
   only the view's parts of its argument; on view parts it is the function, if the view determines
   it.\<close>
 
@@ -281,15 +280,15 @@ definition vfactor_set :: "('r, 'k) view \<Rightarrow> ('r \<rightarrow> 'b::bou
 definition vfactor :: "('r, 'k) view \<Rightarrow> ('r \<rightarrow> 'b::bounded_complete) \<Rightarrow> 'r \<times> 'k \<rightarrow> 'b top" where
   "vfactor v f = (\<Lambda> p. lub (vfactor_set v f p))"
 
-lemma compact_vpart: "compact v \<Longrightarrow> compact x \<Longrightarrow> compact (vpart v x)"
-  by (simp add: vpart_def compact_proj_compact proj_compact[OF compact_snd])
+lemma compact_vpart: "lod_small (snd v) \<Longrightarrow> compact x \<Longrightarrow> compact (vpart v x)"
+  by (simp add: vpart_def compact_proj_compact lod_small_proj)
 
 lemma lattice_lub_max: "x \<in> S \<Longrightarrow> (\<And>y. y \<in> S \<Longrightarrow> y \<sqsubseteq> x) \<Longrightarrow> lub S = (x :: 'a::lattice_complete)"
   by (rule below_antisym) (blast intro: lattice_lub_least is_ubI, rule lattice_lub_upper)
 
 lemma vfactor_beta:
   fixes f :: "'r \<rightarrow> 'b::bounded_complete"
-  assumes cv: "compact v"
+  assumes cv: "lod_small (snd v)"
   shows "vfactor v f\<cdot>p = lub (vfactor_set v f p)"
   unfolding vfactor_def
 proof (rule beta_cfun)
@@ -328,7 +327,7 @@ proof (rule beta_cfun)
 qed
 
 lemma vfactor_reads:
-  assumes cv: "compact v"
+  assumes cv: "lod_small (snd v)"
   shows "vfactor v f\<cdot>(s, \<kappa>) = vfactor v f\<cdot>(s \<downharpoonright> fst v, proj (snd v)\<cdot>\<kappa>)"
 proof -
   have "vpart v x \<sqsubseteq> (s, \<kappa>) \<longleftrightarrow> vpart v x \<sqsubseteq> (s \<downharpoonright> fst v, proj (snd v)\<cdot>\<kappa>)" for x
@@ -348,7 +347,7 @@ proof -
 qed
 
 theorem vfactor_vpart:
-  assumes cv: "compact v" and d: "determines UNIV v f"
+  assumes cv: "lod_small (snd v)" and d: "determines UNIV v f"
   shows "vfactor v f\<cdot>(vpart v x) = down\<cdot>(f\<cdot>x)"
   unfolding vfactor_beta[OF cv]
 proof (rule lattice_lub_max)
@@ -358,7 +357,7 @@ proof (rule lattice_lub_max)
 qed
 
 corollary vfactor_vproj:
-  "compact v \<Longrightarrow> determines UNIV v f \<Longrightarrow> vfactor v f oo vproj v = down oo f"
+  "lod_small (snd v) \<Longrightarrow> determines UNIV v f \<Longrightarrow> vfactor v f oo vproj v = down oo f"
   by (rule cfun_eqI) (simp add: vfactor_vpart)
 
 corollary determines_factor_ex:

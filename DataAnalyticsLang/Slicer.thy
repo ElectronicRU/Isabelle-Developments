@@ -168,7 +168,7 @@ subsection \<open>Slice evaluation\<close>
 
 text \<open>Slices are given by their conjunction \<open>\<^bold>*\<close> and its unit \<open>\<^bold>1\<close>, nothing more: the slicer
   constructs only conjoin.  The order is the one conjunction induces.  Slices act on keys, which
-  carry levels of detail (semi-factors of the keys, compact ones for LODs).  Each slice comes with the LOD it is written
+  carry levels of detail (semi-factors of the keys).  Each slice comes with the LOD it is written
   at, \<open>slod\<close>: what it \<^emph>\<open>looks at\<close>, not what it selects (an upper bound, not the least one).  Its
   meaning \<open>sopen\<close> is a three-valued condition on keys, a continuous function into \<^typ>\<open>tr\<close>, taking
   conjunction to the parallel \<open>pand\<close>: a slice may be undecided at a partial key.  A slice
@@ -194,7 +194,6 @@ locale slicer = conj: semilattice_neutr "sl_conj slicing" "sl_unit slicing" +
   assumes sopen_conj: "sl_open slicing (sl_conj slicing a b)\<cdot>k = pand\<cdot>(sl_open slicing a\<cdot>k)\<cdot>(sl_open slicing b\<cdot>k)"
     and sopen_unit: "sl_open slicing (sl_unit slicing)\<cdot>k = TT"
     and sopen_lod: "sl_open slicing f\<cdot>(proj (sl_lod slicing f)\<cdot>k) = sl_open slicing f\<cdot>k"
-    and slod_compact: "compact (sl_lod slicing f)"
     and coarsen_conj: "sl_coarsen slicing A (sl_conj slicing a b) =
       sl_conj slicing (sl_coarsen slicing A a) (sl_coarsen slicing A b)"
     and coarsen_inside: "sl_lod slicing f \<sqsubseteq> A \<Longrightarrow> sl_coarsen slicing A f = f"

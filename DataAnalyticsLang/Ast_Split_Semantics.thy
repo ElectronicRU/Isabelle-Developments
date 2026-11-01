@@ -63,10 +63,10 @@ corollary ext_lawful_present_asem: "wf e \<Longrightarrow> ext_lawful (present_a
   by (rule ext_lawful_present_at [OF ext_lawful_asem])
 
 text \<open>The minimal LODs of the denotations are small: dimensions and columns have compact LODs,
-  and the combinators join, keep, or drop them, or raise them by compact dimensions.\<close>
+  and the combinators join, keep, or drop them, or raise them by small dimensions.\<close>
 
 lemma lod_small_include_dims:
-  assumes E: "semilawful E" and M: "compact M" and s: "lod_small (emind E)"
+  assumes E: "semilawful E" and M: "lod_small M" and s: "lod_small (emind E)"
   shows "lod_small (emind (include_dims M E))"
 proof -
   have "fold (\<squnion>) (map (\<lambda>S. lower_part (include_sel M S)) (esels E)) \<bottom> \<sqsubseteq> emind E \<squnion> M"
@@ -76,7 +76,7 @@ proof -
     show "x \<sqsubseteq> emind E \<squnion> M" unfolding x include_sel_simps
       by (rule lattice_join_mono [OF lower_below_mind [OF E S] truncate_below])
   qed simp
-  then show ?thesis by (simp only: include_dims_simps) (rule lod_small_below [OF lod_small_sup [OF s lod_small_compact [OF M]]])
+  then show ?thesis by (simp only: include_dims_simps) (rule lod_small_below [OF lod_small_sup [OF s M]])
 qed
 
 lemma lod_small_tuple: "(\<And>E. E \<in> set Es \<Longrightarrow> lod_small (emind E)) \<Longrightarrow> lod_small (emind (tuple Es))"
@@ -88,19 +88,19 @@ proof (induct e rule: wf.induct)
   then show ?case by (auto intro!: lod_small_tuple)
 next
   case (6 ds e)
-  then show ?case by (simp only: asem.simps) (rule lod_small_include_dims [OF semilawful_asem compact_lod], simp_all)
+  then show ?case by (simp only: asem.simps) (rule lod_small_include_dims [OF semilawful_asem lod_small_compact [OF compact_lod]], simp_all)
 qed (simp_all add: lod_small_compact dim_compact)
 
 theorem ext_cont_asem: "wf e \<Longrightarrow> ext_cont (asem_ext e)"
 proof (induct e rule: wf.induct)
   case (1 d)
-  show ?case by (simp add: ext_cont_smap ext_cont_key_at dim_compact)
+  show ?case by (simp add: ext_cont_smap ext_cont_key_at lod_small_compact dim_compact)
 next
   case (2 c)
-  show ?case by (simp add: ext_cont_column [OF col_fd dim_compact])
+  show ?case by (simp add: ext_cont_column [OF col_fd lod_small_compact [OF dim_compact]])
 next
   case (3 v)
-  show ?case by (simp add: ext_cont_smap ext_cont_key_at)
+  show ?case by (simp add: ext_cont_smap ext_cont_key_at lod_small_compact)
 next
   case (4 fn es)
   then show ?case by (auto intro!: ext_cont_smap ext_cont_tuple)
@@ -112,7 +112,7 @@ next
   show ?case unfolding asem_ext.simps by (rule ext_cont_aggregate [OF ag_abel 5(1) [OF we] s])
 next
   case (6 ds e)
-  then show ?case by (simp add: ext_cont_include_dims compact_lod)
+  then show ?case by (simp add: ext_cont_include_dims lod_small_compact compact_lod)
 next
   case (7 ds C e)
   then show ?case by (simp add: ext_cont_filtfor)

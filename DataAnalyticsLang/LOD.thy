@@ -821,6 +821,34 @@ lemma proj_le: "a \<sqsubseteq> b \<Longrightarrow> proj a\<cdot>(proj b\<cdot>k
 lemma proj_mono: "a \<sqsubseteq> b \<Longrightarrow> proj a\<cdot>k \<sqsubseteq> proj b\<cdot>k"
   by (metis proj_le proj_below)
 
+text \<open>An LOD is \<^emph>\<open>small\<close> when it is finitary: it projects every key to a compact one.  Small
+  LODs are closed under joins and downwards, so they form an ideal of the semi-factors; compact
+  ones are small.  Only smallness, not compactness, of an LOD is what reading compact key parts
+  needs.\<close>
+
+abbreviation lod_small :: "'k::lod_domain semi_factor \<Rightarrow> bool" where
+  "lod_small \<equiv> finitary_semi_factor"
+
+lemma lod_small_proj: "lod_small a \<Longrightarrow> compact (proj a\<cdot>k)" for a :: "'k::lod_domain semi_factor"
+  unfolding finitary_semi_factor_def finitary_def by blast
+
+lemma lod_smallI: "(\<And>k. compact (proj a\<cdot>k)) \<Longrightarrow> lod_small a" for a :: "'k::lod_domain semi_factor"
+  unfolding finitary_semi_factor_def finitary_def by blast
+
+lemma lod_small_compact: "compact a \<Longrightarrow> lod_small a" for a :: "'k::lod_domain semi_factor"
+  by (rule lod_smallI) (rule proj_compact)
+
+lemma lod_small_sup: "lod_small a \<Longrightarrow> lod_small b \<Longrightarrow> lod_small (a \<squnion> b)" for a b :: "'k::lod_domain semi_factor"
+  by (rule lod_smallI, unfold proj_sup)
+     (rule compact_join [OF lod_small_proj lod_small_proj joinableI [OF proj_below proj_below]])
+
+lemma lod_small_below: "lod_small b \<Longrightarrow> a \<sqsubseteq> b \<Longrightarrow> lod_small a" for a b :: "'k::lod_domain semi_factor"
+proof (rule lod_smallI)
+  fix k assume b: "lod_small b" and ab: "a \<sqsubseteq> b"
+  have "proj a\<cdot>k = proj a\<cdot>(proj b\<cdot>k)" by (rule proj_le [OF ab, symmetric])
+  then show "compact (proj a\<cdot>k)" using compact_proj_compact [OF lod_small_proj [OF b, of k], of a] by simp
+qed
+
 subsection \<open>Where a key lives\<close>
 
 definition lives_at :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> 'k \<Rightarrow> bool" where
