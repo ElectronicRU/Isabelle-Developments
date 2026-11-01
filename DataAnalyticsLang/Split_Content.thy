@@ -203,6 +203,101 @@ proof -
   then show ?thesis by simp
 qed
 
+subsection \<open>Filtering by guards\<close>
+
+text \<open>A row guard filters the definite rows to those it holds on: refining a row keeps it true, and
+  the possible keys stay, since rows yet to come may pass.  A key guard filters the definite rows to
+  those whose key it holds on, and the possible keys to those it is not false on: refining a key
+  keeps it false.  A kept row's possible key is kept, since it lies below the row's key.\<close>
+
+definition SRowGuard :: "('r \<rightarrow> tr) \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis" where
+  "SRowGuard g t = SplitB {x \<in> srows t. g\<cdot>(Rep_compact_basis x) = TT} (skeys t)"
+
+lemma srows_SRowGuard [simp]: "srows (SRowGuard g t) = {x \<in> srows t. g\<cdot>(Rep_compact_basis x) = TT}"
+  and skeys_SRowGuard [simp]: "skeys (SRowGuard g t) = skeys t"
+  unfolding SRowGuard_def using split_basis_consistent [of t] by (simp_all add: split_consistent_def)
+
+lemma TT_up: "g\<cdot>x = TT \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> g\<cdot>y = TT"
+proof -
+  assume "g\<cdot>x = TT" "x \<sqsubseteq> y"
+  then have "TT \<sqsubseteq> g\<cdot>y" by (metis monofun_cfun_arg)
+  then show ?thesis by simp
+qed
+
+lemma SRowGuard_split_mono:
+  assumes le: "split_le t t'"
+  shows "split_le (SRowGuard g t) (SRowGuard g t')"
+  unfolding split_le_def hoare_le_def smyth_le_def
+proof (intro conjI ballI)
+  fix x assume "x \<in> srows (SRowGuard g t)"
+  then have x: "x \<in> srows t" and gx: "g\<cdot>(Rep_compact_basis x) = TT" by simp_all
+  obtain y where y: "y \<in> srows t'" and xy: "x \<sqsubseteq> y" using le x unfolding split_le_def hoare_le_def by blast
+  have "g\<cdot>(Rep_compact_basis y) = TT" by (rule TT_up [OF gx xy [unfolded compact_le_def]])
+  then show "\<exists>y\<in>srows (SRowGuard g t'). x \<sqsubseteq> y" using y xy by auto
+next
+  fix v assume "v \<in> skeys (SRowGuard g t')"
+  then show "\<exists>u\<in>skeys (SRowGuard g t). u \<sqsubseteq> v" using le unfolding split_le_def smyth_le_def by simp
+qed
+
+definition split_rowguard :: "('r \<rightarrow> tr) \<Rightarrow> ('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" where
+  "split_rowguard g = split_pd.extension (\<lambda>t. split_principal (SRowGuard g t))"
+
+lemma split_rowguard_principal [simp]: "split_rowguard g\<cdot>(split_principal t) = split_principal (SRowGuard g t)"
+  unfolding split_rowguard_def by (simp add: split_pd.extension_principal SRowGuard_split_mono)
+
+definition SKeyGuard :: "('k \<rightarrow> tr) \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> ('r, 'k) split_basis" where
+  "SKeyGuard h t = SplitB {x \<in> srows t. h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT} {u \<in> skeys t. h\<cdot>(Rep_compact_basis u) \<noteq> FF}"
+
+lemma keyguard_consistent:
+  "split_consistent {x \<in> srows t. h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT} {u \<in> skeys t. h\<cdot>(Rep_compact_basis u) \<noteq> FF}"
+  unfolding split_consistent_def
+proof (intro ballI)
+  fix x assume "x \<in> {x \<in> srows t. h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT}"
+  then have x: "x \<in> srows t" and hx: "h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT" by simp_all
+  obtain u where u: "u \<in> skeys t" and ux: "Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x)"
+    using split_basis_consistentD [OF x] by blast
+  have "h\<cdot>(Rep_compact_basis u) \<sqsubseteq> TT" using monofun_cfun_arg [OF ux, of h] hx by simp
+  then have "h\<cdot>(Rep_compact_basis u) \<noteq> FF" by auto
+  then show "\<exists>u\<in>{u \<in> skeys t. h\<cdot>(Rep_compact_basis u) \<noteq> FF}. Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x)"
+    using u ux by blast
+qed
+
+lemma srows_SKeyGuard [simp]: "srows (SKeyGuard h t) = {x \<in> srows t. h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT}"
+  and skeys_SKeyGuard [simp]: "skeys (SKeyGuard h t) = {u \<in> skeys t. h\<cdot>(Rep_compact_basis u) \<noteq> FF}"
+  unfolding SKeyGuard_def by (simp_all add: keyguard_consistent)
+
+lemma FF_down: "h\<cdot>y \<noteq> FF \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> h\<cdot>x \<noteq> FF"
+proof -
+  assume "h\<cdot>y \<noteq> FF" "x \<sqsubseteq> y"
+  have "h\<cdot>x \<sqsubseteq> h\<cdot>y" by (rule monofun_cfun_arg [OF \<open>x \<sqsubseteq> y\<close>])
+  then show ?thesis using \<open>h\<cdot>y \<noteq> FF\<close> by (cases "h\<cdot>x" rule: trE) auto
+qed
+
+lemma SKeyGuard_split_mono:
+  assumes le: "split_le t t'"
+  shows "split_le (SKeyGuard h t) (SKeyGuard h t')"
+  unfolding split_le_def hoare_le_def smyth_le_def
+proof (intro conjI ballI)
+  fix x assume "x \<in> srows (SKeyGuard h t)"
+  then have x: "x \<in> srows t" and hx: "h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT" by simp_all
+  obtain y where y: "y \<in> srows t'" and xy: "x \<sqsubseteq> y" using le x unfolding split_le_def hoare_le_def by blast
+  have "h\<cdot>(row_key\<cdot>(Rep_compact_basis y)) = TT"
+    by (rule TT_up [OF hx]) (intro monofun_cfun_arg xy [unfolded compact_le_def])
+  then show "\<exists>y\<in>srows (SKeyGuard h t'). x \<sqsubseteq> y" using y xy by auto
+next
+  fix v assume "v \<in> skeys (SKeyGuard h t')"
+  then have v: "v \<in> skeys t'" and hv: "h\<cdot>(Rep_compact_basis v) \<noteq> FF" by simp_all
+  obtain u where u: "u \<in> skeys t" and uv: "u \<sqsubseteq> v" using le v unfolding split_le_def smyth_le_def by blast
+  have "h\<cdot>(Rep_compact_basis u) \<noteq> FF" by (rule FF_down [OF hv uv [unfolded compact_le_def]])
+  then show "\<exists>u\<in>skeys (SKeyGuard h t). u \<sqsubseteq> v" using u uv by auto
+qed
+
+definition split_keyguard :: "('k \<rightarrow> tr) \<Rightarrow> ('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" where
+  "split_keyguard h = split_pd.extension (\<lambda>t. split_principal (SKeyGuard h t))"
+
+lemma split_keyguard_principal [simp]: "split_keyguard h\<cdot>(split_principal t) = split_principal (SKeyGuard h t)"
+  unfolding split_keyguard_def by (simp add: split_pd.extension_principal SKeyGuard_split_mono)
+
 subsection \<open>Refutation by a key test\<close>
 
 text \<open>A key test refutes the part when it is false on every selected possible key: the selected
