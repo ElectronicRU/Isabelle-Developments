@@ -170,8 +170,20 @@ lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarro
 definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_lawful X \<longleftrightarrow> semilawful X \<and> ext_sound X"
 
-text \<open>A frame is \<^emph>\<open>LOD-bounded\<close> when its LOD lies below a compact one; its keys then have compact
-  parts at the LODs below.\<close>
+text \<open>An LOD is \<^emph>\<open>small\<close> when it lies below a compact one, and a frame is \<^emph>\<open>LOD-bounded\<close>
+  when its LOD is small; keys then have compact parts at small LODs.\<close>
+
+definition lod_small :: "'k semi_factor \<Rightarrow> bool" where
+  "lod_small a \<longleftrightarrow> (\<exists>M. compact M \<and> a \<sqsubseteq> M)"
+
+lemma lod_small_compact: "compact a \<Longrightarrow> lod_small a"
+  unfolding lod_small_def by blast
+
+lemma lod_small_sup: "lod_small a \<Longrightarrow> lod_small b \<Longrightarrow> lod_small (a \<squnion> b)"
+  unfolding lod_small_def by (blast intro: compact_semi_factor_sup lattice_join_mono)
+
+lemma lod_small_below: "lod_small b \<Longrightarrow> a \<sqsubseteq> b \<Longrightarrow> lod_small a"
+  unfolding lod_small_def by (blast intro: below_trans)
 
 definition lod_bounded :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
   "lod_bounded F \<longleftrightarrow> (\<exists>M. compact M \<and> flod F \<sqsubseteq> M)"
@@ -743,25 +755,35 @@ proof -
   then show ?thesis by (rule finite_subset) (simp add: finite_srows)
 qed
 
-text \<open>An aggregate over a split dataset folds over the inner keys of the outer key that are
-  definitely there, those maximal at the inner key LOD with a definite row, and those possibly
-  there, the inner parts of possible keys in the conforming keyspace.  A definite inner key is
-  folded with its value, a possible one with its value or the unit.  The rows of a dataset above
-  are finitely many, so it is the greatest lower bound of the folds over the definite keys and
-  finitely many possible ones.\<close>
+text \<open>An aggregate over a compact split dataset folds over the inner keys of the outer key in the
+  conforming keyspace that are definitely there, those maximal at the inner key LOD with a definite
+  row, and those possibly there, the inner key parts possible at the inner key LOD.  A definite
+  inner key is folded with its value, a possible one with its value or the unit.  The rows of a
+  dataset above are finitely many, so it is the greatest lower bound of the folds over the definite
+  keys and finitely many possible ones.  Over an arbitrary split dataset the aggregate is the lub of
+  these over the compact datasets below: of infinitely many rows only what finitely many show is
+  known.\<close>
 
 definition agg_definite :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
-  "agg_definite E D F k = {\<kappa>. maximal_at (kd E F) \<kappa> \<and> proj (flod F)\<cdot>\<kappa> = k \<and> (\<exists>y. split_definite y D \<and> rproj (kd E F) y = \<kappa>)}"
+  "agg_definite E D F k = {\<kappa>. maximal_at (kd E F) \<kappa> \<and> proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj (kd E F)) ` conforming_keyspace \<and>
+     (\<exists>y. split_definite y D \<and> rproj (kd E F) y = \<kappa>)}"
 
 definition agg_possible :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k set" where
-  "agg_possible E D F k = {\<kappa>. proj (flod F)\<cdot>\<kappa> = k \<and> (\<exists>u. split_possible u D \<and> u \<in> conforming_keyspace \<and> proj (kd E F)\<cdot>u = \<kappa>)}"
+  "agg_possible E D F k = {\<kappa>. proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj (kd E F)) ` conforming_keyspace \<and>
+     split_possible_at (kd E F) \<kappa> D}"
 
 definition agg_member :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
   "agg_member X D F k \<kappa> = (if \<kappa> \<in> agg_definite X D F k then populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa>
      else populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> + Absent)"
 
+definition agg_glb :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "agg_glb f X D F k = glb {agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> C) | C. finite C \<and> C \<subseteq> agg_possible X D F k}"
+
+definition agg_approx :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd set" where
+  "agg_approx f X D F k = {agg_glb f X D\<^sub>0 F k | D\<^sub>0. compact D\<^sub>0 \<and> D\<^sub>0 \<sqsubseteq> D}"
+
 definition agg_ext_sem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
-  "agg_ext_sem f X D F k = glb {agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> C) | C. finite C \<and> C \<subseteq> agg_possible X D F k}"
+  "agg_ext_sem f X D F k = lub (agg_approx f X D F k)"
 
 definition aggregate_ext :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
   "aggregate_ext f X = with_ext (aggregate f X) (agg_ext_sem f X)"
@@ -774,13 +796,12 @@ lemma aggregate_ext_simps [simp]:
   "sem_ext (aggregate_ext f X) = agg_ext_sem f X"
   by (simp_all add: aggregate_ext_def)
 
-theorem ext_sound_aggregate:
+lemma agg_glb_sound:
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_sound X"
-  shows "ext_sound (aggregate_ext f X)"
-proof (rule ext_soundI, simp only: aggregate_ext_simps aggregate_simps)
-  fix D D' :: "('r, 'k) split_pd" and data F k
-  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+    and DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
     and cf: "conforms data" and d0: "fconf (map release (evalues X)) data F"
+  shows "agg_glb f X D F k \<sqsubseteq> esem (aggregate f X) data F k"
+proof -
   have d: "fconf (evalues X) data F" using d0 by (simp only: fconf_release)
   let ?K = "kd X F" and ?Z = "afiber data F (flod F) k"
   let ?A = "rproj ?K ` ?Z"
@@ -815,13 +836,13 @@ proof (rule ext_soundI, simp only: aggregate_ext_simps aggregate_simps)
     fix \<kappa> assume "\<kappa> \<in> ?A"
     then obtain m where m: "m \<in> ?Z" "\<kappa> = rproj ?K m" by blast
     have mm: "m \<in> lower_maximal data" and mk: "rproj (flod F) m = k" using m(1) by (simp_all add: afiber_def)
-    have p: "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD nD mm])
+    have p: "split_possible_at ?K (rproj ?K m) D" by (rule split_possible_atI [OF impossible_no_point [OF DD cD nD mm]])
     have r: "row_key\<cdot>m \<in> conforming_keyspace" using universallyD [OF universally_keyspace cf] mm by blast
     show "\<kappa> \<in> agg_possible X D F k" unfolding agg_possible_def m(2) using p r pK mk by blast
   qed
   have DA: "agg_definite X D F k \<union> ?A = ?A" using defA by blast
-  have "agg_ext_sem f X D F k \<sqsubseteq> agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> ?A)"
-    unfolding agg_ext_sem_def by (rule glb_below, rule CollectI, rule exI [of _ ?A]) (intro conjI refl fA Apos)
+  have "agg_glb f X D F k \<sqsubseteq> agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> ?A)"
+    unfolding agg_glb_def by (rule glb_below, rule CollectI, rule exI [of _ ?A]) (intro conjI refl fA Apos)
   also have "\<dots> \<sqsubseteq> agg_fold f ?V ?A" unfolding DA
   proof (rule agg_fold_mono [OF f fA])
     fix \<kappa> assume "\<kappa> \<in> ?A"
@@ -833,7 +854,26 @@ proof (rule ext_soundI, simp only: aggregate_ext_simps aggregate_simps)
       by (rule plus_option_pd_below1)
     ultimately show "agg_member X D F k \<kappa> \<sqsubseteq> ?V \<kappa>" unfolding agg_member_def by (auto intro: below_trans)
   qed
-  finally show "agg_ext_sem f X D F k \<sqsubseteq> agg_fold f ?V (inner_keys X data F k)" by (simp only: rigid)
+  finally show ?thesis by (simp only: aggregate_simps rigid)
+qed
+
+theorem ext_sound_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_sound X"
+  shows "ext_sound (aggregate_ext f X)"
+proof (rule ext_soundI, simp only: aggregate_ext_simps)
+  fix D D' :: "('r, 'k) split_pd" and data F k
+  assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and nD: "split_rows\<cdot>D' = up\<cdot>data"
+    and cf: "conforms data" and d0: "fconf (evalues (aggregate f X)) data F"
+  have d: "fconf (map release (evalues X)) data F" using d0 by simp
+  have ub: "agg_approx f X D F k <| esem (aggregate f X) data F k"
+  proof (rule is_ubI)
+    fix v assume "v \<in> agg_approx f X D F k"
+    then obtain D\<^sub>0 where v: "v = agg_glb f X D\<^sub>0 F k" and le: "D\<^sub>0 \<sqsubseteq> D" by (auto simp: agg_approx_def)
+    show "v \<sqsubseteq> esem (aggregate f X) data F k" unfolding v by (rule agg_glb_sound [OF f X below_trans [OF le DD] cD nD cf d])
+  qed
+  have ne: "agg_approx f X D F k \<noteq> {}" unfolding agg_approx_def by auto
+  show "agg_ext_sem f X D F k \<sqsubseteq> esem (aggregate f X) data F k"
+    unfolding agg_ext_sem_def by (rule lub_belowI [OF ne ub])
 qed
 
 theorem ext_lawful_aggregate:
@@ -1108,20 +1148,21 @@ proof (rule ext_contI2 [OF ext_mono_key_at [OF c]], simp only: key_at_ext_simps)
   qed
 qed
 
-text \<open>At an LOD-bounded frame and a compact lower part, the fiber's key parts are compact, and
+text \<open>At an LOD-bounded frame and a small lower part, the fiber's key parts are compact, and
   the presence test is monotone and decided at a finite stage.\<close>
 
 lemma compact_fiber_key:
-  assumes a: "compact a" and F: "lod_bounded F"
+  assumes a: "lod_small a" and F: "lod_bounded F"
   shows "compact (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k)"
 proof -
   obtain M where M: "compact M" "flod F \<sqsubseteq> M" using F by (auto simp: lod_bounded_def)
-  have "a \<squnion> (\<rho> \<sqinter> flod F) \<sqsubseteq> a \<squnion> M" by (rule lattice_join_mono [OF below_refl below_trans [OF lattice_meet_le2 M(2)]])
-  then show ?thesis by (rule compact_proj_bounded [OF compact_semi_factor_sup [OF a M(1)]])
+  obtain A where A: "compact A" "a \<sqsubseteq> A" using a by (auto simp: lod_small_def)
+  have "a \<squnion> (\<rho> \<sqinter> flod F) \<sqsubseteq> A \<squnion> M" by (rule lattice_join_mono [OF A(2) below_trans [OF lattice_meet_le2 M(2)]])
+  then show ?thesis by (rule compact_proj_bounded [OF compact_semi_factor_sup [OF A(1) M(1)]])
 qed
 
 lemma populated_ext_mono:
-  assumes a: "compact a" and F: "lod_bounded F" and le: "D \<sqsubseteq> D'"
+  assumes a: "lod_small a" and F: "lod_bounded F" and le: "D \<sqsubseteq> D'"
   shows "populated_ext D a \<rho> F k \<sqsubseteq> populated_ext D' a \<rho> F k"
 proof -
   let ?L = "a \<squnion> (\<rho> \<sqinter> flod F)"
@@ -1151,7 +1192,7 @@ proof -
 qed
 
 lemma populated_ext_lub:
-  assumes a: "compact a" and F: "lod_bounded F" and Y: "chain Y"
+  assumes a: "lod_small a" and F: "lod_bounded F" and Y: "chain Y"
   shows "populated_ext (\<Squnion>i. Y i) a \<rho> F k \<sqsubseteq> (\<Squnion>i. populated_ext (Y i) a \<rho> F k)"
 proof -
   let ?L = "a \<squnion> (\<rho> \<sqinter> flod F)"
@@ -1187,11 +1228,11 @@ proof -
   qed
 qed
 
-theorem ext_mono_present_at: "compact (emind X \<squnion> a) \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (present_at_ext a \<rho> X)"
+theorem ext_mono_present_at: "lod_small (emind X \<squnion> a) \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (present_at_ext a \<rho> X)"
   by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg populated_ext_mono ext_monoD)
 
 theorem ext_cont_present_at:
-  assumes m: "compact (emind X \<squnion> a)" and X: "ext_cont X"
+  assumes m: "lod_small (emind X \<squnion> a)" and X: "ext_cont X"
   shows "ext_cont (present_at_ext a \<rho> X)"
 proof (rule ext_contI2 [OF ext_mono_present_at [OF m ext_cont_mono [OF X]]], simp only: present_at_ext_simps)
   fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C F k
@@ -1406,6 +1447,181 @@ proof (rule ext_contI2 [OF ext_mono_column [OF fd ca]], simp only: column_ext_si
     qed
   qed
 qed
+
+
+subsection \<open>Monotonicity and continuity of aggregation\<close>
+
+text \<open>A compact dataset has finitely many definite inner keys: they are those of its generators.\<close>
+
+lemma agg_definite_finite:
+  assumes cD: "compact D"
+  shows "finite (agg_definite X D F k)"
+proof -
+  obtain t where t: "D = split_principal t" using split_pd.compact_imp_principal [OF cD] by blast
+  let ?K = "kd X F"
+  have "agg_definite X D F k \<subseteq> (\<lambda>s. rproj ?K (Rep_compact_basis s)) ` srows t"
+  proof
+    fix \<kappa> assume "\<kappa> \<in> agg_definite X D F k"
+    then obtain y where mx: "maximal_at ?K \<kappa>" and y: "split_definite y D" "rproj ?K y = \<kappa>"
+      by (auto simp: agg_definite_def)
+    obtain data where d: "split_rows\<cdot>D = up\<cdot>data" by (rule definite_has_rows [OF y(1)])
+    have "y \<in>\<flat> data" by (rule split_definite_rows_mem [OF y(1) d])
+    then obtain s where s: "s \<in> srows t" "y \<sqsubseteq> Rep_compact_basis s" using split_rows_mem_principal [OF d [unfolded t]] by blast
+    have "rproj ?K y \<sqsubseteq> rproj ?K (Rep_compact_basis s)" by (intro monofun_cfun_arg s(2))
+    then have "rproj ?K (Rep_compact_basis s) = \<kappa>" unfolding y(2) by (rule maximal_at_eq [OF mx proj_idem])
+    then show "\<kappa> \<in> (\<lambda>s. rproj ?K (Rep_compact_basis s)) ` srows t" using s(1) by force
+  qed
+  then show ?thesis by (rule finite_subset) (simp add: finite_srows)
+qed
+
+lemma agg_definite_mono: "D \<sqsubseteq> D' \<Longrightarrow> agg_definite X D F k \<subseteq> agg_definite X D' F k"
+  unfolding agg_definite_def by (blast intro: split_definite_mono)
+
+lemma agg_possible_mono: "D \<sqsubseteq> D' \<Longrightarrow> agg_possible X D' F k \<subseteq> agg_possible X D F k"
+  unfolding agg_possible_def by (blast intro: split_possible_at_below)
+
+text \<open>At an LOD-bounded frame and a small minimal LOD, definite inner keys are possible.\<close>
+
+lemma agg_definite_possible:
+  assumes m: "lod_small (emind X)" and F: "lod_bounded F"
+  shows "agg_definite X D F k \<subseteq> agg_possible X D F k"
+proof
+  fix \<kappa> assume "\<kappa> \<in> agg_definite X D F k"
+  then obtain y where mx: "maximal_at (kd X F) \<kappa>" and k: "proj (flod F)\<cdot>\<kappa> = k"
+    and r: "\<kappa> \<in> Rep_cfun (proj (kd X F)) ` conforming_keyspace"
+    and y: "split_definite y D" "rproj (kd X F) y = \<kappa>" by (auto simp: agg_definite_def)
+  obtain M where M: "compact M" "flod F \<sqsubseteq> M" using F by (auto simp: lod_bounded_def)
+  obtain A where A: "compact A" "emind X \<sqsubseteq> A" using m by (auto simp: lod_small_def)
+  have c: "compact (rproj (kd X F) y)"
+    by (rule compact_proj_bounded [OF compact_semi_factor_sup [OF A(1) M(1)] lattice_join_mono [OF A(2) M(2)]])
+  have "split_possible_at (kd X F) \<kappa> D"
+    using definite_maximal_possible [OF y(1) c] mx y(2) by simp
+  then show "\<kappa> \<in> agg_possible X D F k" unfolding agg_possible_def using k r by blast
+qed
+
+lemma agg_glb_mono:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_mono X" and m: "lod_small (emind X)" and F: "lod_bounded F"
+    and cC: "conforming_rows (split_rows\<cdot>C)" and le: "D \<sqsubseteq> D'" and le': "D' \<sqsubseteq> C" and cD': "compact D'"
+  shows "agg_glb f X D F k \<sqsubseteq> agg_glb f X D' F k"
+proof -
+  let ?Def = "agg_definite X D F k" and ?Def' = "agg_definite X D' F k"
+  let ?S = "\<lambda>D. {agg_fold f (agg_member X D F k) (agg_definite X D F k \<union> C) | C. finite C \<and> C \<subseteq> agg_possible X D F k}"
+  have ne: "?S D' \<noteq> {}" by blast
+  show ?thesis unfolding agg_glb_def
+  proof (rule glb_greatest [OF ne], intro ballI)
+    fix x assume "x \<in> ?S D'"
+    then obtain C' where x: "x = agg_fold f (agg_member X D' F k) (?Def' \<union> C')" and fC': "finite C'"
+      and C': "C' \<subseteq> agg_possible X D' F k" by blast
+    let ?C'' = "(?Def' - ?Def) \<union> C'"
+    have fD': "finite ?Def'" by (rule agg_definite_finite [OF cD'])
+    have sub: "?C'' \<subseteq> agg_possible X D F k"
+      using agg_definite_possible [OF m F, of D'] C' agg_possible_mono [OF le] by blast
+    have eq: "?Def \<union> ?C'' = ?Def' \<union> C'" using agg_definite_mono [OF le] by blast
+    have "glb (?S D) \<sqsubseteq> agg_fold f (agg_member X D F k) (?Def \<union> ?C'')"
+      by (rule glb_below, rule CollectI, rule exI [of _ ?C'']) (use fD' fC' sub in simp)
+    also have "\<dots> = agg_fold f (agg_member X D F k) (?Def' \<union> C')" by (simp only: eq)
+    also have "\<dots> \<sqsubseteq> x" unfolding x
+    proof (rule agg_fold_mono [OF f finite_UnI [OF fD' fC']])
+      fix \<kappa>
+      have V: "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> \<sqsubseteq> populated_ext D' (emind X) \<top> F \<kappa> \<odot> sem_ext X D' F \<kappa>"
+        by (intro monofun_cfun monofun_cfun_arg populated_ext_mono [OF m F le] ext_monoD [OF X F cC le le'])
+      have dm: "?Def \<subseteq> ?Def'" by (rule agg_definite_mono [OF le])
+      show "agg_member X D F k \<kappa> \<sqsubseteq> agg_member X D' F k \<kappa>"
+      proof (cases "\<kappa> \<in> ?Def")
+        case True
+        then show ?thesis using V dm unfolding agg_member_def by auto
+      next
+        case nD: False
+        have l: "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> + Absent \<sqsubseteq> populated_ext D' (emind X) \<top> F \<kappa> \<odot> sem_ext X D' F \<kappa>"
+          by (rule below_trans [OF plus_option_pd_below1 V])
+        show ?thesis
+        proof (cases "\<kappa> \<in> ?Def'")
+          case True
+          then show ?thesis using nD l unfolding agg_member_def by simp
+        next
+          case False
+          then show ?thesis using nD unfolding agg_member_def
+            by (simp add: plus_option_pd_greatest [OF l plus_option_pd_below2])
+        qed
+      qed
+    qed
+    finally show "glb (?S D) \<sqsubseteq> x" .
+  qed
+qed
+
+text \<open>Below a conforming dataset, the folds at the compact datasets below form a directed set: the
+  compact datasets below are directed, and the fold grows along them.\<close>
+
+lemma agg_approx_directed:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_mono X" and m: "lod_small (emind X)" and F: "lod_bounded F"
+    and cC: "conforming_rows (split_rows\<cdot>C)" and DC: "D \<sqsubseteq> C"
+  shows "directed (agg_approx f X D F k)"
+  unfolding directed_def
+proof (intro ballI)
+  fix x y assume "x \<in> agg_approx f X D F k" "y \<in> agg_approx f X D F k"
+  then obtain D\<^sub>1 D\<^sub>2 where x: "x = agg_glb f X D\<^sub>1 F k" "compact D\<^sub>1" "D\<^sub>1 \<sqsubseteq> D"
+    and y: "y = agg_glb f X D\<^sub>2 F k" "compact D\<^sub>2" "D\<^sub>2 \<sqsubseteq> D" by (auto simp: agg_approx_def)
+  obtain t\<^sub>1 t\<^sub>2 where t: "D\<^sub>1 = split_principal t\<^sub>1" "D\<^sub>2 = split_principal t\<^sub>2"
+    using split_pd.compact_imp_principal [OF x(2)] split_pd.compact_imp_principal [OF y(2)] by blast
+  have "t\<^sub>1 \<in> Rep_split_pd D" "t\<^sub>2 \<in> Rep_split_pd D"
+    using x(3) y(3) unfolding t split_pd.principal_below_iff_mem_rep by simp_all
+  then obtain t\<^sub>3 where t3: "t\<^sub>3 \<in> Rep_split_pd D" "split_le t\<^sub>1 t\<^sub>3" "split_le t\<^sub>2 t\<^sub>3"
+    using split_le.idealD2 [OF split_pd.ideal_rep] by blast
+  let ?D = "split_principal t\<^sub>3"
+  have D3: "compact ?D" "?D \<sqsubseteq> D" using t3(1) by (simp_all add: split_pd.compact_principal split_pd.principal_below_iff_mem_rep)
+  have D3C: "?D \<sqsubseteq> C" by (rule below_trans [OF D3(2) DC])
+  have "x \<sqsubseteq> agg_glb f X ?D F k" unfolding x(1) t(1)
+    by (rule agg_glb_mono [OF f X m F cC split_pd.principal_mono [OF t3(2)] D3C D3(1)])
+  moreover have "y \<sqsubseteq> agg_glb f X ?D F k" unfolding y(1) t(2)
+    by (rule agg_glb_mono [OF f X m F cC split_pd.principal_mono [OF t3(3)] D3C D3(1)])
+  moreover have "agg_glb f X ?D F k \<in> agg_approx f X D F k" using D3 by (auto simp: agg_approx_def)
+  ultimately show "\<exists>z\<in>agg_approx f X D F k. x \<sqsubseteq> z \<and> y \<sqsubseteq> z" by blast
+qed
+
+lemma agg_approx_mono: "D \<sqsubseteq> D' \<Longrightarrow> agg_approx f X D F k \<subseteq> agg_approx f X D' F k"
+  unfolding agg_approx_def by (blast intro: below_trans)
+
+theorem ext_mono_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_mono X" and m: "lod_small (emind X)"
+  shows "ext_mono (aggregate_ext f X)"
+proof (rule ext_monoI, simp only: aggregate_ext_simps)
+  fix D D' C :: "('r, 'k) split_pd" and F k
+  assume F: "lod_bounded F" and cC: "conforming_rows (split_rows\<cdot>C)" and le: "D \<sqsubseteq> D'" and le': "D' \<sqsubseteq> C"
+  have d: "agg_approx f X D F k <<| lub (agg_approx f X D F k)"
+    by (rule directed_lub [OF agg_approx_directed [OF f X m F cC below_trans [OF le le']]])
+  have d': "agg_approx f X D' F k <<| lub (agg_approx f X D' F k)"
+    by (rule directed_lub [OF agg_approx_directed [OF f X m F cC le']])
+  have "agg_approx f X D F k <| lub (agg_approx f X D' F k)"
+    using is_lubD1 [OF d'] agg_approx_mono [OF le, of f X F k] by (auto simp: is_ub_def)
+  then show "agg_ext_sem f X D F k \<sqsubseteq> agg_ext_sem f X D' F k" unfolding agg_ext_sem_def by (rule is_lubD2 [OF d])
+qed
+
+theorem ext_cont_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and X: "ext_cont X" and m: "lod_small (emind X)"
+  shows "ext_cont (aggregate_ext f X)"
+proof (rule ext_contI2 [OF ext_mono_aggregate [OF f ext_cont_mono [OF X] m]], simp only: aggregate_ext_simps)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C F k
+  assume F: "lod_bounded F" and Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
+  note Xm = ext_cont_mono [OF X]
+  have YC: "Y i \<sqsubseteq> C" for i by (rule ext_cont_below [OF LC Y])
+  have di: "agg_approx f X (Y i) F k <<| agg_ext_sem f X (Y i) F k" for i
+    unfolding agg_ext_sem_def by (rule directed_lub [OF agg_approx_directed [OF f Xm m F cC YC]])
+  have ch: "chain (\<lambda>i. agg_ext_sem f X (Y i) F k)"
+    using ext_monoD [OF ext_mono_aggregate [OF f Xm m] F cC chainE [OF Y] YC] by (intro chainI) simp
+  have dL: "agg_approx f X (\<Squnion>i. Y i) F k <<| agg_ext_sem f X (\<Squnion>i. Y i) F k"
+    unfolding agg_ext_sem_def by (rule directed_lub [OF agg_approx_directed [OF f Xm m F cC LC]])
+  have "agg_approx f X (\<Squnion>i. Y i) F k <| (\<Squnion>i. agg_ext_sem f X (Y i) F k)"
+  proof (rule is_ubI)
+    fix x assume "x \<in> agg_approx f X (\<Squnion>i. Y i) F k"
+    then obtain D\<^sub>0 where x: "x = agg_glb f X D\<^sub>0 F k" "compact D\<^sub>0" "D\<^sub>0 \<sqsubseteq> (\<Squnion>i. Y i)" by (auto simp: agg_approx_def)
+    obtain i where i: "D\<^sub>0 \<sqsubseteq> Y i" using compact_below_lub_iff [OF x(2) Y] x(3) by blast
+    have "x \<in> agg_approx f X (Y i) F k" using x(1,2) i by (auto simp: agg_approx_def)
+    then have "x \<sqsubseteq> agg_ext_sem f X (Y i) F k" using is_lubD1 [OF di] by (auto simp: is_ub_def)
+    then show "x \<sqsubseteq> (\<Squnion>i. agg_ext_sem f X (Y i) F k)" by (rule below_trans [OF _ is_ub_thelub [OF ch]])
+  qed
+  then show "agg_ext_sem f X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. agg_ext_sem f X (Y i) F k)" by (rule is_lubD2 [OF dL])
+qed
+
 end
 
 end
