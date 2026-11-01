@@ -244,6 +244,76 @@ proof -
   then show ?thesis unfolding M mix_possible_lub [OF chM] each ..
 qed
 
+subsection \<open>Selection in a mix\<close>
+
+text \<open>Selecting a key mix at a part of a coarser LOD keeps the definite keys exactly at the part,
+  if it is maximal, and the possible keys that may end up there; it commutes with forming the key
+  mix.\<close>
+
+lemma Rep_pde_basis_filter [simp]:
+  "Rep_pde_basis (Abs_pde_basis {x \<in> Rep_pde_basis S. P x}) = {x \<in> Rep_pde_basis S. P x}"
+  by (rule Abs_pde_basis_inverse', rule finite_subset [OF _ finite_Rep_pde_basis]) auto
+
+definition MSelect :: "'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'k mix_basis \<Rightarrow> 'k mix_basis" where
+  "MSelect L q t = MixB (Abs_pde_basis {x \<in> Rep_pde_basis (mdef t). maximal_at L q \<and> proj L\<cdot>(Rep_compact_basis x) = q})
+     (Abs_pde_basis {u \<in> Rep_pde_basis (mposs t). proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q})"
+
+lemma mselect_consistent:
+  "upper_le0 (Abs_pde_basis {u \<in> Rep_pde_basis (mposs t). proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q})
+     (Abs_pde_basis {x \<in> Rep_pde_basis (mdef t). maximal_at L q \<and> proj L\<cdot>(Rep_compact_basis x) = q})"
+  unfolding upper_le0_def
+proof (unfold Rep_pde_basis_filter, intro ballI)
+  fix x assume "x \<in> {x \<in> Rep_pde_basis (mdef t). maximal_at L q \<and> proj L\<cdot>(Rep_compact_basis x) = q}"
+  then have x: "x \<in> Rep_pde_basis (mdef t)" and xq: "proj L\<cdot>(Rep_compact_basis x) = q" by simp_all
+  obtain u where u: "u \<in> Rep_pde_basis (mposs t)" and ux: "u \<sqsubseteq> x" using mix_basis_consistentD [OF x] by blast
+  have "proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q" unfolding xq [symmetric] by (rule monofun_cfun_arg) (use ux in \<open>simp only: cb_below_iff\<close>)
+  then show "\<exists>u\<in>{u \<in> Rep_pde_basis (mposs t). proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q}. u \<sqsubseteq> x" using u ux by blast
+qed
+
+lemma mdef_MSelect [simp]:
+  "Rep_pde_basis (mdef (MSelect L q t)) = {x \<in> Rep_pde_basis (mdef t). maximal_at L q \<and> proj L\<cdot>(Rep_compact_basis x) = q}"
+  and mposs_MSelect [simp]:
+  "Rep_pde_basis (mposs (MSelect L q t)) = {u \<in> Rep_pde_basis (mposs t). proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q}"
+  unfolding MSelect_def by (simp_all add: mselect_consistent)
+
+lemma MSelect_mix_mono:
+  assumes st: "mix_le s t"
+  shows "mix_le (MSelect L q s) (MSelect L q t)"
+  unfolding mix_le_def lower_le0_def upper_le0_def mdef_MSelect mposs_MSelect
+proof (intro conjI ballI)
+  fix x assume "x \<in> {x \<in> Rep_pde_basis (mdef s). maximal_at L q \<and> proj L\<cdot>(Rep_compact_basis x) = q}"
+  then have x: "x \<in> Rep_pde_basis (mdef s)" and m: "maximal_at L q" and xq: "proj L\<cdot>(Rep_compact_basis x) = q" by simp_all
+  obtain y where y: "y \<in> Rep_pde_basis (mdef t)" and xy: "x \<sqsubseteq> y" using st x unfolding mix_le_def lower_le0_def by blast
+  have "q \<sqsubseteq> proj L\<cdot>(Rep_compact_basis y)" unfolding xq [symmetric] by (rule monofun_cfun_arg) (use xy in \<open>simp only: cb_below_iff\<close>)
+  then have "proj L\<cdot>(Rep_compact_basis y) = q" by (rule maximal_at_eq [OF m proj_idem])
+  then show "\<exists>y\<in>{x \<in> Rep_pde_basis (mdef t). maximal_at L q \<and> proj L\<cdot>(Rep_compact_basis x) = q}. x \<sqsubseteq> y"
+    using y xy m by blast
+next
+  fix v assume "v \<in> {u \<in> Rep_pde_basis (mposs t). proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q}"
+  then have v: "v \<in> Rep_pde_basis (mposs t)" and vq: "proj L\<cdot>(Rep_compact_basis v) \<sqsubseteq> q" by simp_all
+  obtain u where u: "u \<in> Rep_pde_basis (mposs s)" and uv: "u \<sqsubseteq> v" using st v unfolding mix_le_def upper_le0_def by blast
+  have "proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> proj L\<cdot>(Rep_compact_basis v)" by (rule monofun_cfun_arg) (use uv in \<open>simp only: cb_below_iff\<close>)
+  then show "\<exists>u\<in>{u \<in> Rep_pde_basis (mposs s). proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q}. u \<sqsubseteq> v"
+    using u uv vq by (blast intro: below_trans)
+qed
+
+definition mix_select :: "'k semi_factor \<Rightarrow> 'k \<Rightarrow> 'k mix_pd \<rightarrow> 'k mix_pd" where
+  "mix_select L q = mix_pd.extension (\<lambda>t. mix_principal (MSelect L q t))"
+
+lemma mix_select_principal [simp]: "mix_select L q\<cdot>(mix_principal t) = mix_principal (MSelect L q t)"
+  unfolding mix_select_def by (simp add: mix_pd.extension_principal MSelect_mix_mono)
+
+lemma keymix_select:
+  assumes LK: "L \<sqsubseteq> K"
+  shows "split_keymix K\<cdot>(split_select L q\<cdot>C) = mix_select L q\<cdot>(split_keymix K\<cdot>C)"
+proof (induct C rule: split_pd.principal_induct)
+  fix t
+  have r: "proj L\<cdot>(rproj K y) = rproj L y" for y by (rule proj_le [OF LK])
+  have k: "proj L\<cdot>(proj K\<cdot>u) = proj L\<cdot>u" for u by (rule proj_le [OF LK])
+  show "split_keymix K\<cdot>(split_select L q\<cdot>(split_principal t)) = mix_select L q\<cdot>(split_keymix K\<cdot>(split_principal t))"
+    by (simp, rule arg_cong [where f = mix_principal], rule mix_basis_eqI, simp_all add: Rep_pde_basis_inject [symmetric] r k, auto simp: r k)
+qed simp
+
 subsection \<open>Presence\<close>
 
 text \<open>The presence of a key part in a mix: true where it is definite and maximal, false where it
@@ -295,6 +365,69 @@ qed
 corollary present_select_keymix:
   "compact \<kappa> \<Longrightarrow> split_present (split_select K \<kappa>\<cdot>C) = mix_present K \<kappa> (split_keymix K\<cdot>C)"
   using select_test_keymix [of \<kappa> K C] select_test_guarded [of \<kappa> K "\<Lambda> _. TT" "\<Lambda> _. TT" C] by simp
+
+
+text \<open>Below a key mix, a maximal key part that is definite is possible.\<close>
+
+lemma keymix_definite_possible:
+  assumes c: "compact \<kappa>" and mx: "maximal_at K \<kappa>" and d: "mix_definite \<kappa> (split_keymix K\<cdot>C)"
+  shows "mix_possible \<kappa> (split_keymix K\<cdot>C)"
+proof -
+  obtain y where y: "split_definite y C" "\<kappa> \<sqsubseteq> rproj K y" using keymix_definite_imp [OF c d] by blast
+  have ky: "rproj K y = \<kappa>" by (rule maximal_at_eq [OF mx _ y(2)]) simp
+  have "split_possible_at K (rproj K y) C" by (rule definite_maximal_possible [OF y(1)]) (simp_all add: ky c mx)
+  then show ?thesis unfolding keymix_possible [OF c] ky .
+qed
+
+lemma mix_present_mono_below:
+  assumes c: "compact \<kappa>" and le: "M \<sqsubseteq> M'" and M': "M' \<sqsubseteq> split_keymix K\<cdot>C"
+  shows "mix_present K \<kappa> M \<sqsubseteq> mix_present K \<kappa> M'"
+proof (cases "maximal_at K \<kappa> \<and> mix_definite \<kappa> M")
+  case True
+  then show ?thesis using mix_definite_mono [OF _ le] unfolding mix_present_def by auto
+next
+  case nT: False
+  show ?thesis
+  proof (cases "mix_possible \<kappa> M")
+    case True
+    then have "mix_present K \<kappa> M = \<bottom>" using nT unfolding mix_present_def by simp
+    then show ?thesis by simp
+  next
+    case nP: False
+    have nP': "\<not> mix_possible \<kappa> M'" using nP mix_possible_below [OF _ le] by blast
+    have "\<not> (maximal_at K \<kappa> \<and> mix_definite \<kappa> M')"
+    proof
+      assume "maximal_at K \<kappa> \<and> mix_definite \<kappa> M'"
+      then have "mix_possible \<kappa> (split_keymix K\<cdot>C)"
+        using keymix_definite_possible [OF c] mix_definite_mono [OF _ M'] by blast
+      then show False using nP' mix_possible_below [OF _ M'] by blast
+    qed
+    then show ?thesis using nT nP nP' unfolding mix_present_def by simp
+  qed
+qed
+
+text \<open>The compact maximal definite parts of a compact mix are finitely many.\<close>
+
+lemma mix_definite_finite:
+  assumes cM: "compact M"
+  shows "finite {\<kappa>. compact \<kappa> \<and> maximal_at K \<kappa> \<and> mix_definite \<kappa> M}"
+proof -
+  obtain t where t: "M = mix_principal t" using mix_pd.compact_imp_principal [OF cM] by blast
+  have "{\<kappa>. compact \<kappa> \<and> maximal_at K \<kappa> \<and> mix_definite \<kappa> M} \<subseteq> (\<lambda>x. proj K\<cdot>(Rep_compact_basis x)) ` Rep_pde_basis (mdef t)"
+  proof
+    fix \<kappa> assume "\<kappa> \<in> {\<kappa>. compact \<kappa> \<and> maximal_at K \<kappa> \<and> mix_definite \<kappa> M}"
+    then have c: "compact \<kappa>" and mx: "maximal_at K \<kappa>" and d: "mix_definite \<kappa> M" by simp_all
+    let ?a = "Abs_compact_basis \<kappa>"
+    have ka: "Rep_compact_basis ?a = \<kappa>" by (rule Abs_compact_basis_inverse' [OF c])
+    have "mix_definite (Rep_compact_basis ?a) (mix_principal t)" using d unfolding t by (simp only: ka)
+    then obtain x where x: "x \<in> Rep_pde_basis (mdef t)" and ax: "?a \<sqsubseteq> x" unfolding mix_definite_principal by blast
+    have "\<kappa> \<sqsubseteq> proj K\<cdot>(Rep_compact_basis x)"
+      using monofun_cfun_arg [OF ax [unfolded cb_below_iff ka], of "proj K"] maximal_at_lives [OF mx] by simp
+    then have "proj K\<cdot>(Rep_compact_basis x) = \<kappa>" by (rule maximal_at_eq [OF mx proj_idem])
+    then show "\<kappa> \<in> (\<lambda>x. proj K\<cdot>(Rep_compact_basis x)) ` Rep_pde_basis (mdef t)" using x by force
+  qed
+  then show ?thesis by (rule finite_subset) simp
+qed
 
 end
 
