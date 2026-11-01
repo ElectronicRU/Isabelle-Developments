@@ -657,6 +657,65 @@ proof (rule csem_monoI)
     unfolding x x' by (simp add: monofun_cfun monofun_cfun_arg split_present_mono xx cv)
 qed
 
+subsection \<open>Inner contents of an aggregate\<close>
+
+text \<open>An aggregate releases its argument's entries: a released entry selects only at its upper
+  part within the frame, and keys its content by the lower part as well.  At an inner key whose
+  part at the frame LOD is the outer key, the argument's contents are the released contents
+  selected further at the inner key: guard contents directly, value contents through the view and
+  back down to their own keys.\<close>
+
+lemma upper_frame_part:
+  assumes kk: "proj (flod F)\<cdot>\<kappa> = k"
+  shows "proj (eupper e \<sqinter> flod F)\<cdot>\<kappa> = proj (eupper e \<sqinter> flod F)\<cdot>k"
+proof -
+  have "proj (eupper e \<sqinter> flod F)\<cdot>(proj (flod F)\<cdot>\<kappa>) = proj (eupper e \<sqinter> flod F)\<cdot>\<kappa>"
+    by (rule proj_le) (rule lattice_meet_le2)
+  then show ?thesis using kk by simp
+qed
+
+lemma inner_select:
+  assumes kk: "proj (flod F)\<cdot>\<kappa> = k" and c: "compact (proj l\<cdot>\<kappa>)" and cU: "compact (proj (eupper e \<sqinter> flod F)\<cdot>k)"
+  shows "split_select l (proj l\<cdot>\<kappa>)\<cdot>(split_select (eupper e \<sqinter> flod F) (proj (eupper e \<sqinter> flod F)\<cdot>k)\<cdot>D)
+    = split_select (l \<squnion> (eupper e \<sqinter> flod F)) (proj (l \<squnion> (eupper e \<sqinter> flod F))\<cdot>\<kappa>)\<cdot>D"
+  using split_select_join [OF c cU refl upper_frame_part [OF kk]] by simp
+
+lemma inner_gcontent:
+  assumes kk: "proj (flod F)\<cdot>\<kappa> = k" and c: "compact (proj (sel_at (esel e) (flod F))\<cdot>\<kappa>)"
+    and cU: "compact (proj (eupper e \<sqinter> flod F)\<cdot>k)"
+  shows "gcontent_ext D e F \<kappa> = split_select (sel_at (esel e) (flod F)) (proj (sel_at (esel e) (flod F))\<cdot>\<kappa>)\<cdot>(gcontent_ext D (release e) F k)"
+proof -
+  let ?L = "sel_at (esel e) (flod F)" and ?U = "eupper e \<sqinter> flod F"
+  have U: "sel_at (esel (release e)) (flod F) = ?U" by simp
+  have LU: "?L \<squnion> ?U = ?L" by (rule lattice_join_absorb1) (rule lattice_join_ge2)
+  have "split_select ?L (proj ?L\<cdot>\<kappa>)\<cdot>(split_select ?U (proj ?U\<cdot>k)\<cdot>D) = split_select ?L (proj ?L\<cdot>\<kappa>)\<cdot>D"
+    using inner_select [OF kk c cU] by (simp only: LU)
+  then show ?thesis
+    unfolding gcontent_ext_def sel_select_def U by (simp add: split_select_keyguard_comm split_select_rowguard_comm)
+qed
+
+lemma inner_vcontent:
+  assumes kk: "proj (flod F)\<cdot>\<kappa> = k" and c: "compact (proj (sel_at (esel e) (flod F))\<cdot>\<kappa>)"
+    and cU: "compact (proj (eupper e \<sqinter> flod F)\<cdot>k)"
+  shows "vcontent_ext D e F \<kappa> = split_view (eview e)\<cdot>(split_select (elower e) (proj (elower e)\<cdot>\<kappa>)\<cdot>(vcontent_ext D (release e) F k))"
+proof -
+  let ?L = "sel_at (esel e) (flod F)" and ?U = "eupper e \<sqinter> flod F" and ?l = "elower e"
+  have U: "sel_at (esel (release e)) (flod F) = ?U" by simp
+  have cl: "compact (proj ?l\<cdot>\<kappa>)"
+  proof -
+    have "proj ?l\<cdot>(proj ?L\<cdot>\<kappa>) = proj ?l\<cdot>\<kappa>" by (rule proj_le) (rule lattice_join_ge1)
+    then show ?thesis using compact_proj_compact [OF c, of ?l] by simp
+  qed
+  have lv: "?l \<sqsubseteq> snd (eview (release e))" by (simp add: lattice_join_ge2)
+  have "split_select ?l (proj ?l\<cdot>\<kappa>)\<cdot>(vcontent_ext D (release e) F k)
+      = split_view (eview (release e))\<cdot>(split_select ?l (proj ?l\<cdot>\<kappa>)\<cdot>(split_select ?U (proj ?U\<cdot>k)\<cdot>D))"
+    unfolding vcontent_ext_def sel_select_def U by (rule split_select_view [OF lv])
+  also have "\<dots> = split_view (eview (release e))\<cdot>(split_select ?L (proj ?L\<cdot>\<kappa>)\<cdot>D)"
+    by (simp only: inner_select [OF kk cl cU])
+  finally show ?thesis
+    unfolding vcontent_ext_def sel_select_def by (simp add: split_view_view lattice_join_ge1)
+qed
+
 end
 
 end
