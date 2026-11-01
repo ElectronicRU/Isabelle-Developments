@@ -298,6 +298,12 @@ definition split_keyguard :: "('k \<rightarrow> tr) \<Rightarrow> ('r, 'k) split
 lemma split_keyguard_principal [simp]: "split_keyguard h\<cdot>(split_principal t) = split_principal (SKeyGuard h t)"
   unfolding split_keyguard_def by (simp add: split_pd.extension_principal SKeyGuard_split_mono)
 
+lemma split_keys_rowguard [simp]: "split_keys\<cdot>(split_rowguard g\<cdot>C) = split_keys\<cdot>C"
+  by (induct C rule: split_pd.principal_induct) (simp_all add: skeys_upper_def)
+
+lemma split_rows_principal_bot: "split_rows\<cdot>(split_principal t) = \<bottom> \<longleftrightarrow> srows t = {}"
+  by (simp add: srows_lower_def)
+
 subsection \<open>Selection as a key guard\<close>
 
 text \<open>Selecting exactly the part \<open>\<kappa>\<close> at the LOD \<open>s\<close> is the key guard that best approximates the
@@ -449,6 +455,69 @@ proof -
     using compact_below_lub_iff [OF compact_down [OF compact_upper_unit [OF compact_FF]] ch] by blast
   then show ?thesis using that unfolding split_refuted_def by blast
 qed
+
+text \<open>Refutation is the key guard leaving no possible keys: the possible keys mapped through the
+  key test are all false exactly when the key guard drops all of them.  On a finite set of keys this
+  is a computation; in general both sides are decided at a finite stage.\<close>
+
+lemma upper_map_principal_FF:
+  "{FF}\<sharp> \<sqsubseteq> upper_map\<cdot>h\<cdot>(upper_principal P) \<longleftrightarrow> (\<forall>u\<in>Rep_pd_basis P. h\<cdot>(Rep_compact_basis u) = FF)"
+proof (induct P rule: pd_basis_induct)
+  case (PDUnit a)
+  show ?case by (simp add: upper_unit_Rep_compact_basis [symmetric] Rep_PDUnit del: upper_unit_Rep_compact_basis)
+next
+  case (PDPlus t u)
+  show ?case
+    by (simp add: upper_plus_principal [symmetric] Rep_PDPlus PDPlus.hyps del: upper_plus_principal) blast
+qed
+
+lemma keys_refuted_principal:
+  "down\<cdot>{FF}\<sharp> \<sqsubseteq> cmap_top\<cdot>(upper_map\<cdot>h)\<cdot>(split_keys\<cdot>(split_principal t :: ('r, 'k) split_pd)) \<longleftrightarrow>
+     split_keys\<cdot>(split_keyguard h\<cdot>(split_principal t :: ('r, 'k) split_pd)) = Top"
+proof (cases "skeys t = {}")
+  case True
+  then show ?thesis by (simp add: skeys_upper_def)
+next
+  case False
+  have K: "Rep_pd_basis (Abs_pd_basis (skeys t)) = skeys t"
+    by (rule Abs_pd_basis_inverse) (simp add: pd_basis_def False)
+  have "down\<cdot>{FF}\<sharp> \<sqsubseteq> cmap_top\<cdot>(upper_map\<cdot>h)\<cdot>(split_keys\<cdot>(split_principal t :: ('r, 'k) split_pd)) \<longleftrightarrow>
+      (\<forall>u\<in>skeys t. h\<cdot>(Rep_compact_basis u) = FF)"
+  proof -
+    have e: "split_keys\<cdot>(split_principal t :: ('r, 'k) split_pd) = down\<cdot>(upper_principal (Abs_pd_basis (skeys t)))"
+      by (simp add: skeys_upper_def False)
+    show ?thesis unfolding e cmap_top_down unfolding down_beta below_Of upper_map_principal_FF K ..
+  qed
+  moreover have "split_keys\<cdot>(split_keyguard h\<cdot>(split_principal t :: ('r, 'k) split_pd)) = Top \<longleftrightarrow>
+      (\<forall>u\<in>skeys t. h\<cdot>(Rep_compact_basis u) = FF)"
+    by (auto simp: skeys_upper_def down_beta)
+  ultimately show ?thesis by simp
+qed
+
+lemma keys_refuted_iff:
+  "down\<cdot>{FF}\<sharp> \<sqsubseteq> cmap_top\<cdot>(upper_map\<cdot>h)\<cdot>(split_keys\<cdot>E) \<longleftrightarrow> split_keys\<cdot>(split_keyguard h\<cdot>E) = Top"
+proof -
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and EZ: "E = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  let ?F = "\<lambda>E. cmap_top\<cdot>(upper_map\<cdot>h)\<cdot>(split_keys\<cdot>E)" and ?G = "\<lambda>E. split_keys\<cdot>(split_keyguard h\<cdot>E)"
+  have chF: "chain (\<lambda>i. ?F (split_principal (Z i)))" and chG: "chain (\<lambda>i. ?G (split_principal (Z i)))"
+    by (intro ch2ch_Rep_cfunR ch)+
+  have F: "?F E = (\<Squnion>i. ?F (split_principal (Z i)))"
+    unfolding EZ by (simp only: contlub_cfun_arg [OF ch] contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF ch]])
+  have G: "?G E = (\<Squnion>i. ?G (split_principal (Z i)))"
+    unfolding EZ by (simp only: contlub_cfun_arg [OF ch] contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF ch]])
+  have "down\<cdot>{FF}\<sharp> \<sqsubseteq> ?F E \<longleftrightarrow> (\<exists>i. down\<cdot>{FF}\<sharp> \<sqsubseteq> ?F (split_principal (Z i)))"
+    unfolding F by (rule compact_below_lub_iff [OF compact_down [OF compact_upper_unit [OF compact_FF]] chF])
+  also have "\<dots> \<longleftrightarrow> (\<exists>i. Top \<sqsubseteq> ?G (split_principal (Z i)))" by (simp only: Top_below keys_refuted_principal)
+  also have "\<dots> \<longleftrightarrow> Top \<sqsubseteq> ?G E"
+    unfolding G by (rule compact_below_lub_iff [OF compact_Top chG, symmetric])
+  finally show ?thesis by simp
+qed
+
+lemma split_refuted_keyguard:
+  "split_refuted s \<kappa> h D \<longleftrightarrow> split_keys\<cdot>(split_keyguard h\<cdot>(split_select s \<kappa>\<cdot>D)) = Top"
+  unfolding split_refuted_def by (rule keys_refuted_iff)
 
 text \<open>A refuted part has no possible key there on which the test is not false.\<close>
 

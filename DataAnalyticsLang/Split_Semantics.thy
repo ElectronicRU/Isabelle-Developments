@@ -1197,6 +1197,79 @@ proof -
   ultimately show ?thesis unfolding select_test_def by (simp only:)
 qed
 
+text \<open>The selection test is the plain presence test on the dataset as seen from the entry: selected
+  at the part, filtered by the key guard and by the row guard.  Present where it has rows (at a
+  maximal part, passing both guards), absent where it has no possible keys, undecided otherwise.\<close>
+
+definition split_present :: "('r, 'k) split_pd \<Rightarrow> tr" where
+  "split_present C = (if split_rows\<cdot>C \<noteq> \<bottom> then TT else if split_keys\<cdot>C = Top then FF else \<bottom>)"
+
+lemma select_test_guarded:
+  assumes k: "compact \<kappa>"
+  shows "select_test s \<kappa> g h D = split_present (split_rowguard g\<cdot>(split_keyguard h\<cdot>(split_select s \<kappa>\<cdot>D)))"
+proof -
+  let ?C = "split_rowguard g\<cdot>(split_keyguard h\<cdot>(split_select s \<kappa>\<cdot>D))"
+  let ?T = "maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT \<and> h\<cdot>(row_key\<cdot>y) = TT)"
+  let ?B = "\<lambda>t. SRowGuard g (SKeyGuard h (SSelect s \<kappa> t))"
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and DZ: "D = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  have ch1: "chain (\<lambda>i. split_principal (SSelect s \<kappa> (Z i)))"
+    by (rule split_pd.ch2ch_principal) (blast intro: Z [rule_format] SSelect_split_mono)
+  have ch2: "chain (\<lambda>i. split_principal (SKeyGuard h (SSelect s \<kappa> (Z i))))"
+    by (rule split_pd.ch2ch_principal) (blast intro: Z [rule_format] SKeyGuard_split_mono SSelect_split_mono)
+  have chB: "chain (\<lambda>i. split_principal (?B (Z i)))"
+    by (rule split_pd.ch2ch_principal) (blast intro: Z [rule_format] SRowGuard_split_mono SKeyGuard_split_mono SSelect_split_mono)
+  have C: "?C = (\<Squnion>i. split_principal (?B (Z i)))"
+  proof -
+    have "split_select s \<kappa>\<cdot>D = (\<Squnion>i. split_principal (SSelect s \<kappa> (Z i)))"
+      unfolding DZ contlub_cfun_arg [OF ch] by simp
+    moreover have "split_keyguard h\<cdot>(\<Squnion>i. split_principal (SSelect s \<kappa> (Z i))) = (\<Squnion>i. split_principal (SKeyGuard h (SSelect s \<kappa> (Z i))))"
+      unfolding contlub_cfun_arg [OF ch1] by simp
+    moreover have "split_rowguard g\<cdot>(\<Squnion>i. split_principal (SKeyGuard h (SSelect s \<kappa> (Z i)))) = (\<Squnion>i. split_principal (?B (Z i)))"
+      unfolding contlub_cfun_arg [OF ch2] by simp
+    ultimately show ?thesis by simp
+  qed
+  have rows: "split_rows\<cdot>?C \<noteq> \<bottom> \<longleftrightarrow> (\<exists>i. srows (?B (Z i)) \<noteq> {})"
+  proof -
+    have e: "split_rows\<cdot>?C = (\<Squnion>i. split_rows\<cdot>(split_principal (?B (Z i))))"
+      unfolding C by (rule contlub_cfun_arg [OF chB])
+    have "split_rows\<cdot>?C \<noteq> \<bottom> \<longleftrightarrow> \<not> (\<forall>i. split_rows\<cdot>(split_principal (?B (Z i))) = \<bottom>)"
+      unfolding e by (simp only: lub_eq_bottom_iff [OF ch2ch_Rep_cfunR [OF chB]])
+    then show ?thesis by (simp only: split_rows_principal_bot) blast
+  qed
+  have tt: "?T \<longleftrightarrow> (\<exists>i. srows (?B (Z i)) \<noteq> {})"
+  proof
+    assume "?T"
+    then obtain y where mx: "maximal_at s \<kappa>" and y: "split_definite y D" "rproj s y = \<kappa>" and gy: "g\<cdot>y = TT"
+      and hy: "h\<cdot>(row_key\<cdot>y) = TT" by blast
+    let ?f = "\<Lambda> y. (rproj s y, g\<cdot>y, h\<cdot>(row_key\<cdot>y))"
+    obtain y0 where y0: "compact y0" "y0 \<sqsubseteq> y" "?f\<cdot>y0 = ?f\<cdot>y"
+      by (rule compact_approx_value [of ?f y]) (simp add: gy hy k [folded y(2)] compact_TT)
+    have e: "rproj s y0 = \<kappa>" "g\<cdot>y0 = TT" "h\<cdot>(row_key\<cdot>y0) = TT" using y0(3) y(2) gy hy by simp_all
+    have "split_definite y0 (\<Squnion>i. split_principal (Z i))" using split_definite_below [OF y(1) y0(2)] unfolding DZ .
+    then obtain i x where x: "x \<in> srows (Z i)" "y0 \<sqsubseteq> Rep_compact_basis x"
+      by (rule definite_chain_generator [OF Z _ y0(1)])
+    have "rproj s y0 \<sqsubseteq> rproj s (Rep_compact_basis x)" by (intro monofun_cfun_arg x(2))
+    then have xk: "rproj s (Rep_compact_basis x) = \<kappa>" unfolding e(1) by (rule maximal_at_eq [OF mx proj_idem])
+    have xg: "g\<cdot>(Rep_compact_basis x) = TT" by (rule TT_up [OF e(2) x(2)])
+    have xh: "h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT" by (rule TT_up [OF e(3) monofun_cfun_arg [OF x(2)]])
+    have "x \<in> srows (?B (Z i))" using x(1) xk xg xh mx by simp
+    then show "\<exists>i. srows (?B (Z i)) \<noteq> {}" by blast
+  next
+    assume "\<exists>i. srows (?B (Z i)) \<noteq> {}"
+    then obtain i x where x: "x \<in> srows (?B (Z i))" by blast
+    then have xZ: "x \<in> srows (Z i)" and mx: "maximal_at s \<kappa>" and xk: "rproj s (Rep_compact_basis x) = \<kappa>"
+      and xg: "g\<cdot>(Rep_compact_basis x) = TT" and xh: "h\<cdot>(row_key\<cdot>(Rep_compact_basis x)) = TT" by simp_all
+    have "split_definite (Rep_compact_basis x) D"
+      by (rule split_definite_mono [OF generator_definite [OF xZ]]) (simp only: DZ is_ub_thelub [OF ch])
+    then show "?T" using mx xk xg xh by blast
+  qed
+  have ff: "split_refuted s \<kappa> h D \<longleftrightarrow> split_keys\<cdot>?C = Top"
+    by (simp only: split_keys_rowguard split_refuted_keyguard)
+  show ?thesis unfolding select_test_def split_present_def by (simp only: rows tt [symmetric] ff)
+qed
+
 lemma impossible_refuted:
   assumes n: "\<not> split_possible_at s \<kappa> D"
   shows "split_refuted s \<kappa> h D"
