@@ -63,6 +63,58 @@ lemma split_possible_below: "split_possible k ys \<Longrightarrow> xs \<sqsubset
   unfolding split_possible_keys by (erule below_trans [rotated], erule monofun_cfun_arg)
 
 
+subsection \<open>Deciding at a finite stage\<close>
+
+text \<open>A compact definite row of the lub of a chain is definite at some stage, and definite rows
+  are closed downwards.  A continuous function with a compact value at a row takes that value at a
+  compact row below.\<close>
+
+lemma split_definite_below: "split_definite x D \<Longrightarrow> x' \<sqsubseteq> x \<Longrightarrow> split_definite x' D"
+  unfolding split_definite_def by (erule below_trans [rotated]) simp
+
+lemma split_definite_lub_compact:
+  assumes Y: "chain Y" and x: "compact x" and d: "split_definite x (\<Squnion>i. Y i)"
+  obtains i where "split_definite x (Y i)"
+  using d compact_below_lub_iff [OF compact_split_open_unit [OF x] Y] unfolding split_definite_def by blast
+
+lemma compact_approx_value:
+  fixes f :: "'a::bifinite \<rightarrow> 'b::cpo"
+  assumes c: "compact (f\<cdot>y)"
+  obtains y' where "compact y'" "y' \<sqsubseteq> y" "f\<cdot>y' = f\<cdot>y"
+proof -
+  obtain a :: "nat \<Rightarrow> 'a \<rightarrow> 'a" where a: "approx_chain a" using bifinite by blast
+  interpret approx_chain a by (fact a)
+  have ch: "chain (\<lambda>i. f\<cdot>(a i\<cdot>y))" by (intro ch2ch_Rep_cfunR ch2ch_Rep_cfunL chain_approx)
+  have "f\<cdot>y = f\<cdot>((\<Squnion>i. a i)\<cdot>y)" by (simp add: lub_approx)
+  also have "\<dots> = f\<cdot>(\<Squnion>i. a i\<cdot>y)" by (simp only: contlub_cfun_fun [OF chain_approx])
+  also have "\<dots> = (\<Squnion>i. f\<cdot>(a i\<cdot>y))" by (rule contlub_cfun_arg) (intro ch2ch_Rep_cfunL chain_approx)
+  finally have "f\<cdot>y = (\<Squnion>i. f\<cdot>(a i\<cdot>y))" .
+  then obtain i where i: "f\<cdot>y \<sqsubseteq> f\<cdot>(a i\<cdot>y)" using compact_below_lub_iff [OF c ch] by auto
+  have le: "a i\<cdot>y \<sqsubseteq> y" by (rule deflation.below [OF finite_deflation_imp_deflation [OF finite_deflation_approx]])
+  have "f\<cdot>(a i\<cdot>y) = f\<cdot>y" by (rule below_antisym [OF monofun_cfun_arg [OF le] i])
+  then show ?thesis using that le finite_deflation.compact [OF finite_deflation_approx] by blast
+qed
+
+text \<open>A key part is \<^emph>\<open>possible\<close> at an LOD where the possible keys, projected there, allow it.
+  Possibility of a key gives possibility of its part; it is antitone in the dataset and survives
+  to the lub of a chain, so impossibility is decided at a finite stage.\<close>
+
+definition split_possible_at :: "'k::{bifinite, distributive_cpo} semi_factor \<Rightarrow> 'k \<Rightarrow> ('r::bifinite, 'k) split_pd \<Rightarrow> bool" where
+  "split_possible_at c \<kappa> D \<longleftrightarrow> cmap_top\<cdot>(upper_map\<cdot>(proj c))\<cdot>(split_keys\<cdot>D) \<sqsubseteq> down\<cdot>{\<kappa>}\<sharp>"
+
+lemma split_possible_atI: "split_possible u D \<Longrightarrow> split_possible_at c (proj c\<cdot>u) D"
+  unfolding split_possible_at_def split_possible_keys
+  by (drule monofun_cfun_arg [of _ _ "cmap_top\<cdot>(upper_map\<cdot>(proj c))"]) simp
+
+lemma split_possible_at_below: "split_possible_at c \<kappa> D' \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> split_possible_at c \<kappa> D"
+  unfolding split_possible_at_def by (erule below_trans [rotated]) (intro monofun_cfun_arg)
+
+lemma split_possible_at_lub:
+  assumes Y: "chain Y" and p: "\<And>i. split_possible_at c \<kappa> (Y i)"
+  shows "split_possible_at c \<kappa> (\<Squnion>i. Y i)"
+  unfolding split_possible_at_def contlub_cfun_arg [OF Y] contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF Y]]
+  by (rule lub_below) (simp_all add: Y p [unfolded split_possible_at_def])
+
 subsection \<open>Expressions with an extended semantics\<close>
 
 text \<open>An extended expression is an expression with a semantics over split datasets as well.\<close>
@@ -118,23 +170,45 @@ lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarro
 definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_lawful X \<longleftrightarrow> semilawful X \<and> ext_sound X"
 
-text \<open>\<^emph>\<open>Continuity\<close> on split datasets with conforming definite rows: along a chain of them
-  the extended semantics has the value at the lub as its lub.  This includes monotonicity there,
-  and like @{thm contI2} it follows from monotonicity and the bound at the lub.  Then the extended
-  semantics is a continuous function on the conforming split datasets.\<close>
+text \<open>A frame is \<^emph>\<open>LOD-bounded\<close> when its LOD lies below a compact one; its keys then have compact
+  parts at the LODs below.\<close>
+
+definition lod_bounded :: "('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
+  "lod_bounded F \<longleftrightarrow> (\<exists>M. compact M \<and> flod F \<sqsubseteq> M)"
+
+lemma lod_bounded_frestrict [simp]: "lod_bounded (frestrict \<gamma> F) \<longleftrightarrow> lod_bounded F"
+  by (simp add: lod_bounded_def)
+
+lemma lod_bounded_ffor: "lod_bounded F \<Longrightarrow> lod_bounded (ffor \<tau> G F)"
+  unfolding lod_bounded_def by (auto intro: below_trans [OF lattice_meet_le2])
+
+lemma lod_bounded_finclude: "lod_bounded F \<Longrightarrow> compact M \<Longrightarrow> lod_bounded (finclude M F)"
+  unfolding lod_bounded_def flod_finclude by (blast intro: compact_semi_factor_sup lattice_join_mono)
+
+lemma compact_proj_bounded: "compact B \<Longrightarrow> L \<sqsubseteq> B \<Longrightarrow> compact (proj L\<cdot>(k::'k))"
+proof -
+  assume B: "compact B" and LB: "L \<sqsubseteq> B"
+  have "proj L\<cdot>k = proj L\<cdot>(proj B\<cdot>k)" by (rule proj_le [OF LB, symmetric])
+  then show ?thesis using compact_proj_compact [OF proj_compact [OF B, of k], of L] by simp
+qed
+
+text \<open>\<^emph>\<open>Continuity\<close> on split datasets with conforming definite rows, at LOD-bounded frames: along
+  a chain of datasets the extended semantics has the value at the lub as its lub.  This includes
+  monotonicity there, and like @{thm contI2} it follows from monotonicity and the bound at the
+  lub.  Then the extended semantics is a continuous function on the conforming split datasets.\<close>
 
 definition ext_cont :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
-  "ext_cont X \<longleftrightarrow> (\<forall>Y F k. chain Y \<longrightarrow> (\<forall>i. conforming_rows (split_rows\<cdot>(Y i))) \<longrightarrow>
+  "ext_cont X \<longleftrightarrow> (\<forall>Y F k. lod_bounded F \<longrightarrow> chain Y \<longrightarrow> (\<forall>i. conforming_rows (split_rows\<cdot>(Y i))) \<longrightarrow>
      range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k)"
 
 lemma ext_contD:
-  "ext_cont X \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
+  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
      range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
   unfolding ext_cont_def by blast
 
 lemma ext_cont_mono:
-  assumes c: "ext_cont X" and D: "conforming_rows (split_rows\<cdot>D)" and D': "conforming_rows (split_rows\<cdot>D')"
-    and le: "D \<sqsubseteq> D'"
+  assumes c: "ext_cont X" and F: "lod_bounded F"
+    and D: "conforming_rows (split_rows\<cdot>D)" and D': "conforming_rows (split_rows\<cdot>D')" and le: "D \<sqsubseteq> D'"
   shows "sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
 proof -
   let ?Y = "\<lambda>i::nat. if i = 0 then D else D'"
@@ -142,31 +216,45 @@ proof -
   have l: "(\<Squnion>i. ?Y i) = D'"
     by (rule lub_eqI, rule is_lubI) (auto simp: is_ub_def le dest: ub_rangeD [of _ 1])
   have "range (\<lambda>i. sem_ext X (?Y i) F k) <<| sem_ext X D' F k"
-    using ext_contD [OF c Y, of F k] D D' unfolding l by simp
+    using ext_contD [OF c F Y, of k] D D' unfolding l by simp
   then show ?thesis using is_lubD1 [THEN ub_rangeD, of _ _ 0] by fastforce
 qed
 
+lemma ext_cont_chain:
+  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
+     chain (\<lambda>i. sem_ext X (Y i) F k)"
+  by (rule chainI) (simp add: ext_cont_mono chainE)
+
+lemma ext_cont_lub:
+  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
+     sem_ext X (\<Squnion>i. Y i) F k = (\<Squnion>i. sem_ext X (Y i) F k)"
+  by (rule lub_eqI [symmetric]) (rule ext_contD)
+
+lemma conforming_rows_lub:
+  "chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow> conforming_rows (split_rows\<cdot>(\<Squnion>i. Y i))"
+  unfolding contlub_cfun_arg by (rule admD [OF adm_conforming_rows ch2ch_Rep_cfunR]) simp_all
+
 lemma ext_contI2:
-  assumes m: "\<And>(D :: ('r, 'k) split_pd) D' F k. conforming_rows (split_rows\<cdot>D) \<Longrightarrow> conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow>
-      sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
-    and l: "\<And>(Y :: nat \<Rightarrow> ('r, 'k) split_pd) F k. chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
-      sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
+  assumes m: "\<And>(D :: ('r, 'k) split_pd) D' F k. lod_bounded F \<Longrightarrow> conforming_rows (split_rows\<cdot>D) \<Longrightarrow>
+      conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
+    and l: "\<And>(Y :: nat \<Rightarrow> ('r, 'k) split_pd) F k. lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow>
+      (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow> sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
   shows "ext_cont X"
   unfolding ext_cont_def
 proof (intro allI impI)
-  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k assume Y: "chain Y" and cf: "\<forall>i. conforming_rows (split_rows\<cdot>(Y i))"
-  have cY: "chain (\<lambda>i. sem_ext X (Y i) F k)" by (rule chainI) (simp add: m cf chainE [OF Y])
-  have cL: "conforming_rows (split_rows\<cdot>(\<Squnion>i. Y i))"
-    unfolding contlub_cfun_arg [OF Y] by (rule admD [OF adm_conforming_rows ch2ch_Rep_cfunR [OF Y]]) (simp add: cf)
-  have ub: "sem_ext X (Y i) F k \<sqsubseteq> sem_ext X (\<Squnion>i. Y i) F k" for i by (rule m [OF _ cL is_ub_thelub [OF Y]]) (simp add: cf)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k
+  assume F: "lod_bounded F" and Y: "chain Y" and cf: "\<forall>i. conforming_rows (split_rows\<cdot>(Y i))"
+  have cY: "chain (\<lambda>i. sem_ext X (Y i) F k)" by (rule chainI) (simp add: m F cf chainE [OF Y])
+  have cL: "conforming_rows (split_rows\<cdot>(\<Squnion>i. Y i))" by (rule conforming_rows_lub [OF Y]) (simp add: cf)
+  have ub: "sem_ext X (Y i) F k \<sqsubseteq> sem_ext X (\<Squnion>i. Y i) F k" for i by (rule m [OF F _ cL is_ub_thelub [OF Y]]) (simp add: cf)
   have "(\<Squnion>i. sem_ext X (Y i) F k) = sem_ext X (\<Squnion>i. Y i) F k"
-    by (rule below_antisym [OF lub_below [OF cY ub] l [OF Y]]) (simp add: cf)
+    by (rule below_antisym [OF lub_below [OF cY ub] l [OF F Y]]) (simp add: cf)
   then show "range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
     using cpo_lubI [OF cY] by simp
 qed
 
 lemma cont_sem_ext_conf:
-  assumes c: "ext_cont X"
+  assumes c: "ext_cont X" and F: "lod_bounded F"
   shows "cont (\<lambda>D :: ('r, 'k) conf_split. sem_ext X (Rep_conf_split D) F k)"
 proof (rule contI)
   have conf: "conforming_rows (split_rows\<cdot>(Rep_conf_split D))" for D :: "('r, 'k) conf_split"
@@ -175,27 +263,28 @@ proof (rule contI)
   have R: "chain (\<lambda>i. Rep_conf_split (Y i))" by (rule ch2ch_cont [OF cont_Rep_conf_split [OF cont_id] Y])
   have "Rep_conf_split (\<Squnion>i. Y i) = (\<Squnion>i. Rep_conf_split (Y i))" by (rule cont2contlubE [OF cont_Rep_conf_split [OF cont_id] Y])
   then show "range (\<lambda>i. sem_ext X (Rep_conf_split (Y i)) F k) <<| sem_ext X (Rep_conf_split (\<Squnion>i. Y i)) F k"
-    using ext_contD [OF c R conf] by simp
+    using ext_contD [OF c F R conf] by simp
 qed
 
 definition ext_fun :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) conf_split \<rightarrow> 'v option_pd" where
   "ext_fun X F k = (\<Lambda> D. sem_ext X (Rep_conf_split D) F k)"
 
-lemma ext_fun_apply: "ext_cont X \<Longrightarrow> ext_fun X F k\<cdot>D = sem_ext X (Rep_conf_split D) F k"
+lemma ext_fun_apply: "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> ext_fun X F k\<cdot>D = sem_ext X (Rep_conf_split D) F k"
   unfolding ext_fun_def by (rule beta_cfun [OF cont_sem_ext_conf])
 
 
 subsection \<open>Keys\<close>
 
-text \<open>The key at an LOD \<open>c\<close> is present where some definite row has it.  Where the key is
-  maximal at \<open>c\<close> it stays present; where it is partial the row may still move up, so it is
-  present or absent, present with that key.  Where no definite row has the key, it is absent if no
-  possible key projects to it, and undecided otherwise.\<close>
+text \<open>The key at an LOD \<open>c\<close> is absent where the possible keys do not allow it there.  Otherwise
+  it is present where some definite row has it: where the key is maximal at \<open>c\<close> it stays present;
+  where it is partial the row may still move up, so it is present or absent, present with that key.
+  Otherwise it is undecided.\<close>
 
 abbreviation key_at_sem :: "'k semi_factor \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'k option_pd" where
-  "key_at_sem c D k \<equiv> if \<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k
+  "key_at_sem c D k \<equiv> if \<not> split_possible_at c (proj c\<cdot>k) D then Absent
+     else if \<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k
      then (if maximal_at c (proj c\<cdot>k) then Present\<cdot>(proj c\<cdot>k) else Present\<cdot>(proj c\<cdot>k) + Absent)
-     else if \<exists>u. split_possible u D \<and> proj c\<cdot>u = proj c\<cdot>k then \<bottom> else Absent"
+     else \<bottom>"
 
 definition key_at_ext :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'k) expr_ext" where
   "key_at_ext c = with_ext (key_at c) (\<lambda>D F k. key_at_sem c D k)"
@@ -237,6 +326,12 @@ proof -
   then show ?thesis by (rule split_possible_below [OF _ DD])
 qed
 
+lemma impossible_at_no_point:
+  assumes DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
+    and m: "m \<in> lower_maximal data" and n: "\<not> split_possible_at c \<kappa> D"
+  shows "rproj c m \<noteq> \<kappa>"
+  using split_possible_atI [OF impossible_no_point [OF DD cD d m], of c] n by auto
+
 theorem ext_sound_key_at: "ext_sound (key_at_ext c)"
 proof (rule ext_soundI, simp only: key_at_ext_simps)
   fix D D' :: "('r, 'k) split_pd" and data F k
@@ -246,39 +341,33 @@ proof (rule ext_soundI, simp only: key_at_ext_simps)
   have esem: "esem (key_at c) data F k = (if fiber data c c F k = {} then Absent else Present\<cdot>(proj c\<cdot>k))"
     by simp
   show "key_at_sem c D k \<sqsubseteq> esem (key_at c) data F k"
-  proof (cases "\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k")
-    case True
-    then obtain y where y: "split_definite y D" "rproj c y = proj c\<cdot>k" by blast
+  proof (cases "split_possible_at c (proj c\<cdot>k) D")
+    case nP: False
+    have "fiber data c c F k = {}" using fib impossible_at_no_point [OF DD cD d _ nP] by blast
+    then show ?thesis by (simp only: if_P [OF nP] esem) simp
+  next
+    case P: True
     show ?thesis
-    proof (cases "maximal_at c (proj c\<cdot>k)")
-      case mx: True
-      have mx': "maximal_at c (rproj c y)" using mx y(2) by simp
-      obtain m where m: "m \<in> lower_maximal data" "rproj c m = rproj c y"
-        using definite_maximal_point [OF DD d y(1) mx'] by blast
-      have "fiber data c c F k \<noteq> {}" using fib m y(2) by auto
-      then show ?thesis using True mx by simp
+    proof (cases "\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k")
+      case True
+      then obtain y where y: "split_definite y D" "rproj c y = proj c\<cdot>k" by blast
+      show ?thesis
+      proof (cases "maximal_at c (proj c\<cdot>k)")
+        case mx: True
+        have mx': "maximal_at c (rproj c y)" using mx y(2) by simp
+        obtain m where m: "m \<in> lower_maximal data" "rproj c m = rproj c y"
+          using definite_maximal_point [OF DD d y(1) mx'] by blast
+        have "fiber data c c F k \<noteq> {}" using fib m y(2) by auto
+        then show ?thesis using P True mx by simp
+      next
+        case False
+        have "Present\<cdot>(proj c\<cdot>k) + Absent \<sqsubseteq> esem (key_at c) data F k"
+          unfolding esem by (simp add: plus_option_pd_below1 plus_option_pd_below2)
+        then show ?thesis using P True False by simp
+      qed
     next
       case False
-      have "Present\<cdot>(proj c\<cdot>k) + Absent \<sqsubseteq> esem (key_at c) data F k"
-        unfolding esem by (simp add: plus_option_pd_below1 plus_option_pd_below2)
-      then show ?thesis using True False by simp
-    qed
-  next
-    case nP: False
-    show ?thesis
-    proof (cases "\<exists>u. split_possible u D \<and> proj c\<cdot>u = proj c\<cdot>k")
-      case True
-      show ?thesis by (simp only: if_not_P [OF nP] if_P [OF True] minimal)
-    next
-      case nA: False
-      have "fiber data c c F k = {}"
-      proof (rule ccontr)
-        assume "fiber data c c F k \<noteq> {}"
-        then obtain m where m: "m \<in> lower_maximal data" "rproj c m = proj c\<cdot>k" using fib by blast
-        have "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
-        then show False using nA m(2) by blast
-      qed
-      then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] esem) simp
+      show ?thesis by (simp only: if_not_P [OF False] not_not [THEN iffD2, OF P] if_False minimal)
     qed
   qed
 qed
@@ -301,7 +390,7 @@ definition col_sections :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Righta
 abbreviation column_sem :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::bifinite) \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'w option_pd" where
   "column_sem c a v D k \<equiv> if maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}
      then Present\<cdot>(v\<cdot>(lub (col_sections c a D k)))
-     else if \<exists>u. split_possible u D \<and> proj a\<cdot>u = proj a\<cdot>k then \<bottom> else Absent"
+     else if split_possible_at a (proj a\<cdot>k) D then \<bottom> else Absent"
 
 definition column_ext :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'w) expr_ext" where
   "column_ext c a v = with_ext (column c a v) (\<lambda>D F k. column_sem c a v D k)"
@@ -361,7 +450,7 @@ proof (rule ext_soundI, simp only: column_ext_simps)
   next
     case nP: False
     show ?thesis
-    proof (cases "\<exists>u. split_possible u D \<and> proj a\<cdot>u = proj a\<cdot>k")
+    proof (cases "split_possible_at a (proj a\<cdot>k) D")
       case True
       show ?thesis by (simp only: if_not_P [OF nP] if_P [OF True] minimal)
     next
@@ -370,8 +459,7 @@ proof (rule ext_soundI, simp only: column_ext_simps)
       proof (rule ccontr)
         assume "fiber data a a F k \<noteq> {}"
         then obtain m where m: "m \<in> lower_maximal data" "rproj a m = proj a\<cdot>k" using fib by blast
-        have "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
-        then show False using nA m(2) by blast
+        show False using impossible_at_no_point [OF DD cD d m(1) nA] m(2) by blast
       qed
       then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] column_simps) simp
     qed
@@ -552,7 +640,7 @@ definition populated_ext :: "('r, 'k) split_pd \<Rightarrow> 'k semi_factor \<Ri
   "populated_ext D a \<rho> F k = (if maximal_at (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) \<and>
        (\<exists>y. split_definite y D \<and> rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k \<and> fguard \<rho> F\<cdot>y = TT)
      then TT
-     else if \<exists>u. split_possible u D \<and> proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>u = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k then \<bottom> else FF)"
+     else if split_possible_at (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) D then \<bottom> else FF)"
 
 lemma populated_ext_sound:
   assumes DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
@@ -577,7 +665,7 @@ proof -
   next
     case nT: False
     show ?thesis
-    proof (cases "\<exists>u. split_possible u D \<and> proj ?L\<cdot>u = proj ?L\<cdot>k")
+    proof (cases "split_possible_at ?L (proj ?L\<cdot>k) D")
       case True
       show ?thesis unfolding populated_ext_def by (simp only: if_not_P [OF nT] if_P [OF True] minimal)
     next
@@ -586,8 +674,7 @@ proof -
       proof (rule ccontr)
         assume "fiber data a \<rho> F k \<noteq> {}"
         then obtain m where m: "m \<in> lower_maximal data" "rproj ?L m = proj ?L\<cdot>k" using fib by blast
-        have "split_possible (row_key\<cdot>m) D" by (rule impossible_no_point [OF DD cD d m(1)])
-        then show False using nA m(2) by blast
+        show False using impossible_at_no_point [OF DD cD d m(1) nA] m(2) by blast
       qed
       then show ?thesis unfolding populated_ext_def populated_def by (simp only: if_not_P [OF nT] if_not_P [OF nA]) simp
     qed
@@ -818,6 +905,172 @@ proof -
   then have "semilawful (tuple_ext Xs)" by (simp only: semilawful_truncate)
   moreover have "ext_sound (tuple_ext Xs)" by (rule ext_sound_tuple) (simp add: X [unfolded ext_lawful_def])
   ultimately show ?thesis unfolding ext_lawful_def ..
+qed
+
+
+subsection \<open>Continuity of the combinators\<close>
+
+theorem ext_cont_const: "ext_cont (const_ext v)"
+  by (rule ext_contI2) simp_all
+
+theorem ext_cont_smap: "ext_cont X \<Longrightarrow> ext_cont (smap_ext g X)"
+proof (rule ext_contI2, simp_all only: smap_ext_simps)
+  fix D D' :: "('r, 'k) split_pd" and F k
+  assume "ext_cont X" "lod_bounded F" "conforming_rows (split_rows\<cdot>D)" "conforming_rows (split_rows\<cdot>D')" "D \<sqsubseteq> D'"
+  then show "map_option_pd g\<cdot>(sem_ext X D F k) \<sqsubseteq> map_option_pd g\<cdot>(sem_ext X D' F k)"
+    by (intro monofun_cfun_arg ext_cont_mono)
+next
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k
+  assume X: "ext_cont X" and F: "lod_bounded F" and Y: "chain Y" and c: "\<And>i. conforming_rows (split_rows\<cdot>(Y i))"
+  show "map_option_pd g\<cdot>(sem_ext X (\<Squnion>i. Y i) F k) \<sqsubseteq> (\<Squnion>i. map_option_pd g\<cdot>(sem_ext X (Y i) F k))"
+    unfolding ext_cont_lub [OF X F Y c] contlub_cfun_arg [OF ext_cont_chain [OF X F Y c]] ..
+qed
+
+theorem ext_cont_restrict: "ext_cont X \<Longrightarrow> ext_cont (restrict_ext \<gamma> X)"
+  unfolding ext_cont_def by simp
+
+theorem ext_cont_filtfor: "ext_cont X \<Longrightarrow> ext_cont (filtfor_ext \<tau> G X)"
+  unfolding ext_cont_def by (simp add: lod_bounded_ffor)
+
+theorem ext_cont_include_dims: "compact M \<Longrightarrow> ext_cont X \<Longrightarrow> ext_cont (include_dims_ext M X)"
+  unfolding ext_cont_def by (simp add: lod_bounded_finclude)
+
+theorem ext_cont_combine:
+  assumes X\<^sub>1: "ext_cont X\<^sub>1" and X\<^sub>2: "ext_cont X\<^sub>2"
+  shows "ext_cont (combine_ext f X\<^sub>1 X\<^sub>2)"
+proof (rule ext_contI2, simp_all only: combine_ext_simps)
+  fix D D' :: "('r, 'k) split_pd" and F k
+  assume F: "lod_bounded F" and c: "conforming_rows (split_rows\<cdot>D)" "conforming_rows (split_rows\<cdot>D')" and le: "D \<sqsubseteq> D'"
+  show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd X\<^sub>2 F)\<cdot>k))
+      \<sqsubseteq> lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D' F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D' F (proj (kd X\<^sub>2 F)\<cdot>k))"
+    by (intro monofun_cfun monofun_cfun_arg ext_cont_mono [OF X\<^sub>1 F c le] ext_cont_mono [OF X\<^sub>2 F c le])
+next
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k
+  assume F: "lod_bounded F" and Y: "chain Y" and c: "\<And>i. conforming_rows (split_rows\<cdot>(Y i))"
+  let ?a = "\<lambda>i. sem_ext X\<^sub>1 (Y i) F (proj (kd X\<^sub>1 F)\<cdot>k)" and ?b = "\<lambda>i. sem_ext X\<^sub>2 (Y i) F (proj (kd X\<^sub>2 F)\<cdot>k)"
+  have a: "chain ?a" and b: "chain ?b" by (rule ext_cont_chain [OF X\<^sub>1 F Y c], rule ext_cont_chain [OF X\<^sub>2 F Y c])
+  have "lift2_option_pd f\<cdot>(\<Squnion>i. ?a i)\<cdot>(\<Squnion>i. ?b i) = (\<Squnion>i. lift2_option_pd f\<cdot>(?a i)\<cdot>(?b i))"
+    by (simp add: contlub_cfun_arg [OF a] lub_APP [OF ch2ch_Rep_cfunR [OF a] b])
+  then show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 (\<Squnion>i. Y i) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 (\<Squnion>i. Y i) F (proj (kd X\<^sub>2 F)\<cdot>k))
+      \<sqsubseteq> (\<Squnion>i. lift2_option_pd f\<cdot>(?a i)\<cdot>(?b i))"
+    by (simp only: ext_cont_lub [OF X\<^sub>1 F Y c] ext_cont_lub [OF X\<^sub>2 F Y c] below_refl)
+qed
+
+theorem ext_cont_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_cont X) \<Longrightarrow> ext_cont (tuple_ext Xs)"
+  by (induct Xs) (simp_all add: ext_cont_const const_ext_def [symmetric] ext_cont_combine)
+
+text \<open>A definite row at a compact key part maximal at \<open>c\<close> makes that key part possible: at each
+  basis element above a compact approximation of the row, a generator above it carries the key
+  part, and its key is above a possible key.\<close>
+
+lemma definite_maximal_possible:
+  assumes y: "split_definite y D" and c: "compact (rproj c y)" and mx: "maximal_at c (rproj c y)"
+  shows "split_possible_at c (rproj c y) D"
+proof -
+  obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "(proj c oo row_key)\<cdot>y' = (proj c oo row_key)\<cdot>y"
+    by (rule compact_approx_value [of "proj c oo row_key" y]) (simp add: c)
+  have ky: "rproj c y' = rproj c y" using y'(3) by simp
+  have dy: "split_definite y' D" by (rule split_definite_below [OF y y'(2)])
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and DZ: "D = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  obtain i0 where i0: "split_definite y' (split_principal (Z i0))"
+    using split_definite_lub_compact [OF ch y'(1)] dy DZ by blast
+  have p: "split_possible_at c (rproj c y) (split_principal (Z (j + i0)))" for j
+  proof -
+    have "split_definite y' (split_principal (Z (j + i0)))"
+      by (rule split_definite_mono [OF i0 chain_mono [OF ch]]) simp
+    then have "split_definite (Rep_compact_basis (Abs_compact_basis y')) (split_principal (Z (j + i0)))"
+      by (simp only: Abs_compact_basis_inverse' [OF y'(1)])
+    then obtain x where x0: "x \<in> srows (Z (j + i0))" "Abs_compact_basis y' \<sqsubseteq> x"
+      unfolding split_definite_principal by blast
+    have x: "x \<in> srows (Z (j + i0))" "y' \<sqsubseteq> Rep_compact_basis x"
+      using x0 unfolding compact_le_def Abs_compact_basis_inverse' [OF y'(1)] by simp_all
+    obtain u where u: "u \<in> skeys (Z (j + i0))" "Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x)"
+      using split_basis_consistentD [OF x(1)] by blast
+    have "split_possible (Rep_compact_basis u) (split_principal (Z (j + i0)))"
+      using u(1) by (auto simp: split_possible_principal)
+    then have "split_possible (row_key\<cdot>(Rep_compact_basis x)) (split_principal (Z (j + i0)))"
+      by (rule split_possible_up [OF _ u(2)])
+    then have p: "split_possible_at c (rproj c (Rep_compact_basis x)) (split_principal (Z (j + i0)))"
+      by (rule split_possible_atI)
+    have "rproj c y' \<sqsubseteq> rproj c (Rep_compact_basis x)" by (intro monofun_cfun_arg x(2))
+    then have "rproj c (Rep_compact_basis x) = rproj c y"
+      unfolding ky by (rule maximal_at_eq [OF mx proj_idem])
+    then show ?thesis using p by simp
+  qed
+  have ch': "chain (\<lambda>j. split_principal (Z (j + i0)))" by (rule chain_shift [OF ch])
+  have "split_possible_at c (rproj c y) (\<Squnion>j. split_principal (Z (j + i0)))" by (rule split_possible_at_lub [OF ch' p])
+  then show ?thesis unfolding lub_range_shift [OF ch] DZ .
+qed
+
+lemma key_at_sem_mono:
+  assumes c: "compact c" and le: "D \<sqsubseteq> D'"
+  shows "key_at_sem c D k \<sqsubseteq> key_at_sem c D' k"
+proof (cases "split_possible_at c (proj c\<cdot>k) D")
+  case nP: False
+  then have "\<not> split_possible_at c (proj c\<cdot>k) D'" using split_possible_at_below [OF _ le] by blast
+  then show ?thesis using nP by simp
+next
+  case P: True
+  show ?thesis
+  proof (cases "\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k")
+    case A: True
+    then obtain y where y: "split_definite y D" "rproj c y = proj c\<cdot>k" by blast
+    have A': "\<exists>y. split_definite y D' \<and> rproj c y = proj c\<cdot>k" using split_definite_mono [OF y(1) le] y(2) by blast
+    show ?thesis
+    proof (cases "maximal_at c (proj c\<cdot>k)")
+      case mx: True
+      have "split_possible_at c (rproj c y) D'"
+        by (rule definite_maximal_possible [OF split_definite_mono [OF y(1) le]]) (simp_all add: y(2) mx proj_compact [OF c])
+      then have P': "split_possible_at c (proj c\<cdot>k) D'" by (simp only: y(2))
+      show ?thesis by (simp only: not_not [THEN iffD2, OF P] not_not [THEN iffD2, OF P'] if_False if_P [OF A] if_P [OF A'] if_P [OF mx] below_refl)
+    next
+      case False
+      then show ?thesis using P A A' by (auto simp: plus_option_pd_below2)
+    qed
+  next
+    case False
+    show ?thesis by (simp only: not_not [THEN iffD2, OF P] if_False if_not_P [OF False] minimal)
+  qed
+qed
+
+theorem ext_cont_key_at:
+  assumes c: "compact c"
+  shows "ext_cont (key_at_ext c)"
+proof (rule ext_contI2, simp_all only: key_at_ext_simps)
+  fix D D' :: "('r, 'k) split_pd" and k
+  assume "D \<sqsubseteq> D'"
+  then show "key_at_sem c D k \<sqsubseteq> key_at_sem c D' k" by (rule key_at_sem_mono [OF c])
+next
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and k
+  assume Y: "chain Y"
+  have ch: "chain (\<lambda>i. key_at_sem c (Y i) k)" by (rule chainI) (simp add: key_at_sem_mono [OF c] chainE [OF Y])
+  have stage: "key_at_sem c (\<Squnion>i. Y i) k \<sqsubseteq> (\<Squnion>i. key_at_sem c (Y i) k)" if "key_at_sem c (\<Squnion>i. Y i) k = key_at_sem c (Y i) k" for i
+    unfolding that by (rule is_ub_thelub [OF ch])
+  show "key_at_sem c (\<Squnion>i. Y i) k \<sqsubseteq> (\<Squnion>i. key_at_sem c (Y i) k)"
+  proof (cases "split_possible_at c (proj c\<cdot>k) (\<Squnion>i. Y i)")
+    case nP: False
+    then obtain i where i: "\<not> split_possible_at c (proj c\<cdot>k) (Y i)" using split_possible_at_lub [OF Y] by blast
+    show ?thesis by (rule stage [of i]) (simp add: nP i)
+  next
+    case P: True
+    have Pi: "split_possible_at c (proj c\<cdot>k) (Y i)" for i by (rule split_possible_at_below [OF P is_ub_thelub [OF Y]])
+    show ?thesis
+    proof (cases "\<exists>y. split_definite y (\<Squnion>i. Y i) \<and> rproj c y = proj c\<cdot>k")
+      case True
+      then obtain y where y: "split_definite y (\<Squnion>i. Y i)" "rproj c y = proj c\<cdot>k" by blast
+      obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "(proj c oo row_key)\<cdot>y' = (proj c oo row_key)\<cdot>y"
+        by (rule compact_approx_value [of "proj c oo row_key" y]) (simp add: y(2) proj_compact [OF c])
+      obtain i where i: "split_definite y' (Y i)"
+        by (rule split_definite_lub_compact [OF Y y'(1) split_definite_below [OF y(1) y'(2)]])
+      have Ai: "\<exists>y. split_definite y (Y i) \<and> rproj c y = proj c\<cdot>k" using i y'(3) y(2) by auto
+      show ?thesis by (rule stage [of i]) (simp add: P Pi True Ai)
+    next
+      case False
+      show ?thesis by (simp only: not_not [THEN iffD2, OF P] if_False if_not_P [OF False] minimal)
+    qed
+  qed
 qed
 
 end
