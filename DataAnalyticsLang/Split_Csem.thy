@@ -393,6 +393,178 @@ next
   show ?case unfolding ext_factors_def tuple_ext.simps by (rule exI, rule ext_csem_combine [OF c c' sX sXs])
 qed
 
+subsection \<open>Monotonicity in the contents\<close>
+
+text \<open>A content semantics is \<^emph>\<open>monotone\<close> on the contents below those of a conforming dataset.
+  It cannot be monotone everywhere: a column joins the sections of its rows, which are bounded only
+  where the rows conform.\<close>
+
+definition csem_mono :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
+    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow> bool" where
+  "csem_mono X c \<longleftrightarrow> (\<forall>C F k Gs Gs' Xs Xs'. conforming_rows (split_rows\<cdot>C) \<longrightarrow> sel_compact X F k \<longrightarrow>
+     list_all2 (\<sqsubseteq>) Gs Gs' \<longrightarrow> list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards X) F k) \<longrightarrow>
+     list_all2 (\<sqsubseteq>) Xs Xs' \<longrightarrow> list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues X) F k) \<longrightarrow> c Gs Xs F k \<sqsubseteq> c Gs' Xs' F k)"
+
+lemma csem_monoI:
+  "(\<And>C F k Gs Gs' Xs Xs'. conforming_rows (split_rows\<cdot>C) \<Longrightarrow> sel_compact X F k \<Longrightarrow>
+     list_all2 (\<sqsubseteq>) Gs Gs' \<Longrightarrow> list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards X) F k) \<Longrightarrow>
+     list_all2 (\<sqsubseteq>) Xs Xs' \<Longrightarrow> list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues X) F k) \<Longrightarrow> c Gs Xs F k \<sqsubseteq> c Gs' Xs' F k) \<Longrightarrow>
+     csem_mono X c"
+  unfolding csem_mono_def by blast
+
+lemma csem_monoD:
+  "csem_mono X c \<Longrightarrow> conforming_rows (split_rows\<cdot>C) \<Longrightarrow> sel_compact X F k \<Longrightarrow>
+     list_all2 (\<sqsubseteq>) Gs Gs' \<Longrightarrow> list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards X) F k) \<Longrightarrow>
+     list_all2 (\<sqsubseteq>) Xs Xs' \<Longrightarrow> list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues X) F k) \<Longrightarrow> c Gs Xs F k \<sqsubseteq> c Gs' Xs' F k"
+  unfolding csem_mono_def by blast
+
+text \<open>A dataset with rows has possible keys; so presence is monotone.\<close>
+
+lemma split_rows_keys: "split_rows\<cdot>C \<noteq> \<bottom> \<Longrightarrow> split_keys\<cdot>C \<noteq> Top"
+proof -
+  assume r: "split_rows\<cdot>C \<noteq> \<bottom>"
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and CZ: "C = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  have "\<not> (\<forall>i. split_rows\<cdot>(split_principal (Z i)) = \<bottom>)"
+    using r unfolding CZ contlub_cfun_arg [OF ch] lub_eq_bottom_iff [OF ch2ch_Rep_cfunR [OF ch]] by simp
+  then obtain i0 where i0: "srows (Z i0) \<noteq> {}" by (auto simp: srows_lower_def split: if_splits)
+  have ne: "skeys (Z (j + i0)) \<noteq> {}" for j
+  proof -
+    have "split_rows\<cdot>(split_principal (Z i0)) \<sqsubseteq> split_rows\<cdot>(split_principal (Z (j + i0)))"
+      by (intro monofun_cfun_arg chain_mono [OF ch]) simp
+    then have "srows (Z (j + i0)) \<noteq> {}" using i0 by (auto simp: srows_lower_def split: if_splits)
+    then obtain x where "x \<in> srows (Z (j + i0))" by blast
+    then show ?thesis using split_basis_consistentD by blast
+  qed
+  have chK: "chain (\<lambda>j. split_keys\<cdot>(split_principal (Z (j + i0))))" by (intro ch2ch_Rep_cfunR chain_shift [OF ch])
+  have "split_keys\<cdot>C = (\<Squnion>j. split_keys\<cdot>(split_principal (Z (j + i0))))"
+    unfolding CZ contlub_cfun_arg [OF ch] lub_range_shift [OF ch2ch_Rep_cfunR [OF ch]] ..
+  moreover have "\<not> (Top \<sqsubseteq> (\<Squnion>j. split_keys\<cdot>(split_principal (Z (j + i0)))))"
+    unfolding compact_below_lub_iff [OF compact_Top chK] using ne by (simp add: skeys_upper_def down_beta)
+  ultimately show ?thesis by simp
+qed
+
+lemma split_present_mono:
+  assumes le: "C \<sqsubseteq> C'"
+  shows "split_present C \<sqsubseteq> split_present C'"
+proof (cases "split_rows\<cdot>C \<noteq> \<bottom>")
+  case True
+  then have "split_rows\<cdot>C' \<noteq> \<bottom>" using monofun_cfun_arg [OF le, of split_rows] by (auto simp: bottomI)
+  then show ?thesis using True by (simp add: split_present_def)
+next
+  case nR: False
+  show ?thesis
+  proof (cases "split_keys\<cdot>C = Top")
+    case True
+    then have kT: "split_keys\<cdot>C' = Top" using monofun_cfun_arg [OF le, of split_keys] by simp
+    then have "split_rows\<cdot>C' = \<bottom>" using split_rows_keys by blast
+    then show ?thesis using nR True kT by (simp add: split_present_def)
+  next
+    case False
+    then show ?thesis using nR by (simp add: split_present_def)
+  qed
+qed
+
+theorem csem_mono_const: "csem_mono (const_ext v) (\<lambda>Gs Xs F k. Present\<cdot>v)"
+  by (rule csem_monoI) simp
+
+theorem csem_mono_smap: "csem_mono X c \<Longrightarrow> csem_mono (smap_ext g X) (\<lambda>Gs Xs F k. map_option_pd g\<cdot>(c Gs Xs F k))"
+  by (rule csem_monoI) (simp add: monofun_cfun_arg csem_monoD)
+
+theorem csem_mono_key_at: "csem_mono (key_at_ext c) (\<lambda>Gs Xs F k. split_present (hd Xs) \<odot> Present\<cdot>(proj c\<cdot>k))"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' and Xs Xs' :: "('r, 'k) split_pd list"
+  assume X: "list_all2 (\<sqsubseteq>) Xs Xs'" and X': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (key_at_ext c)) F k)"
+  obtain x' where x': "Xs' = [x']" using X' by (auto simp: list_all2_Cons2)
+  obtain x where x: "Xs = [x]" "x \<sqsubseteq> x'" using X unfolding x' by (auto simp: list_all2_Cons2)
+  show "split_present (hd Xs) \<odot> Present\<cdot>(proj c\<cdot>k) \<sqsubseteq> split_present (hd Xs') \<odot> Present\<cdot>(proj c\<cdot>k)"
+    unfolding x x' by (simp add: monofun_cfun_fun monofun_cfun_arg split_present_mono x(2))
+qed
+
+lemma gcontents_frestrict: "gcontents_ext D (eguards X) (frestrict \<gamma> F) k = gcontents_ext D (map (restrict_entry \<gamma>) (eguards X)) F k"
+  by (simp add: gcontent_ext_def sel_select_def gand_assoc)
+
+lemma vcontents_frestrict: "vcontents_ext D es (frestrict \<gamma> F) k = vcontents_ext D es F k"
+  by (simp add: vcontent_ext_def sel_select_def)
+
+theorem csem_mono_restrict: "csem_mono X c \<Longrightarrow> csem_mono (restrict_ext \<gamma> X) (\<lambda>Gs Xs F k. c Gs Xs (frestrict \<gamma> F) k)"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' Xs Xs'
+  assume c: "csem_mono X c" and cC: "conforming_rows (split_rows\<cdot>C)" and comp: "sel_compact (restrict_ext \<gamma> X) F k"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (restrict_ext \<gamma> X)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (restrict_ext \<gamma> X)) F k)"
+  have comp': "sel_compact X (frestrict \<gamma> F) k" using comp by (simp add: comp_def)
+  show "c Gs Xs (frestrict \<gamma> F) k \<sqsubseteq> c Gs' Xs' (frestrict \<gamma> F) k"
+    by (rule csem_monoD [OF c cC comp' G _ V]) (use G' V' in \<open>simp_all add: gcontents_frestrict vcontents_frestrict\<close>)
+qed
+
+lemma gcontents_finclude: "gcontents_ext D (eguards X) (finclude M F) k = gcontents_ext D (map (include_entry M) (eguards X)) F k"
+  by (simp add: gcontent_ext_include)
+
+lemma vcontents_finclude: "vcontents_ext D (evalues X) (finclude M F) k = vcontents_ext D (map (include_entry M) (evalues X)) F k"
+  by (simp add: vcontent_ext_include)
+
+theorem csem_mono_include_dims: "csem_mono X c \<Longrightarrow> csem_mono (include_dims_ext M X) (\<lambda>Gs Xs F k. c Gs Xs (finclude M F) k)"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' Xs Xs'
+  assume c: "csem_mono X c" and cC: "conforming_rows (split_rows\<cdot>C)" and comp: "sel_compact (include_dims_ext M X) F k"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (include_dims_ext M X)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (include_dims_ext M X)) F k)"
+  have comp': "sel_compact X (finclude M F) k"
+  proof
+    fix S assume "S \<in> set (esels X)"
+    then have "include_sel M S \<in> set (esels (include_dims_ext M X))" by (auto simp: comp_def)
+    then have "compact (proj (sel_at (include_sel M S) (flod F))\<cdot>k)" using comp by blast
+    then show "compact (proj (sel_at S (flod (finclude M F)))\<cdot>k)" by (simp only: include_lod)
+  qed
+  show "c Gs Xs (finclude M F) k \<sqsubseteq> c Gs' Xs' (finclude M F) k"
+    by (rule csem_monoD [OF c cC comp' G _ V]) (use G' V' in \<open>simp_all only: gcontents_finclude vcontents_finclude include_dims_ext_simps include_dims_simps\<close>)
+qed
+
+theorem csem_mono_present_at:
+  assumes c: "csem_mono X c" and X: "semilawful X"
+  shows "csem_mono (present_at_ext a \<rho> X) (\<lambda>Gs Xs F k. split_present (hd Gs) \<odot> c (tl Gs) Xs F (proj (kd X F)\<cdot>k))"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' Xs Xs'
+  assume cC: "conforming_rows (split_rows\<cdot>C)" and comp: "sel_compact (present_at_ext a \<rho> X) F k"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (present_at_ext a \<rho> X)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (present_at_ext a \<rho> X)) F k)"
+  have compX: "sel_compact X F (proj (kd X F)\<cdot>k)" by (rule sel_compact_kd [OF X]) (use comp in simp)
+  obtain g' Gt' where g': "Gs' = g' # Gt'" and Gt': "list_all2 (\<sqsubseteq>) Gt' (gcontents_ext C (eguards X) F k)"
+    using G' by (auto simp: list_all2_Cons2)
+  obtain g Gt where g: "Gs = g # Gt" "g \<sqsubseteq> g'" and Gt: "list_all2 (\<sqsubseteq>) Gt Gt'" using G unfolding g' by (auto simp: list_all2_Cons2)
+  have "c Gt Xs F (proj (kd X F)\<cdot>k) \<sqsubseteq> c Gt' Xs' F (proj (kd X F)\<cdot>k)"
+    by (rule csem_monoD [OF c cC compX Gt _ V]) (use Gt' V' in \<open>simp_all only: contents_kd [OF X] present_at_ext_simps present_at_simps\<close>)
+  then show "split_present (hd Gs) \<odot> c (tl Gs) Xs F (proj (kd X F)\<cdot>k) \<sqsubseteq> split_present (hd Gs') \<odot> c (tl Gs') Xs' F (proj (kd X F)\<cdot>k)"
+    unfolding g g' by (simp add: monofun_cfun monofun_cfun_arg split_present_mono g(2))
+qed
+
+theorem csem_mono_combine:
+  assumes c\<^sub>1: "csem_mono X\<^sub>1 c\<^sub>1" and c\<^sub>2: "csem_mono X\<^sub>2 c\<^sub>2" and X\<^sub>1: "semilawful X\<^sub>1" and X\<^sub>2: "semilawful X\<^sub>2"
+  shows "csem_mono (combine_ext f X\<^sub>1 X\<^sub>2) (\<lambda>Gs Xs F k. lift2_option_pd f\<cdot>
+     (c\<^sub>1 (take (length (eguards X\<^sub>1)) Gs) (take (length (evalues X\<^sub>1)) Xs) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>
+     (c\<^sub>2 (drop (length (eguards X\<^sub>1)) Gs) (drop (length (evalues X\<^sub>1)) Xs) F (proj (kd X\<^sub>2 F)\<cdot>k)))"
+proof (rule csem_monoI)
+  fix C F k Gs Gs' Xs Xs'
+  assume cC: "conforming_rows (split_rows\<cdot>C)" and comp: "sel_compact (combine_ext f X\<^sub>1 X\<^sub>2) F k"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (combine_ext f X\<^sub>1 X\<^sub>2)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (combine_ext f X\<^sub>1 X\<^sub>2)) F k)"
+  let ?n = "length (eguards X\<^sub>1)" and ?m = "length (evalues X\<^sub>1)"
+  have comp1: "sel_compact X\<^sub>1 F (proj (kd X\<^sub>1 F)\<cdot>k)" by (rule sel_compact_kd [OF X\<^sub>1]) (use comp in auto)
+  have comp2: "sel_compact X\<^sub>2 F (proj (kd X\<^sub>2 F)\<cdot>k)" by (rule sel_compact_kd [OF X\<^sub>2]) (use comp in auto)
+  have G1: "list_all2 (\<sqsubseteq>) (take ?n Gs') (gcontents_ext C (eguards X\<^sub>1) F (proj (kd X\<^sub>1 F)\<cdot>k))"
+    and G2: "list_all2 (\<sqsubseteq>) (drop ?n Gs') (gcontents_ext C (eguards X\<^sub>2) F (proj (kd X\<^sub>2 F)\<cdot>k))"
+    using list_all2_takeI [OF G', of ?n] list_all2_dropI [OF G', of ?n] by (simp_all add: contents_kd X\<^sub>1 X\<^sub>2)
+  have V1: "list_all2 (\<sqsubseteq>) (take ?m Xs') (vcontents_ext C (evalues X\<^sub>1) F (proj (kd X\<^sub>1 F)\<cdot>k))"
+    and V2: "list_all2 (\<sqsubseteq>) (drop ?m Xs') (vcontents_ext C (evalues X\<^sub>2) F (proj (kd X\<^sub>2 F)\<cdot>k))"
+    using list_all2_takeI [OF V', of ?m] list_all2_dropI [OF V', of ?m] by (simp_all add: contents_kd X\<^sub>1 X\<^sub>2)
+  show "lift2_option_pd f\<cdot>(c\<^sub>1 (take ?n Gs) (take ?m Xs) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(c\<^sub>2 (drop ?n Gs) (drop ?m Xs) F (proj (kd X\<^sub>2 F)\<cdot>k))
+      \<sqsubseteq> lift2_option_pd f\<cdot>(c\<^sub>1 (take ?n Gs') (take ?m Xs') F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(c\<^sub>2 (drop ?n Gs') (drop ?m Xs') F (proj (kd X\<^sub>2 F)\<cdot>k))"
+    by (intro monofun_cfun monofun_cfun_arg csem_monoD [OF c\<^sub>1 cC comp1 _ G1 _ V1] csem_monoD [OF c\<^sub>2 cC comp2 _ G2 _ V2]
+        list_all2_takeI list_all2_dropI G V)
+qed
+
 end
 
 end
