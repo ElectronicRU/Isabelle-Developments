@@ -1080,6 +1080,132 @@ proof -
   ultimately show ?thesis unfolding SD SG by (rule below_antisym)
 qed
 
+
+text \<open>The content aggregate is monotone on contents below those of a conforming dataset, where
+  the fold guard's content is compact: then its definite inner keys are finitely many, and possible
+  since they are compact.\<close>
+
+lemma list_all2_map2_mono:
+  assumes xy: "list_all2 (\<sqsubseteq>) xs ys" and g: "\<And>e x y. x \<sqsubseteq> y \<Longrightarrow> g e x \<sqsubseteq> g e y"
+  shows "list_all2 (\<sqsubseteq>) (map2 g es xs) (map2 g es ys)"
+  using xy
+proof (induct arbitrary: es rule: list_all2_induct)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons x xs y ys)
+  then show ?case by (cases es) (simp_all add: g)
+qed
+
+lemma agg_inner_g_mono: "list_all2 (\<sqsubseteq>) Gr Gr' \<Longrightarrow> list_all2 (\<sqsubseteq>) (agg_inner_g X F \<kappa> Gr) (agg_inner_g X F \<kappa> Gr')"
+  unfolding agg_inner_g_def by (rule list_all2_map2_mono, assumption, rule monofun_cfun_arg)
+
+lemma agg_inner_v_mono: "list_all2 (\<sqsubseteq>) Xr Xr' \<Longrightarrow> list_all2 (\<sqsubseteq>) (agg_inner_v X \<kappa> Xr) (agg_inner_v X \<kappa> Xr')"
+  unfolding agg_inner_v_def by (rule list_all2_map2_mono, assumption, intro monofun_cfun_arg)
+
+lemma cagg_value_mono:
+  assumes c: "csem_mono X c" and cC: "conforming_rows (split_rows\<cdot>C)" and k: "sel_compact (aggregate_ext f X) F k"
+    and kk: "proj (flod F)\<cdot>\<kappa> = k" and c\<kappa>: "compact \<kappa>"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (aggregate_ext f X)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (aggregate_ext f X)) F k)"
+  shows "cagg_value X c Gs Xs F \<kappa> \<sqsubseteq> cagg_value X c Gs' Xs' F \<kappa>"
+proof -
+  obtain g' Gt' where g': "Gs' = g' # Gt'" and Gt': "list_all2 (\<sqsubseteq>) Gt' (gcontents_ext C (map release (eguards X)) F k)"
+    using G' by (auto simp: list_all2_Cons2)
+  obtain g Gt where g: "Gs = g # Gt" "g \<sqsubseteq> g'" and Gt: "list_all2 (\<sqsubseteq>) Gt Gt'" using G unfolding g' by (auto simp: list_all2_Cons2)
+  have Vt': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (map release (evalues X)) F k)"
+    using V' by (simp only: aggregate_ext_simps aggregate_simps)
+  have sk: "sel_compact X F \<kappa>" by (blast intro: compact_proj_compact [OF c\<kappa>])
+  have GI: "list_all2 (\<sqsubseteq>) (agg_inner_g X F \<kappa> Gt') (gcontents_ext C (eguards X) F \<kappa>)"
+    using agg_inner_g_mono [OF Gt', of X F \<kappa>] unfolding agg_inner_contents(1) [OF k kk c\<kappa>] .
+  have VI: "list_all2 (\<sqsubseteq>) (agg_inner_v X \<kappa> Xs') (vcontents_ext C (evalues X) F \<kappa>)"
+    using agg_inner_v_mono [OF Vt', of X \<kappa>] unfolding agg_inner_contents(2) [OF k kk c\<kappa>] .
+  have cc: "c (agg_inner_g X F \<kappa> Gt) (agg_inner_v X \<kappa> Xs) F \<kappa> \<sqsubseteq> c (agg_inner_g X F \<kappa> Gt') (agg_inner_v X \<kappa> Xs') F \<kappa>"
+    by (rule csem_monoD [OF c cC sk agg_inner_g_mono [OF Gt] GI agg_inner_v_mono [OF V] VI])
+  have pp: "split_present (split_select (kd X F) \<kappa>\<cdot>g) \<sqsubseteq> split_present (split_select (kd X F) \<kappa>\<cdot>g')"
+    by (rule split_present_mono [OF monofun_cfun_arg [OF g(2)]])
+  show ?thesis unfolding cagg_value_def g g' list.sel by (rule monofun_cfun [OF monofun_cfun_arg [OF pp] cc])
+qed
+
+theorem cagg_glb_mono:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and c: "csem_mono X c" and m: "lod_small (emind X)"
+    and cC: "conforming_rows (split_rows\<cdot>C)" and k: "sel_compact (aggregate_ext f X) F k"
+    and G: "list_all2 (\<sqsubseteq>) Gs Gs'" and G': "list_all2 (\<sqsubseteq>) Gs' (gcontents_ext C (eguards (aggregate_ext f X)) F k)"
+    and V: "list_all2 (\<sqsubseteq>) Xs Xs'" and V': "list_all2 (\<sqsubseteq>) Xs' (vcontents_ext C (evalues (aggregate_ext f X)) F k)"
+    and cG: "compact (hd Gs')"
+  shows "cagg_glb f X c Gs Xs F k \<sqsubseteq> cagg_glb f X c Gs' Xs' F k"
+proof -
+  obtain g' Gt' where g': "Gs' = g' # Gt'" using G' by (auto simp: list_all2_Cons2)
+  obtain g Gt where g: "Gs = g # Gt" "g \<sqsubseteq> g'" using G unfolding g' by (auto simp: list_all2_Cons2)
+  have hG: "hd Gs = g" and hG': "hd Gs' = g'" unfolding g g' by simp_all
+  let ?K = "kd X F"
+  let ?Def = "agg_definite X g F k" and ?Def' = "agg_definite X g' F k"
+  let ?Pos = "agg_possible X g F k" and ?Pos' = "agg_possible X g' F k"
+  let ?M = "cagg_member X c Gs Xs F k" and ?M' = "cagg_member X c Gs' Xs' F k"
+  let ?S = "{agg_fold f ?M (?Def \<union> C) | C. finite C \<and> C \<subseteq> ?Pos}"
+  let ?S' = "{agg_fold f ?M' (?Def' \<union> C) | C. finite C \<and> C \<subseteq> ?Pos'}"
+  have ck: "compact (proj (flod F)\<cdot>k)" by (rule agg_frame_compact [OF k])
+  have key: "proj (flod F)\<cdot>\<kappa> = k" "compact \<kappa>" if "\<kappa> \<in> ?Def' \<union> ?Pos'" for \<kappa>
+  proof -
+    have kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj ?K\<cdot>\<kappa> = \<kappa>" using agg_keys_at [OF that] by simp_all
+    show "proj (flod F)\<cdot>\<kappa> = k" by (rule kk)
+    have "compact (proj (flod F)\<cdot>\<kappa>)" using ck by (simp only: kk [symmetric] proj_idem)
+    then show "compact \<kappa>" by (rule inner_key_compact [OF m kK])
+  qed
+  have dm: "?Def \<subseteq> ?Def'" by (rule agg_definite_mono [OF g(2)])
+  have pm: "?Pos' \<subseteq> ?Pos" by (rule agg_possible_mono [OF g(2)])
+  have dp: "?Def' \<subseteq> ?Pos'"
+  proof
+    fix \<kappa> assume d: "\<kappa> \<in> ?Def'"
+    then obtain y where mx: "maximal_at ?K \<kappa>" and kk: "proj (flod F)\<cdot>\<kappa> = k"
+      and r: "\<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
+      and y: "split_definite y g'" "rproj ?K y = \<kappa>" by (auto simp: agg_definite_def)
+    have cy: "compact (rproj ?K y)" using key(2) [OF UnI1 [OF d]] y(2) by simp
+    have "split_possible_at ?K \<kappa> g'" using definite_maximal_possible [OF y(1) cy] mx y(2) by simp
+    then show "\<kappa> \<in> ?Pos'" unfolding agg_possible_def using kk r by blast
+  qed
+  have fD': "finite ?Def'" by (rule agg_definite_finite) (use cG g' in simp)
+  have mem: "?M \<kappa> \<sqsubseteq> ?M' \<kappa>" if "\<kappa> \<in> ?Def' \<union> ?Pos'" for \<kappa>
+  proof -
+    have v: "cagg_value X c Gs Xs F \<kappa> \<sqsubseteq> cagg_value X c Gs' Xs' F \<kappa>"
+      by (rule cagg_value_mono [OF c cC k key [OF that] G G' V V'])
+    show ?thesis
+    proof (cases "\<kappa> \<in> ?Def")
+      case True
+      then show ?thesis using v dm unfolding cagg_member_def hG hG' by auto
+    next
+      case nD: False
+      have l: "cagg_value X c Gs Xs F \<kappa> + Absent \<sqsubseteq> cagg_value X c Gs' Xs' F \<kappa>"
+        by (rule below_trans [OF plus_option_pd_below1 v])
+      show ?thesis
+      proof (cases "\<kappa> \<in> ?Def'")
+        case True
+        then show ?thesis using nD l unfolding cagg_member_def hG hG' by simp
+      next
+        case False
+        then show ?thesis using nD unfolding cagg_member_def hG hG'
+          by (simp add: plus_option_pd_greatest [OF l plus_option_pd_below2])
+      qed
+    qed
+  qed
+  have S: "cagg_glb f X c Gs Xs F k = glb ?S" unfolding cagg_glb_def g list.sel ..
+  have S': "cagg_glb f X c Gs' Xs' F k = glb ?S'" unfolding cagg_glb_def g' list.sel ..
+  have "glb ?S \<sqsubseteq> glb ?S'"
+  proof (rule glb_greatest, blast, intro ballI)
+    fix x assume "x \<in> ?S'"
+    then obtain C' where x: "x = agg_fold f ?M' (?Def' \<union> C')" and fC': "finite C'" and C': "C' \<subseteq> ?Pos'" by blast
+    let ?C'' = "(?Def' - ?Def) \<union> C'"
+    have eq: "?Def \<union> ?C'' = ?Def' \<union> C'" using dm by blast
+    have "glb ?S \<sqsubseteq> agg_fold f ?M (?Def \<union> ?C'')"
+      by (rule glb_below, rule CollectI, rule exI [of _ ?C'']) (use fD' fC' C' dp pm in auto)
+    also have "\<dots> = agg_fold f ?M (?Def' \<union> C')" by (simp only: eq)
+    also have "\<dots> \<sqsubseteq> x" unfolding x
+      by (rule agg_fold_mono [OF f finite_UnI [OF fD' fC']], rule mem) (use C' in blast)
+    finally show "glb ?S \<sqsubseteq> x" .
+  qed
+  then show ?thesis unfolding S S' .
+qed
+
 end
 
 end
