@@ -118,47 +118,71 @@ lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarro
 definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_lawful X \<longleftrightarrow> semilawful X \<and> ext_sound X"
 
-text \<open>\<^emph>\<open>Monotonicity\<close> and \<^emph>\<open>continuity\<close> on split datasets with conforming definite rows:
-  the extended semantics grows with the dataset, and at the lub of a chain it is below the lub
-  along the chain.  Then it is a continuous function on the conforming split datasets.\<close>
-
-definition ext_mono :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
-  "ext_mono X \<longleftrightarrow> (\<forall>D D' F k. conforming_rows (split_rows\<cdot>D') \<longrightarrow> D \<sqsubseteq> D' \<longrightarrow> sem_ext X D F k \<sqsubseteq> sem_ext X D' F k)"
+text \<open>\<^emph>\<open>Continuity\<close> on split datasets with conforming definite rows: along a chain of them
+  the extended semantics has the value at the lub as its lub.  This includes monotonicity there,
+  and like @{thm contI2} it follows from monotonicity and the bound at the lub.  Then the extended
+  semantics is a continuous function on the conforming split datasets.\<close>
 
 definition ext_cont :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_cont X \<longleftrightarrow> (\<forall>Y F k. chain Y \<longrightarrow> (\<forall>i. conforming_rows (split_rows\<cdot>(Y i))) \<longrightarrow>
-     sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k))"
-
-lemma ext_monoD: "ext_mono X \<Longrightarrow> conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
-  unfolding ext_mono_def by blast
+     range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k)"
 
 lemma ext_contD:
   "ext_cont X \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
-     sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
+     range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
   unfolding ext_cont_def by blast
 
+lemma ext_cont_mono:
+  assumes c: "ext_cont X" and D: "conforming_rows (split_rows\<cdot>D)" and D': "conforming_rows (split_rows\<cdot>D')"
+    and le: "D \<sqsubseteq> D'"
+  shows "sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
+proof -
+  let ?Y = "\<lambda>i::nat. if i = 0 then D else D'"
+  have Y: "chain ?Y" by (rule chainI) (simp add: le)
+  have l: "(\<Squnion>i. ?Y i) = D'"
+    by (rule lub_eqI, rule is_lubI) (auto simp: is_ub_def le dest: ub_rangeD [of _ 1])
+  have "range (\<lambda>i. sem_ext X (?Y i) F k) <<| sem_ext X D' F k"
+    using ext_contD [OF c Y, of F k] D D' unfolding l by simp
+  then show ?thesis using is_lubD1 [THEN ub_rangeD, of _ _ 0] by fastforce
+qed
+
+lemma ext_contI2:
+  assumes m: "\<And>(D :: ('r, 'k) split_pd) D' F k. conforming_rows (split_rows\<cdot>D) \<Longrightarrow> conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow>
+      sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
+    and l: "\<And>(Y :: nat \<Rightarrow> ('r, 'k) split_pd) F k. chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
+      sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
+  shows "ext_cont X"
+  unfolding ext_cont_def
+proof (intro allI impI)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k assume Y: "chain Y" and cf: "\<forall>i. conforming_rows (split_rows\<cdot>(Y i))"
+  have cY: "chain (\<lambda>i. sem_ext X (Y i) F k)" by (rule chainI) (simp add: m cf chainE [OF Y])
+  have cL: "conforming_rows (split_rows\<cdot>(\<Squnion>i. Y i))"
+    unfolding contlub_cfun_arg [OF Y] by (rule admD [OF adm_conforming_rows ch2ch_Rep_cfunR [OF Y]]) (simp add: cf)
+  have ub: "sem_ext X (Y i) F k \<sqsubseteq> sem_ext X (\<Squnion>i. Y i) F k" for i by (rule m [OF _ cL is_ub_thelub [OF Y]]) (simp add: cf)
+  have "(\<Squnion>i. sem_ext X (Y i) F k) = sem_ext X (\<Squnion>i. Y i) F k"
+    by (rule below_antisym [OF lub_below [OF cY ub] l [OF Y]]) (simp add: cf)
+  then show "range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
+    using cpo_lubI [OF cY] by simp
+qed
+
 lemma cont_sem_ext_conf:
-  assumes m: "ext_mono X" and c: "ext_cont X"
+  assumes c: "ext_cont X"
   shows "cont (\<lambda>D :: ('r, 'k) conf_split. sem_ext X (Rep_conf_split D) F k)"
-proof (rule contI2)
+proof (rule contI)
   have conf: "conforming_rows (split_rows\<cdot>(Rep_conf_split D))" for D :: "('r, 'k) conf_split"
     using Rep_conf_split [of D] by simp
-  show "monofun (\<lambda>D :: ('r, 'k) conf_split. sem_ext X (Rep_conf_split D) F k)"
-    by (rule monofunI) (simp add: ext_monoD [OF m conf] below_conf_split_def)
   fix Y :: "nat \<Rightarrow> ('r, 'k) conf_split" assume Y: "chain Y"
   have R: "chain (\<lambda>i. Rep_conf_split (Y i))" by (rule ch2ch_cont [OF cont_Rep_conf_split [OF cont_id] Y])
   have "Rep_conf_split (\<Squnion>i. Y i) = (\<Squnion>i. Rep_conf_split (Y i))" by (rule cont2contlubE [OF cont_Rep_conf_split [OF cont_id] Y])
-  then show "sem_ext X (Rep_conf_split (\<Squnion>i. Y i)) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Rep_conf_split (Y i)) F k)"
+  then show "range (\<lambda>i. sem_ext X (Rep_conf_split (Y i)) F k) <<| sem_ext X (Rep_conf_split (\<Squnion>i. Y i)) F k"
     using ext_contD [OF c R conf] by simp
 qed
 
 definition ext_fun :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) conf_split \<rightarrow> 'v option_pd" where
   "ext_fun X F k = (\<Lambda> D. sem_ext X (Rep_conf_split D) F k)"
 
-lemma ext_fun_apply:
-  assumes m: "ext_mono X" and c: "ext_cont X"
-  shows "ext_fun X F k\<cdot>D = sem_ext X (Rep_conf_split D) F k"
-  unfolding ext_fun_def by (rule beta_cfun [OF cont_sem_ext_conf [OF m c]])
+lemma ext_fun_apply: "ext_cont X \<Longrightarrow> ext_fun X F k\<cdot>D = sem_ext X (Rep_conf_split D) F k"
+  unfolding ext_fun_def by (rule beta_cfun [OF cont_sem_ext_conf])
 
 
 subsection \<open>Keys\<close>
