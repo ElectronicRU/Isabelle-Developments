@@ -197,6 +197,90 @@ proof (rule ext_csemI)
     using ext_csemD_kd [OF c\<^sub>1 X\<^sub>1 comp1, of D] ext_csemD_kd [OF c\<^sub>2 X\<^sub>2 comp2, of D] by simp
 qed
 
+text \<open>Including dimensions and filtering for keys transform the selectors as the frame changes.\<close>
+
+lemma gcontent_ext_include: "gcontent_ext D (include_entry M e) F k = gcontent_ext D e (finclude M F) k"
+  unfolding gcontent_ext_def sel_select_def include_entry_simps include_lod by simp
+
+lemma vcontent_ext_include: "vcontent_ext D (include_entry M e) F k = vcontent_ext D e (finclude M F) k"
+  unfolding vcontent_ext_def sel_select_def include_entry_simps include_lod by simp
+
+theorem ext_csem_include_dims:
+  "ext_csem X c \<Longrightarrow> ext_csem (include_dims_ext M X) (\<lambda>Gs Xs F k. c Gs Xs (finclude M F) k)"
+proof (rule ext_csemI)
+  fix D F k assume c: "ext_csem X c" and comp: "sel_compact (include_dims_ext M X) F k"
+  have comp': "sel_compact X (finclude M F) k"
+  proof
+    fix S assume "S \<in> set (esels X)"
+    then have "include_sel M S \<in> set (esels (include_dims_ext M X))" by (auto simp: comp_def)
+    then have "compact (proj (sel_at (include_sel M S) (flod F))\<cdot>k)" using comp by blast
+    then show "compact (proj (sel_at S (flod (finclude M F)))\<cdot>k)" by (simp only: include_lod)
+  qed
+  show "sem_ext (include_dims_ext M X) D F k =
+      c (gcontents_ext D (eguards (include_dims_ext M X)) F k) (vcontents_ext D (evalues (include_dims_ext M X)) F k) (finclude M F) k"
+    using ext_csemD [OF c comp', of D] by (simp add: gcontent_ext_include vcontent_ext_include comp_def)
+qed
+
+lemma sel_select_ffor:
+  assumes am: "lower_part S \<sqsubseteq> m"
+  shows "sel_select S (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = sel_select (trunc_sel \<tau> S) F k"
+  unfolding sel_select_def trunc_sel_simps ffor_key [OF am] ..
+
+lemma gcontent_ext_ffor:
+  "elower e \<sqsubseteq> m \<Longrightarrow> gcontent_ext D e (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = gcontent_ext D (for_entry \<tau> G e) F k"
+  unfolding gcontent_ext_def sel_select_ffor
+  by (simp add: coarsen_conj coarsen_coarsen sopen_gand gand_assoc)
+
+lemma vcontent_ext_ffor:
+  "elower e \<sqsubseteq> m \<Longrightarrow> vcontent_ext D e (ffor \<tau> G F) (proj (m \<squnion> flod (ffor \<tau> G F))\<cdot>k) = vcontent_ext D (for_value \<tau> e) F k"
+  unfolding vcontent_ext_def sel_select_ffor by simp
+
+theorem ext_csem_filtfor:
+  assumes c: "ext_csem X c" and X: "semilawful X"
+  shows "ext_csem (filtfor_ext \<tau> G X) (\<lambda>Gs Xs F k. c Gs Xs (ffor \<tau> G F) (proj (kd X (ffor \<tau> G F))\<cdot>k))"
+proof (rule ext_csemI)
+  fix D F k assume comp: "sel_compact (filtfor_ext \<tau> G X) F k"
+  let ?k = "proj (kd X (ffor \<tau> G F))\<cdot>k"
+  have lm: "lower_part S \<sqsubseteq> emind X" if "S \<in> set (esels X)" for S by (rule lower_below_mind [OF X that])
+  have comp': "sel_compact X (ffor \<tau> G F) ?k"
+  proof
+    fix S assume S: "S \<in> set (esels X)"
+    have "trunc_sel \<tau> S \<in> set (esels (filtfor_ext \<tau> G X))" using S by (auto simp: comp_def)
+    then have "compact (proj (sel_at (trunc_sel \<tau> S) (flod F))\<cdot>k)" using comp by blast
+    moreover have "proj (sel_at S (flod (ffor \<tau> G F)))\<cdot>?k = proj (sel_at (trunc_sel \<tau> S) (flod F))\<cdot>k"
+      by (simp only: ffor_key [OF lm [OF S]] trunc_sel_simps)
+    ultimately show "compact (proj (sel_at S (flod (ffor \<tau> G F)))\<cdot>?k)" by simp
+  qed
+  have g: "gcontents_ext D (eguards X) (ffor \<tau> G F) ?k = gcontents_ext D (map (for_entry \<tau> G) (eguards X)) F k"
+    unfolding map_map comp_def by (rule map_cong [OF refl], rule gcontent_ext_ffor [OF lm [OF esels_guardI]])
+  have v: "vcontents_ext D (evalues X) (ffor \<tau> G F) ?k = vcontents_ext D (map (for_value \<tau>) (evalues X)) F k"
+    unfolding map_map comp_def by (rule map_cong [OF refl], rule vcontent_ext_ffor [OF lm [OF esels_valueI]])
+  show "sem_ext (filtfor_ext \<tau> G X) D F k =
+      c (gcontents_ext D (eguards (filtfor_ext \<tau> G X)) F k) (vcontents_ext D (evalues (filtfor_ext \<tau> G X)) F k) (ffor \<tau> G F) ?k"
+    using ext_csemD [OF c comp', of D] by (simp only: filtfor_ext_simps filtfor_simps g v)
+qed
+
+text \<open>An expression \<^emph>\<open>factors\<close> when some function of the contents gives its extended semantics.\<close>
+
+definition ext_factors :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
+  "ext_factors X \<longleftrightarrow> (\<exists>c. ext_csem X c)"
+
+lemma semilawful_tuple_ext: "(\<And>X. X \<in> set Xs \<Longrightarrow> semilawful X) \<Longrightarrow> semilawful (tuple_ext Xs)"
+  by (induct Xs) (simp_all add: semilawful_const_expr semilawful_combine)
+
+theorem ext_factors_tuple:
+  "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_factors X \<and> semilawful X) \<Longrightarrow> ext_factors (tuple_ext Xs)"
+proof (induct Xs)
+  case Nil
+  show ?case unfolding ext_factors_def tuple_ext.simps by (rule exI, rule ext_csem_const)
+next
+  case (Cons X Xs)
+  obtain c where c: "ext_csem X c" and sX: "semilawful X" using Cons.prems unfolding ext_factors_def by auto
+  obtain c' where c': "ext_csem (tuple_ext Xs) c'" using Cons unfolding ext_factors_def by auto
+  have sXs: "semilawful (tuple_ext Xs)" by (rule semilawful_tuple_ext) (use Cons.prems in auto)
+  show ?case unfolding ext_factors_def tuple_ext.simps by (rule exI, rule ext_csem_combine [OF c c' sX sXs])
+qed
+
 end
 
 end
