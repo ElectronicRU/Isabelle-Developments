@@ -192,80 +192,6 @@ proof -
   then show ?thesis using compact_proj_compact [OF proj_compact [OF B, of k], of L] by simp
 qed
 
-text \<open>\<^emph>\<open>Continuity\<close> on split datasets with conforming definite rows, at LOD-bounded frames: along
-  a chain of datasets the extended semantics has the value at the lub as its lub.  This includes
-  monotonicity there, and like @{thm contI2} it follows from monotonicity and the bound at the
-  lub.  Then the extended semantics is a continuous function on the conforming split datasets.\<close>
-
-definition ext_cont :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
-  "ext_cont X \<longleftrightarrow> (\<forall>Y F k. lod_bounded F \<longrightarrow> chain Y \<longrightarrow> (\<forall>i. conforming_rows (split_rows\<cdot>(Y i))) \<longrightarrow>
-     range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k)"
-
-lemma ext_contD:
-  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
-     range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
-  unfolding ext_cont_def by blast
-
-lemma ext_cont_mono:
-  assumes c: "ext_cont X" and F: "lod_bounded F"
-    and D: "conforming_rows (split_rows\<cdot>D)" and D': "conforming_rows (split_rows\<cdot>D')" and le: "D \<sqsubseteq> D'"
-  shows "sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
-proof -
-  let ?Y = "\<lambda>i::nat. if i = 0 then D else D'"
-  have Y: "chain ?Y" by (rule chainI) (simp add: le)
-  have l: "(\<Squnion>i. ?Y i) = D'"
-    by (rule lub_eqI, rule is_lubI) (auto simp: is_ub_def le dest: ub_rangeD [of _ 1])
-  have "range (\<lambda>i. sem_ext X (?Y i) F k) <<| sem_ext X D' F k"
-    using ext_contD [OF c F Y, of k] D D' unfolding l by simp
-  then show ?thesis using is_lubD1 [THEN ub_rangeD, of _ _ 0] by fastforce
-qed
-
-lemma ext_cont_chain:
-  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
-     chain (\<lambda>i. sem_ext X (Y i) F k)"
-  by (rule chainI) (simp add: ext_cont_mono chainE)
-
-lemma ext_cont_lub:
-  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow>
-     sem_ext X (\<Squnion>i. Y i) F k = (\<Squnion>i. sem_ext X (Y i) F k)"
-  by (rule lub_eqI [symmetric]) (rule ext_contD)
-
-lemma conforming_rows_lub:
-  "chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow> conforming_rows (split_rows\<cdot>(\<Squnion>i. Y i))"
-  unfolding contlub_cfun_arg by (rule admD [OF adm_conforming_rows ch2ch_Rep_cfunR]) simp_all
-
-lemma ext_contI2:
-  assumes m: "\<And>(D :: ('r, 'k) split_pd) D' F k. lod_bounded F \<Longrightarrow> conforming_rows (split_rows\<cdot>D) \<Longrightarrow>
-      conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
-    and l: "\<And>(Y :: nat \<Rightarrow> ('r, 'k) split_pd) F k. lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow>
-      (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow> sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
-  shows "ext_cont X"
-  unfolding ext_cont_def
-proof (intro allI impI)
-  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k
-  assume F: "lod_bounded F" and Y: "chain Y" and cf: "\<forall>i. conforming_rows (split_rows\<cdot>(Y i))"
-  have cY: "chain (\<lambda>i. sem_ext X (Y i) F k)" by (rule chainI) (simp add: m F cf chainE [OF Y])
-  have cL: "conforming_rows (split_rows\<cdot>(\<Squnion>i. Y i))" by (rule conforming_rows_lub [OF Y]) (simp add: cf)
-  have ub: "sem_ext X (Y i) F k \<sqsubseteq> sem_ext X (\<Squnion>i. Y i) F k" for i by (rule m [OF F _ cL is_ub_thelub [OF Y]]) (simp add: cf)
-  have "(\<Squnion>i. sem_ext X (Y i) F k) = sem_ext X (\<Squnion>i. Y i) F k"
-    by (rule below_antisym [OF lub_below [OF cY ub] l [OF F Y]]) (simp add: cf)
-  then show "range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
-    using cpo_lubI [OF cY] by simp
-qed
-
-lemma cont_sem_ext_conf:
-  assumes c: "ext_cont X" and F: "lod_bounded F"
-  shows "cont (\<lambda>D :: ('r, 'k) conf_split. sem_ext X (Rep_conf_split D) F k)"
-proof (rule contI)
-  have conf: "conforming_rows (split_rows\<cdot>(Rep_conf_split D))" for D :: "('r, 'k) conf_split"
-    using Rep_conf_split [of D] by simp
-  fix Y :: "nat \<Rightarrow> ('r, 'k) conf_split" assume Y: "chain Y"
-  have R: "chain (\<lambda>i. Rep_conf_split (Y i))" by (rule ch2ch_cont [OF cont_Rep_conf_split [OF cont_id] Y])
-  have "Rep_conf_split (\<Squnion>i. Y i) = (\<Squnion>i. Rep_conf_split (Y i))" by (rule cont2contlubE [OF cont_Rep_conf_split [OF cont_id] Y])
-  then show "range (\<lambda>i. sem_ext X (Rep_conf_split (Y i)) F k) <<| sem_ext X (Rep_conf_split (\<Squnion>i. Y i)) F k"
-    using ext_contD [OF c F R conf] by simp
-qed
-
 text \<open>\<^emph>\<open>Monotonicity below conforming datasets\<close>: the extended semantics grows along datasets
   below a split dataset with conforming definite rows.  Their compact approximants need not
   conform, so this is what lets a semantics be extended from the compact datasets.\<close>
@@ -284,12 +210,83 @@ lemma ext_monoD:
      sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
   unfolding ext_mono_def by blast
 
-lemma ext_contI_mono:
+text \<open>\<^emph>\<open>Continuity\<close> below conforming datasets, at LOD-bounded frames: along a chain below a split
+  dataset with conforming definite rows the extended semantics has the value at the lub as its
+  lub.  This includes monotonicity below conforming datasets, and like @{thm contI2} it follows
+  from that and the bound at the lub.  Chains of conforming datasets are such chains, and on the
+  conforming split datasets the extended semantics is a continuous function.\<close>
+
+definition ext_cont :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
+  "ext_cont X \<longleftrightarrow> (\<forall>Y C F k. lod_bounded F \<longrightarrow> chain Y \<longrightarrow> conforming_rows (split_rows\<cdot>C) \<longrightarrow> (\<Squnion>i. Y i) \<sqsubseteq> C \<longrightarrow>
+     range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k)"
+
+lemma ext_contD:
+  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> conforming_rows (split_rows\<cdot>C) \<Longrightarrow> (\<Squnion>i. Y i) \<sqsubseteq> C \<Longrightarrow>
+     range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
+  unfolding ext_cont_def by blast
+
+theorem ext_cont_mono: "ext_cont X \<Longrightarrow> ext_mono X"
+proof (rule ext_monoI)
+  fix D D' C :: "('r, 'k) split_pd" and F k
+  assume c: "ext_cont X" and F: "lod_bounded F" and cC: "conforming_rows (split_rows\<cdot>C)" and le: "D \<sqsubseteq> D'" and le': "D' \<sqsubseteq> C"
+  let ?Y = "\<lambda>i::nat. if i = 0 then D else D'"
+  have Y: "chain ?Y" by (rule chainI) (simp add: le)
+  have l: "(\<Squnion>i. ?Y i) = D'"
+    by (rule lub_eqI, rule is_lubI) (auto simp: is_ub_def le dest: ub_rangeD [of _ 1])
+  have "range (\<lambda>i. sem_ext X (?Y i) F k) <<| sem_ext X D' F k"
+    using ext_contD [OF c F Y cC, of k] le' unfolding l by simp
+  then show "sem_ext X D F k \<sqsubseteq> sem_ext X D' F k" using is_lubD1 [THEN ub_rangeD, of _ _ 0] by fastforce
+qed
+
+lemma ext_cont_below:
+  assumes LC: "(\<Squnion>i. Y i) \<sqsubseteq> C" and Y: "chain (Y :: nat \<Rightarrow> ('r, 'k) split_pd)"
+  shows "Y i \<sqsubseteq> C"
+  using is_ub_thelub [OF Y, of i] LC by (rule below_trans)
+
+lemma ext_cont_chain:
+  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> conforming_rows (split_rows\<cdot>C) \<Longrightarrow> (\<Squnion>i. Y i) \<sqsubseteq> C \<Longrightarrow>
+     chain (\<lambda>i. sem_ext X (Y i) F k)"
+  by (rule chainI, rule ext_monoD [OF ext_cont_mono], assumption+, erule chainE, rule ext_cont_below) assumption+
+
+lemma ext_cont_lub:
+  "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> conforming_rows (split_rows\<cdot>C) \<Longrightarrow> (\<Squnion>i. Y i) \<sqsubseteq> C \<Longrightarrow>
+     sem_ext X (\<Squnion>i. Y i) F k = (\<Squnion>i. sem_ext X (Y i) F k)"
+  by (rule lub_eqI [symmetric]) (rule ext_contD)
+
+lemma conforming_rows_lub:
+  "chain Y \<Longrightarrow> (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow> conforming_rows (split_rows\<cdot>(\<Squnion>i. Y i))"
+  unfolding contlub_cfun_arg by (rule admD [OF adm_conforming_rows ch2ch_Rep_cfunR]) simp_all
+
+lemma ext_contI2:
   assumes m: "ext_mono X"
-    and l: "\<And>(Y :: nat \<Rightarrow> ('r, 'k) split_pd) F k. lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow>
-      (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow> sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
+    and l: "\<And>(Y :: nat \<Rightarrow> ('r, 'k) split_pd) C F k. lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow> conforming_rows (split_rows\<cdot>C) \<Longrightarrow>
+      (\<Squnion>i. Y i) \<sqsubseteq> C \<Longrightarrow> sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
   shows "ext_cont X"
-  by (rule ext_contI2 [OF ext_monoD [OF m _ _ _ below_refl] l])
+  unfolding ext_cont_def
+proof (intro allI impI)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C F k
+  assume F: "lod_bounded F" and Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
+  have cY: "chain (\<lambda>i. sem_ext X (Y i) F k)"
+    by (rule chainI) (rule ext_monoD [OF m F cC chainE [OF Y] ext_cont_below [OF LC Y]])
+  have ub: "sem_ext X (Y i) F k \<sqsubseteq> sem_ext X (\<Squnion>i. Y i) F k" for i by (rule ext_monoD [OF m F cC is_ub_thelub [OF Y] LC])
+  have "(\<Squnion>i. sem_ext X (Y i) F k) = sem_ext X (\<Squnion>i. Y i) F k"
+    by (rule below_antisym [OF lub_below [OF cY ub] l [OF F Y cC LC]])
+  then show "range (\<lambda>i. sem_ext X (Y i) F k) <<| sem_ext X (\<Squnion>i. Y i) F k"
+    using cpo_lubI [OF cY] by simp
+qed
+
+lemma cont_sem_ext_conf:
+  assumes c: "ext_cont X" and F: "lod_bounded F"
+  shows "cont (\<lambda>D :: ('r, 'k) conf_split. sem_ext X (Rep_conf_split D) F k)"
+proof (rule contI)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) conf_split" assume Y: "chain Y"
+  have R: "chain (\<lambda>i. Rep_conf_split (Y i))" by (rule ch2ch_cont [OF cont_Rep_conf_split [OF cont_id] Y])
+  have l: "Rep_conf_split (\<Squnion>i. Y i) = (\<Squnion>i. Rep_conf_split (Y i))" by (rule cont2contlubE [OF cont_Rep_conf_split [OF cont_id] Y])
+  have conf: "conforming_rows (split_rows\<cdot>(\<Squnion>i. Rep_conf_split (Y i)))"
+    using Rep_conf_split [of "\<Squnion>i. Y i"] unfolding l by simp
+  show "range (\<lambda>i. sem_ext X (Rep_conf_split (Y i)) F k) <<| sem_ext X (Rep_conf_split (\<Squnion>i. Y i)) F k"
+    unfolding l by (rule ext_contD [OF c F R conf below_refl])
+qed
 
 definition ext_fun :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) conf_split \<rightarrow> 'v option_pd" where
   "ext_fun X F k = (\<Lambda> D. sem_ext X (Rep_conf_split D) F k)"
@@ -933,22 +930,42 @@ proof -
 qed
 
 
+subsection \<open>Monotonicity of the combinators below conforming datasets\<close>
+
+theorem ext_mono_const: "ext_mono (const_ext v)"
+  by (rule ext_monoI) simp
+
+theorem ext_mono_smap: "ext_mono X \<Longrightarrow> ext_mono (smap_ext g X)"
+  by (rule ext_monoI) (simp add: monofun_cfun_arg ext_monoD)
+
+theorem ext_mono_restrict: "ext_mono X \<Longrightarrow> ext_mono (restrict_ext \<gamma> X)"
+  unfolding ext_mono_def by simp
+
+theorem ext_mono_filtfor: "ext_mono X \<Longrightarrow> ext_mono (filtfor_ext \<tau> G X)"
+  unfolding ext_mono_def by (simp add: lod_bounded_ffor)
+
+theorem ext_mono_include_dims: "compact M \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (include_dims_ext M X)"
+  unfolding ext_mono_def by (simp add: lod_bounded_finclude)
+
+theorem ext_mono_combine: "ext_mono X\<^sub>1 \<Longrightarrow> ext_mono X\<^sub>2 \<Longrightarrow> ext_mono (combine_ext f X\<^sub>1 X\<^sub>2)"
+  by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg ext_monoD)
+
+theorem ext_mono_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_mono X) \<Longrightarrow> ext_mono (tuple_ext Xs)"
+  by (induct Xs) (simp_all add: ext_mono_const const_ext_def [symmetric] ext_mono_combine)
+
 subsection \<open>Continuity of the combinators\<close>
 
 theorem ext_cont_const: "ext_cont (const_ext v)"
-  by (rule ext_contI2) simp_all
+  by (rule ext_contI2 [OF ext_mono_const]) simp
 
-theorem ext_cont_smap: "ext_cont X \<Longrightarrow> ext_cont (smap_ext g X)"
-proof (rule ext_contI2, simp_all only: smap_ext_simps)
-  fix D D' :: "('r, 'k) split_pd" and F k
-  assume "ext_cont X" "lod_bounded F" "conforming_rows (split_rows\<cdot>D)" "conforming_rows (split_rows\<cdot>D')" "D \<sqsubseteq> D'"
-  then show "map_option_pd g\<cdot>(sem_ext X D F k) \<sqsubseteq> map_option_pd g\<cdot>(sem_ext X D' F k)"
-    by (intro monofun_cfun_arg ext_cont_mono)
-next
-  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k
-  assume X: "ext_cont X" and F: "lod_bounded F" and Y: "chain Y" and c: "\<And>i. conforming_rows (split_rows\<cdot>(Y i))"
+theorem ext_cont_smap:
+  assumes X: "ext_cont X"
+  shows "ext_cont (smap_ext g X)"
+proof (rule ext_contI2 [OF ext_mono_smap [OF ext_cont_mono [OF X]]], simp only: smap_ext_simps)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C F k
+  assume F: "lod_bounded F" and Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
   show "map_option_pd g\<cdot>(sem_ext X (\<Squnion>i. Y i) F k) \<sqsubseteq> (\<Squnion>i. map_option_pd g\<cdot>(sem_ext X (Y i) F k))"
-    unfolding ext_cont_lub [OF X F Y c] contlub_cfun_arg [OF ext_cont_chain [OF X F Y c]] ..
+    unfolding ext_cont_lub [OF X F Y cC LC] contlub_cfun_arg [OF ext_cont_chain [OF X F Y cC LC]] ..
 qed
 
 theorem ext_cont_restrict: "ext_cont X \<Longrightarrow> ext_cont (restrict_ext \<gamma> X)"
@@ -963,22 +980,16 @@ theorem ext_cont_include_dims: "compact M \<Longrightarrow> ext_cont X \<Longrig
 theorem ext_cont_combine:
   assumes X\<^sub>1: "ext_cont X\<^sub>1" and X\<^sub>2: "ext_cont X\<^sub>2"
   shows "ext_cont (combine_ext f X\<^sub>1 X\<^sub>2)"
-proof (rule ext_contI2, simp_all only: combine_ext_simps)
-  fix D D' :: "('r, 'k) split_pd" and F k
-  assume F: "lod_bounded F" and c: "conforming_rows (split_rows\<cdot>D)" "conforming_rows (split_rows\<cdot>D')" and le: "D \<sqsubseteq> D'"
-  show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D F (proj (kd X\<^sub>2 F)\<cdot>k))
-      \<sqsubseteq> lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 D' F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 D' F (proj (kd X\<^sub>2 F)\<cdot>k))"
-    by (intro monofun_cfun monofun_cfun_arg ext_cont_mono [OF X\<^sub>1 F c le] ext_cont_mono [OF X\<^sub>2 F c le])
-next
-  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k
-  assume F: "lod_bounded F" and Y: "chain Y" and c: "\<And>i. conforming_rows (split_rows\<cdot>(Y i))"
+proof (rule ext_contI2 [OF ext_mono_combine [OF ext_cont_mono [OF X\<^sub>1] ext_cont_mono [OF X\<^sub>2]]], simp only: combine_ext_simps)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C F k
+  assume F: "lod_bounded F" and Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
   let ?a = "\<lambda>i. sem_ext X\<^sub>1 (Y i) F (proj (kd X\<^sub>1 F)\<cdot>k)" and ?b = "\<lambda>i. sem_ext X\<^sub>2 (Y i) F (proj (kd X\<^sub>2 F)\<cdot>k)"
-  have a: "chain ?a" and b: "chain ?b" by (rule ext_cont_chain [OF X\<^sub>1 F Y c], rule ext_cont_chain [OF X\<^sub>2 F Y c])
+  have a: "chain ?a" and b: "chain ?b" by (rule ext_cont_chain [OF X\<^sub>1 F Y cC LC], rule ext_cont_chain [OF X\<^sub>2 F Y cC LC])
   have "lift2_option_pd f\<cdot>(\<Squnion>i. ?a i)\<cdot>(\<Squnion>i. ?b i) = (\<Squnion>i. lift2_option_pd f\<cdot>(?a i)\<cdot>(?b i))"
     by (simp add: contlub_cfun_arg [OF a] lub_APP [OF ch2ch_Rep_cfunR [OF a] b])
   then show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 (\<Squnion>i. Y i) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 (\<Squnion>i. Y i) F (proj (kd X\<^sub>2 F)\<cdot>k))
       \<sqsubseteq> (\<Squnion>i. lift2_option_pd f\<cdot>(?a i)\<cdot>(?b i))"
-    by (simp only: ext_cont_lub [OF X\<^sub>1 F Y c] ext_cont_lub [OF X\<^sub>2 F Y c] below_refl)
+    by (simp only: ext_cont_lub [OF X\<^sub>1 F Y cC LC] ext_cont_lub [OF X\<^sub>2 F Y cC LC] below_refl)
 qed
 
 theorem ext_cont_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_cont X) \<Longrightarrow> ext_cont (tuple_ext Xs)"
@@ -1060,14 +1071,13 @@ next
   qed
 qed
 
+theorem ext_mono_key_at: "compact c \<Longrightarrow> ext_mono (key_at_ext c)"
+  by (rule ext_monoI) (simp add: key_at_sem_mono)
+
 theorem ext_cont_key_at:
   assumes c: "compact c"
   shows "ext_cont (key_at_ext c)"
-proof (rule ext_contI2, simp_all only: key_at_ext_simps)
-  fix D D' :: "('r, 'k) split_pd" and k
-  assume "D \<sqsubseteq> D'"
-  then show "key_at_sem c D k \<sqsubseteq> key_at_sem c D' k" by (rule key_at_sem_mono [OF c])
-next
+proof (rule ext_contI2 [OF ext_mono_key_at [OF c]], simp only: key_at_ext_simps)
   fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and k
   assume Y: "chain Y"
   have ch: "chain (\<lambda>i. key_at_sem c (Y i) k)" by (rule chainI) (simp add: key_at_sem_mono [OF c] chainE [OF Y])
@@ -1177,24 +1187,21 @@ proof -
   qed
 qed
 
+theorem ext_mono_present_at: "compact (emind X \<squnion> a) \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (present_at_ext a \<rho> X)"
+  by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg populated_ext_mono ext_monoD)
+
 theorem ext_cont_present_at:
   assumes m: "compact (emind X \<squnion> a)" and X: "ext_cont X"
   shows "ext_cont (present_at_ext a \<rho> X)"
-proof (rule ext_contI2, simp_all only: present_at_ext_simps)
-  fix D D' :: "('r, 'k) split_pd" and F k
-  assume F: "lod_bounded F" and c: "conforming_rows (split_rows\<cdot>D)" "conforming_rows (split_rows\<cdot>D')" and le: "D \<sqsubseteq> D'"
-  show "populated_ext D (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X D F (proj (kd X F)\<cdot>k)
-      \<sqsubseteq> populated_ext D' (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X D' F (proj (kd X F)\<cdot>k)"
-    by (intro monofun_cfun monofun_cfun_arg populated_ext_mono [OF m F le] ext_cont_mono [OF X F c le])
-next
-  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and F k
-  assume F: "lod_bounded F" and Y: "chain Y" and c: "\<And>i. conforming_rows (split_rows\<cdot>(Y i))"
+proof (rule ext_contI2 [OF ext_mono_present_at [OF m ext_cont_mono [OF X]]], simp only: present_at_ext_simps)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C F k
+  assume F: "lod_bounded F" and Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
   let ?t = "\<lambda>i. populated_ext (Y i) (emind X \<squnion> a) \<rho> F k" and ?x = "\<lambda>i. sem_ext X (Y i) F (proj (kd X F)\<cdot>k)"
   have t: "chain ?t" by (rule chainI) (simp add: populated_ext_mono [OF m F] chainE [OF Y])
-  have x: "chain ?x" by (rule ext_cont_chain [OF X F Y c])
+  have x: "chain ?x" by (rule ext_cont_chain [OF X F Y cC LC])
   have "populated_ext (\<Squnion>i. Y i) (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X (\<Squnion>i. Y i) F (proj (kd X F)\<cdot>k)
       \<sqsubseteq> (\<Squnion>i. ?t i) \<odot> (\<Squnion>i. ?x i)"
-    unfolding ext_cont_lub [OF X F Y c] by (intro monofun_cfun_fun monofun_cfun_arg populated_ext_lub [OF m F Y])
+    unfolding ext_cont_lub [OF X F Y cC LC] by (intro monofun_cfun_fun monofun_cfun_arg populated_ext_lub [OF m F Y])
   also have "\<dots> = (\<Squnion>i. ?t i \<odot> ?x i)"
     by (simp add: contlub_cfun_arg [OF t] lub_APP [OF ch2ch_Rep_cfunR [OF t] x])
   finally show "populated_ext (\<Squnion>i. Y i) (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X (\<Squnion>i. Y i) F (proj (kd X F)\<cdot>k)
@@ -1298,20 +1305,20 @@ lemma column_sem_mono:
     column_sem c a v D k \<sqsubseteq> column_sem c a v D' k"
   by (rule column_sem_mono_below [OF _ _ _ _ below_refl])
 
+theorem ext_mono_column:
+  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> compact a \<Longrightarrow> ext_mono (column_ext c a v)"
+  by (rule ext_monoI) (simp add: column_sem_mono_below)
+
 theorem ext_cont_column:
   assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "compact a"
   shows "ext_cont (column_ext c a v)"
-proof (rule ext_contI2, simp_all only: column_ext_simps)
-  fix D D' :: "('r, 'k) split_pd" and k
-  assume "conforming_rows (split_rows\<cdot>D')" "D \<sqsubseteq> D'"
-  then show "column_sem c a v D k \<sqsubseteq> column_sem c a v D' k" by (rule column_sem_mono [OF fd ca])
-next
-  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and k
-  assume Y: "chain Y" and cY: "\<And>i. conforming_rows (split_rows\<cdot>(Y i))"
+proof (rule ext_contI2 [OF ext_mono_column [OF fd ca]], simp only: column_ext_simps)
+  fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C k
+  assume Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
   let ?C = "\<lambda>D. maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}"
   let ?L = "\<Squnion>i. Y i"
-  have cL: "conforming_rows (split_rows\<cdot>?L)" by (rule conforming_rows_lub [OF Y cY])
-  have ch: "chain (\<lambda>i. column_sem c a v (Y i) k)" by (rule chainI) (simp add: column_sem_mono [OF fd ca cY] chainE [OF Y])
+  have YC: "Y i \<sqsubseteq> C" for i by (rule ext_cont_below [OF LC Y])
+  have ch: "chain (\<lambda>i. column_sem c a v (Y i) k)" by (rule chainI) (rule column_sem_mono_below [OF fd ca cC chainE [OF Y] YC])
   have stage: "column_sem c a v ?L k \<sqsubseteq> (\<Squnion>i. column_sem c a v (Y i) k)"
     if "column_sem c a v ?L k \<sqsubseteq> column_sem c a v (Y i) k" for i
     by (rule below_trans [OF that is_ub_thelub [OF ch]])
@@ -1345,7 +1352,13 @@ next
     obtain i0 y0 where i0: "y0 \<in> col_sections c a (Y i0) k" using approx [OF z0, of 0] by blast
     have Ci: "?C (Y (j + i0))" for j using mx col_sections_mono [OF chain_mono [OF Y le_add2]] i0 by blast
     let ?l = "\<lambda>j. lub (col_sections c a (Y (j + i0)) k)"
-    have ub: "\<exists>b. col_sections c a (Y (j + i0)) k <| b" for j by (rule col_sections_ub [OF fd cY]) (use Ci in simp_all)
+    have ub: "\<exists>b. col_sections c a (Y (j + i0)) k <| b" for j
+    proof -
+      have sub: "col_sections c a (Y (j + i0)) k \<subseteq> col_sections c a C k" by (rule col_sections_mono [OF YC])
+      have "col_sections c a C k \<noteq> {}" using Ci [of j] sub by blast
+      then obtain b where "col_sections c a C k <| b" using col_sections_ub [OF fd cC mx] by blast
+      then show ?thesis using sub by (auto simp: is_ub_def)
+    qed
     have lch: "chain ?l"
     proof (rule chainI)
       fix j
@@ -1393,41 +1406,6 @@ next
     qed
   qed
 qed
-
-
-subsection \<open>Monotonicity of the combinators below conforming datasets\<close>
-
-theorem ext_mono_const: "ext_mono (const_ext v)"
-  by (rule ext_monoI) simp
-
-theorem ext_mono_smap: "ext_mono X \<Longrightarrow> ext_mono (smap_ext g X)"
-  by (rule ext_monoI) (simp add: monofun_cfun_arg ext_monoD)
-
-theorem ext_mono_restrict: "ext_mono X \<Longrightarrow> ext_mono (restrict_ext \<gamma> X)"
-  unfolding ext_mono_def by simp
-
-theorem ext_mono_filtfor: "ext_mono X \<Longrightarrow> ext_mono (filtfor_ext \<tau> G X)"
-  unfolding ext_mono_def by (simp add: lod_bounded_ffor)
-
-theorem ext_mono_include_dims: "compact M \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (include_dims_ext M X)"
-  unfolding ext_mono_def by (simp add: lod_bounded_finclude)
-
-theorem ext_mono_combine: "ext_mono X\<^sub>1 \<Longrightarrow> ext_mono X\<^sub>2 \<Longrightarrow> ext_mono (combine_ext f X\<^sub>1 X\<^sub>2)"
-  by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg ext_monoD)
-
-theorem ext_mono_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_mono X) \<Longrightarrow> ext_mono (tuple_ext Xs)"
-  by (induct Xs) (simp_all add: ext_mono_const const_ext_def [symmetric] ext_mono_combine)
-
-theorem ext_mono_key_at: "compact c \<Longrightarrow> ext_mono (key_at_ext c)"
-  by (rule ext_monoI) (simp add: key_at_sem_mono)
-
-theorem ext_mono_present_at: "compact (emind X \<squnion> a) \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (present_at_ext a \<rho> X)"
-  by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg populated_ext_mono ext_monoD)
-
-theorem ext_mono_column:
-  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> compact a \<Longrightarrow> ext_mono (column_ext c a v)"
-  by (rule ext_monoI) (simp add: column_sem_mono_below)
-
 end
 
 end
