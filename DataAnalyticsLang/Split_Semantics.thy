@@ -1111,6 +1111,92 @@ proof -
   ultimately show False by simp
 qed
 
+text \<open>A compact definite row of a dataset given by a chain of basis elements lies below a generator
+  at some stage.\<close>
+
+lemma definite_chain_generator:
+  assumes Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and y: "split_definite y (\<Squnion>i. split_principal (Z i))" and cy: "compact y"
+  obtains i x where "x \<in> srows (Z i)" "y \<sqsubseteq> Rep_compact_basis x"
+proof -
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  obtain i where i: "split_definite y (split_principal (Z i))" by (rule split_definite_lub_compact [OF ch cy y])
+  have "split_definite (Rep_compact_basis (Abs_compact_basis y)) (split_principal (Z i))"
+    by (simp only: Abs_compact_basis_inverse' [OF cy] i)
+  then obtain x where x0: "x \<in> srows (Z i)" "Abs_compact_basis y \<sqsubseteq> x"
+    unfolding split_definite_principal by blast
+  have "y \<sqsubseteq> Rep_compact_basis x" using x0(2) unfolding compact_le_def Abs_compact_basis_inverse' [OF cy] .
+  then show ?thesis using that x0(1) by blast
+qed
+
+lemma generator_definite: "x \<in> srows t \<Longrightarrow> split_definite (Rep_compact_basis x) (split_principal t)"
+  unfolding split_definite_principal by blast
+
+text \<open>At a compact key part the selection test reads only the selection: the definite rows at a
+  maximal part passing the tests are those of the selected dataset, and refutation reads the
+  selected possible keys.\<close>
+
+lemma select_test_select:
+  assumes k: "compact \<kappa>"
+  shows "select_test s \<kappa> g h (split_select s \<kappa>\<cdot>D) = select_test s \<kappa> g h D"
+proof -
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and DZ: "D = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  have Z': "\<forall>i. split_le (SSelect s \<kappa> (Z i)) (SSelect s \<kappa> (Z (Suc i)))" using Z SSelect_split_mono by blast
+  have ch': "chain (\<lambda>i. split_principal (SSelect s \<kappa> (Z i)))" by (rule split_pd.ch2ch_principal [OF Z'])
+  have SD: "split_select s \<kappa>\<cdot>D = (\<Squnion>i. split_principal (SSelect s \<kappa> (Z i)))"
+    unfolding DZ by (simp add: contlub_cfun_arg [OF ch])
+  let ?f = "\<Lambda> y. (rproj s y, g\<cdot>y, h\<cdot>(row_key\<cdot>y))"
+  let ?T = "\<lambda>D. maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT \<and> h\<cdot>(row_key\<cdot>y) = TT)"
+  have approx: "\<exists>y0. compact y0 \<and> y0 \<sqsubseteq> y \<and> rproj s y0 = \<kappa> \<and> g\<cdot>y0 = TT \<and> h\<cdot>(row_key\<cdot>y0) = TT"
+    if ky: "rproj s y = \<kappa>" and gy: "g\<cdot>y = TT" and hy: "h\<cdot>(row_key\<cdot>y) = TT" for y
+  proof -
+    obtain y0 where "compact y0" "y0 \<sqsubseteq> y" "?f\<cdot>y0 = ?f\<cdot>y"
+      by (rule compact_approx_value [of ?f y]) (simp add: gy hy k [folded ky] compact_TT)
+    then show ?thesis using ky gy hy by auto
+  qed
+  have up: "g\<cdot>x = TT \<and> h\<cdot>(row_key\<cdot>x) = TT" if "y0 \<sqsubseteq> x" "g\<cdot>y0 = TT" "h\<cdot>(row_key\<cdot>y0) = TT" for x y0
+  proof -
+    have "TT \<sqsubseteq> g\<cdot>x" unfolding that(2) [symmetric] by (rule monofun_cfun_arg [OF that(1)])
+    moreover have "TT \<sqsubseteq> h\<cdot>(row_key\<cdot>x)" unfolding that(3) [symmetric] by (intro monofun_cfun_arg that(1))
+    ultimately show ?thesis by simp
+  qed
+  have "?T (split_select s \<kappa>\<cdot>D) \<longleftrightarrow> ?T D"
+  proof
+    assume "?T (split_select s \<kappa>\<cdot>D)"
+    then obtain y where mx: "maximal_at s \<kappa>" and y: "split_definite y (split_select s \<kappa>\<cdot>D)" "rproj s y = \<kappa>"
+      "g\<cdot>y = TT" "h\<cdot>(row_key\<cdot>y) = TT" by blast
+    obtain y0 where y0: "compact y0" "y0 \<sqsubseteq> y" "g\<cdot>y0 = TT" "h\<cdot>(row_key\<cdot>y0) = TT"
+      using approx [OF y(2-4)] by blast
+    have "split_definite y0 (\<Squnion>i. split_principal (SSelect s \<kappa> (Z i)))"
+      using split_definite_below [OF y(1) y0(2)] unfolding SD .
+    then obtain i x where x: "x \<in> srows (SSelect s \<kappa> (Z i))" "y0 \<sqsubseteq> Rep_compact_basis x"
+      by (rule definite_chain_generator [OF Z' _ y0(1)])
+    have xZ: "x \<in> srows (Z i)" and xk: "rproj s (Rep_compact_basis x) = \<kappa>" using x(1) by simp_all
+    have "split_definite (Rep_compact_basis x) D"
+      by (rule split_definite_mono [OF generator_definite [OF xZ]]) (simp only: DZ is_ub_thelub [OF ch])
+    then show "?T D" using mx xk up [OF x(2) y0(3,4)] by blast
+  next
+    assume "?T D"
+    then obtain y where mx: "maximal_at s \<kappa>" and y: "split_definite y D" "rproj s y = \<kappa>"
+      "g\<cdot>y = TT" "h\<cdot>(row_key\<cdot>y) = TT" by blast
+    obtain y0 where y0: "compact y0" "y0 \<sqsubseteq> y" "rproj s y0 = \<kappa>" "g\<cdot>y0 = TT" "h\<cdot>(row_key\<cdot>y0) = TT"
+      using approx [OF y(2-4)] by blast
+    have "split_definite y0 (\<Squnion>i. split_principal (Z i))" using split_definite_below [OF y(1) y0(2)] unfolding DZ .
+    then obtain i x where x: "x \<in> srows (Z i)" "y0 \<sqsubseteq> Rep_compact_basis x"
+      by (rule definite_chain_generator [OF Z _ y0(1)])
+    have "rproj s y0 \<sqsubseteq> rproj s (Rep_compact_basis x)" by (intro monofun_cfun_arg x(2))
+    then have xk: "rproj s (Rep_compact_basis x) = \<kappa>" unfolding y0(3) by (rule maximal_at_eq [OF mx proj_idem])
+    have xS: "x \<in> srows (SSelect s \<kappa> (Z i))" using x(1) xk mx by simp
+    have "split_definite (Rep_compact_basis x) (split_select s \<kappa>\<cdot>D)"
+      by (rule split_definite_mono [OF generator_definite [OF xS]]) (simp only: SD is_ub_thelub [OF ch'])
+    then show "?T (split_select s \<kappa>\<cdot>D)" using mx xk up [OF x(2) y0(4,5)] by blast
+  qed
+  moreover have "split_refuted s \<kappa> h (split_select s \<kappa>\<cdot>D) \<longleftrightarrow> split_refuted s \<kappa> h D"
+    unfolding split_refuted_def split_select_idem ..
+  ultimately show ?thesis unfolding select_test_def by (simp only:)
+qed
+
 lemma impossible_refuted:
   assumes n: "\<not> split_possible_at s \<kappa> D"
   shows "split_refuted s \<kappa> h D"

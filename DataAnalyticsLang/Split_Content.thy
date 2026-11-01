@@ -184,6 +184,9 @@ lemma split_select_plus: "split_select s \<kappa>\<cdot>(xs \<union>\<^sub>s ys)
   apply (simp, rule split_principal_eqI, auto)
   done
 
+lemma split_select_idem: "split_select s \<kappa>\<cdot>(split_select s \<kappa>\<cdot>D) = split_select s \<kappa>\<cdot>D"
+  by (induct D rule: split_pd.principal_induct, simp, simp, rule split_principal_eqI, auto)
+
 text \<open>A possible key that may end up at the part bounds the selected possible keys.\<close>
 
 lemma split_select_keys_possible:
