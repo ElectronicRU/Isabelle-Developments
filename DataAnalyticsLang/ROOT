@@ -25,6 +25,7 @@ session DataAnalyticsLang = "HOLCF-extra" +
     Ast
     Ast_Semantics
     Split_Semantics
+    Key_Mix
     Split_Csem
     Ast_Split_Semantics
   document_files

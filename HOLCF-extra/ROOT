@@ -28,6 +28,7 @@ session "HOLCF-extra" = HOLCF +
     UpperPD_Representation
     Cpo_Topology
     BagPD
+    MixPD
   document_files
     "root.tex"
 

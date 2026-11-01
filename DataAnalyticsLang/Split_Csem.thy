@@ -1,5 +1,5 @@
 theory Split_Csem
-  imports Split_Semantics
+  imports Key_Mix
 begin
 
 section \<open>Content semantics over split datasets\<close>
@@ -85,12 +85,6 @@ lemma ext_csemD_kd:
 
 subsection \<open>Presence on views and trivial guards\<close>
 
-lemma split_rowguard_TT [simp]: "split_rowguard (\<Lambda> _. TT)\<cdot>C = C"
-  by (induct C rule: split_pd.principal_induct) (simp, simp, rule split_principal_eqI, simp_all)
-
-lemma split_keyguard_TT [simp]: "split_keyguard (\<Lambda> _. TT)\<cdot>C = C"
-  by (induct C rule: split_pd.principal_induct) (simp, simp, rule split_principal_eqI, simp_all)
-
 text \<open>A view keeps whether there are rows and whether there are possible keys.\<close>
 
 lemma split_view_rows_bot: "split_rows\<cdot>(split_view v\<cdot>C) = \<bottom> \<longleftrightarrow> split_rows\<cdot>C = \<bottom>"
@@ -108,9 +102,6 @@ proof -
     unfolding CZ contlub_cfun_arg [OF ch] by (rule lub_eq_bottom_iff [OF ch2ch_Rep_cfunR [OF ch], symmetric])
   finally show ?thesis .
 qed
-
-lemma split_keys_principal_Top: "split_keys\<cdot>(split_principal t) = Top \<longleftrightarrow> skeys t = {}"
-  by (simp add: skeys_upper_def down_beta)
 
 lemma split_view_keys_Top: "split_keys\<cdot>(split_view v\<cdot>C) = Top \<longleftrightarrow> split_keys\<cdot>C = Top"
 proof -
@@ -768,29 +759,6 @@ proof -
   then have "(\<Squnion>n. split_open_unit\<cdot>(r n\<cdot>y)) \<sqsubseteq> C" unfolding split_definite_def by (intro lub_below ch2ch_Rep_cfunR ch2ch_Rep_cfunL R.chain_approx)
   then show ?thesis unfolding split_definite_def
     by (simp add: contlub_cfun_arg [OF ch2ch_Rep_cfunL [OF R.chain_approx], symmetric] contlub_cfun_fun [OF R.chain_approx, symmetric] R.lub_approx)
-qed
-
-lemma upper_map_principal_below_unit:
-  "upper_map\<cdot>h\<cdot>(upper_principal P) \<sqsubseteq> {x}\<sharp> \<longleftrightarrow> (\<exists>u\<in>Rep_pd_basis P. h\<cdot>(Rep_compact_basis u) \<sqsubseteq> x)"
-proof (induct P rule: pd_basis_induct)
-  case (PDUnit a)
-  show ?case by (simp add: upper_unit_Rep_compact_basis [symmetric] Rep_PDUnit del: upper_unit_Rep_compact_basis)
-next
-  case (PDPlus t u)
-  show ?case
-    by (simp add: upper_plus_principal [symmetric] Rep_PDPlus PDPlus.hyps del: upper_plus_principal) blast
-qed
-
-lemma possible_at_principal:
-  "split_possible_at K \<kappa> (split_principal t) \<longleftrightarrow> (\<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> \<kappa>)"
-proof (cases "skeys t = {}")
-  case True
-  then show ?thesis by (simp add: split_possible_at_def skeys_upper_def down_beta)
-next
-  case False
-  have Kt: "Rep_pd_basis (Abs_pd_basis (skeys t)) = skeys t" by (rule Abs_pd_basis_inverse) (simp add: pd_basis_def False)
-  have e: "split_keys\<cdot>(split_principal t) = down\<cdot>(upper_principal (Abs_pd_basis (skeys t)))" by (simp add: skeys_upper_def False)
-  show ?thesis unfolding split_possible_at_def e cmap_top_down unfolding down_beta below_Of upper_map_principal_below_unit Kt ..
 qed
 
 lemma filter_possible:
