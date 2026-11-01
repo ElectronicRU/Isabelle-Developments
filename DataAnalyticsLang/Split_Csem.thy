@@ -737,6 +737,96 @@ proof -
     by (simp only: entry.select_convs selector.select_convs fst_conv snd_conv B kf split_select_keyguard_comm split_select_rowguard_comm sel gand_gtrue)
 qed
 
+text \<open>The guard filters and selection only drop definite rows and possible keys: a definite row of
+  the filtered dataset is one of the dataset, and a key part possible there is possible in it.\<close>
+
+lemma filter_definite:
+  fixes \<Phi> :: "('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" and C :: "('r, 'k) split_pd"
+  assumes P: "\<And>t. \<Phi>\<cdot>(split_principal t) = split_principal (\<Psi> t)" and S: "\<And>t. srows (\<Psi> t) \<subseteq> srows t"
+    and M: "\<And>s t. split_le s t \<Longrightarrow> split_le (\<Psi> s) (\<Psi> t)" and d: "split_definite y (\<Phi>\<cdot>C)"
+  shows "split_definite y C"
+proof -
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and CZ: "C = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  have ZP: "\<forall>i. split_le (\<Psi> (Z i)) (\<Psi> (Z (Suc i)))" using Z M by blast
+  have PC: "\<Phi>\<cdot>C = (\<Squnion>i. split_principal (\<Psi> (Z i)))" unfolding CZ contlub_cfun_arg [OF ch] P ..
+  obtain r :: "nat \<Rightarrow> 'r \<rightarrow> 'r" where r: "approx_chain r" using bifinite by blast
+  interpret R: approx_chain r by (fact r)
+  have "split_definite (r n\<cdot>y) C" for n
+  proof -
+    have c: "compact (r n\<cdot>y)" by (rule finite_deflation.compact [OF R.finite_deflation_approx])
+    have "split_definite (r n\<cdot>y) (\<Squnion>i. split_principal (\<Psi> (Z i)))"
+      unfolding PC [symmetric]
+      by (rule split_definite_below [OF d deflation.below [OF finite_deflation_imp_deflation [OF R.finite_deflation_approx]]])
+    then obtain i x where x: "x \<in> srows (\<Psi> (Z i))" "r n\<cdot>y \<sqsubseteq> Rep_compact_basis x"
+      by (rule definite_chain_generator [OF ZP _ c])
+    have "split_definite (Rep_compact_basis x) C"
+      by (rule split_definite_mono [OF generator_definite [OF subsetD [OF S x(1)]]]) (simp only: CZ is_ub_thelub [OF ch])
+    then show ?thesis by (rule split_definite_below [OF _ x(2)])
+  qed
+  then have "(\<Squnion>n. split_open_unit\<cdot>(r n\<cdot>y)) \<sqsubseteq> C" unfolding split_definite_def by (intro lub_below ch2ch_Rep_cfunR ch2ch_Rep_cfunL R.chain_approx)
+  then show ?thesis unfolding split_definite_def
+    by (simp add: contlub_cfun_arg [OF ch2ch_Rep_cfunL [OF R.chain_approx], symmetric] contlub_cfun_fun [OF R.chain_approx, symmetric] R.lub_approx)
+qed
+
+lemma upper_map_principal_below_unit:
+  "upper_map\<cdot>h\<cdot>(upper_principal P) \<sqsubseteq> {x}\<sharp> \<longleftrightarrow> (\<exists>u\<in>Rep_pd_basis P. h\<cdot>(Rep_compact_basis u) \<sqsubseteq> x)"
+proof (induct P rule: pd_basis_induct)
+  case (PDUnit a)
+  show ?case by (simp add: upper_unit_Rep_compact_basis [symmetric] Rep_PDUnit del: upper_unit_Rep_compact_basis)
+next
+  case (PDPlus t u)
+  show ?case
+    by (simp add: upper_plus_principal [symmetric] Rep_PDPlus PDPlus.hyps del: upper_plus_principal) blast
+qed
+
+lemma possible_at_principal:
+  "split_possible_at K \<kappa> (split_principal t) \<longleftrightarrow> (\<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> \<kappa>)"
+proof (cases "skeys t = {}")
+  case True
+  then show ?thesis by (simp add: split_possible_at_def skeys_upper_def down_beta)
+next
+  case False
+  have Kt: "Rep_pd_basis (Abs_pd_basis (skeys t)) = skeys t" by (rule Abs_pd_basis_inverse) (simp add: pd_basis_def False)
+  have e: "split_keys\<cdot>(split_principal t) = down\<cdot>(upper_principal (Abs_pd_basis (skeys t)))" by (simp add: skeys_upper_def False)
+  show ?thesis unfolding split_possible_at_def e cmap_top_down unfolding down_beta below_Of upper_map_principal_below_unit Kt ..
+qed
+
+lemma filter_possible:
+  fixes \<Phi> :: "('r, 'k) split_pd \<rightarrow> ('r, 'k) split_pd" and C :: "('r, 'k) split_pd"
+  assumes P: "\<And>t. \<Phi>\<cdot>(split_principal t) = split_principal (\<Psi> t)" and S: "\<And>t. skeys (\<Psi> t) \<subseteq> skeys t"
+    and M: "\<And>s t. split_le s t \<Longrightarrow> split_le (\<Psi> s) (\<Psi> t)" and p: "split_possible_at K \<kappa> (\<Phi>\<cdot>C)"
+  shows "split_possible_at K \<kappa> C"
+proof -
+  obtain Z where Z: "\<forall>i. split_le (Z i) (Z (Suc i))" and CZ: "C = (\<Squnion>i. split_principal (Z i))"
+    by (rule split_pd.obtain_principal_chain)
+  have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
+  have chP: "chain (\<lambda>i. split_principal (\<Psi> (Z i)))" by (rule split_pd.ch2ch_principal) (blast intro: Z [rule_format] M)
+  have PC: "\<Phi>\<cdot>C = (\<Squnion>i. split_principal (\<Psi> (Z i)))" unfolding CZ contlub_cfun_arg [OF ch] P ..
+  have "split_possible_at K \<kappa> (split_principal (Z i))" for i
+  proof -
+    have "split_possible_at K \<kappa> (split_principal (\<Psi> (Z i)))"
+      by (rule split_possible_at_below [OF p]) (simp only: PC is_ub_thelub [OF chP])
+    then show ?thesis unfolding possible_at_principal using S by blast
+  qed
+  then show ?thesis unfolding CZ by (rule split_possible_at_lub [OF ch])
+qed
+
+text \<open>The content of a guard entry is such a filtered selection.\<close>
+
+lemma gcontent_definite: "split_definite y (gcontent_ext D e F k) \<Longrightarrow> split_definite y D"
+  unfolding gcontent_ext_def sel_select_def
+  by (rule filter_definite [where \<Phi> = "split_rowguard _ oo split_keyguard _ oo split_select _ _"
+        and \<Psi> = "\<lambda>t. SRowGuard _ (SKeyGuard _ (SSelect _ _ t))"])
+     (auto intro: SRowGuard_split_mono SKeyGuard_split_mono SSelect_split_mono)
+
+lemma gcontent_possible: "split_possible_at K \<kappa> (gcontent_ext D e F k) \<Longrightarrow> split_possible_at K \<kappa> D"
+  unfolding gcontent_ext_def sel_select_def
+  by (rule filter_possible [where \<Phi> = "split_rowguard _ oo split_keyguard _ oo split_select _ _"
+        and \<Psi> = "\<lambda>t. SRowGuard _ (SKeyGuard _ (SSelect _ _ t))"])
+     (auto intro: SRowGuard_split_mono SKeyGuard_split_mono SSelect_split_mono)
+
 end
 
 end
