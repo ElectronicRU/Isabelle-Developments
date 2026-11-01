@@ -289,16 +289,34 @@ lemma ext_fun_apply: "ext_cont X \<Longrightarrow> lod_bounded F \<Longrightarro
 
 subsection \<open>Keys\<close>
 
-text \<open>The key at an LOD \<open>c\<close> is absent where the possible keys do not allow it there.  Otherwise
-  it is present where some definite row has it: where the key is maximal at \<open>c\<close> it stays present;
-  where it is partial the row may still move up, so it is present or absent, present with that key.
-  Otherwise it is undecided.\<close>
+text \<open>The selection test at a key part \<open>\<kappa>\<close> of an LOD \<open>s\<close>, for a row predicate \<open>g\<close>: true where
+  some definite row at \<open>\<kappa>\<close> passes \<open>g\<close> and \<open>\<kappa>\<close> is maximal at \<open>s\<close>, so that the row stays at
+  \<open>\<kappa>\<close> when refined; false where no possible key may end up at \<open>\<kappa>\<close>; undecided otherwise.  A
+  definite row at a partial key part decides nothing: it may still move up.\<close>
+
+definition select_test :: "'k semi_factor \<Rightarrow> 'k \<Rightarrow> ('r \<rightarrow> tr) \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> tr" where
+  "select_test s \<kappa> g D = (if maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT) then TT
+     else if split_possible_at s \<kappa> D then \<bottom> else FF)"
+
+lemma select_test_TT: "maximal_at s \<kappa> \<Longrightarrow> split_definite y D \<Longrightarrow> rproj s y = \<kappa> \<Longrightarrow> g\<cdot>y = TT \<Longrightarrow> select_test s \<kappa> g D = TT"
+  unfolding select_test_def by auto
+
+lemma select_test_bot:
+  "\<not> (maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT)) \<Longrightarrow> split_possible_at s \<kappa> D \<Longrightarrow>
+     select_test s \<kappa> g D = \<bottom>"
+  unfolding select_test_def by (simp only: if_False if_P)
+
+lemma select_test_FF:
+  "\<not> (maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT)) \<Longrightarrow> \<not> split_possible_at s \<kappa> D \<Longrightarrow>
+     select_test s \<kappa> g D = FF"
+  unfolding select_test_def by (simp only: if_False if_not_P)
+
+text \<open>The key at an LOD \<open>c\<close> is the selection test at its part, multiplied by the part: present where
+  a definite row has it and it is maximal, absent where it is impossible, and otherwise present with
+  that key or absent.\<close>
 
 abbreviation key_at_sem :: "'k semi_factor \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'k option_pd" where
-  "key_at_sem c D k \<equiv> if \<not> split_possible_at c (proj c\<cdot>k) D then Absent
-     else if \<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k
-     then (if maximal_at c (proj c\<cdot>k) then Present\<cdot>(proj c\<cdot>k) else Present\<cdot>(proj c\<cdot>k) + Absent)
-     else \<bottom>"
+  "key_at_sem c D k \<equiv> select_test c (proj c\<cdot>k) (\<Lambda> _. TT) D \<odot> Present\<cdot>(proj c\<cdot>k)"
 
 definition key_at_ext :: "'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'k) expr_ext" where
   "key_at_ext c = with_ext (key_at c) (\<lambda>D F k. key_at_sem c D k)"
@@ -346,44 +364,48 @@ lemma impossible_at_no_point:
   shows "rproj c m \<noteq> \<kappa>"
   using split_possible_atI [OF impossible_no_point [OF DD cD d m], of c] n by auto
 
+text \<open>The selection test is below the rigid test on the data points at the key part.\<close>
+
+lemma select_test_sound:
+  assumes DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
+  shows "select_test s \<kappa> g D \<sqsubseteq> (\<exists>\<^sub>K m\<in>{m \<in> lower_maximal data. rproj s m = \<kappa>}. g\<cdot>m)"
+proof (cases "maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT)")
+  case True
+  then obtain y where mx: "maximal_at s \<kappa>" and y: "split_definite y D" "rproj s y = \<kappa>" and gy: "g\<cdot>y = TT" by blast
+  have mx': "maximal_at s (rproj s y)" using mx y(2) by simp
+  obtain m where m: "m \<in> lower_maximal data" "y \<sqsubseteq> m" "rproj s m = rproj s y"
+    using definite_maximal_point [OF DD d y(1) mx'] by blast
+  have "TT \<sqsubseteq> g\<cdot>m" unfolding gy [symmetric] by (rule monofun_cfun_arg [OF m(2)])
+  then have "g\<cdot>m = TT" by simp
+  then have "(\<exists>\<^sub>K m\<in>{m \<in> lower_maximal data. rproj s m = \<kappa>}. g\<cdot>m) = TT"
+    unfolding kleene_bex_TT_iff using m(1,3) y(2) by auto
+  then show ?thesis by (simp add: select_test_TT [OF mx y gy])
+next
+  case nT: False
+  show ?thesis
+  proof (cases "split_possible_at s \<kappa> D")
+    case True
+    show ?thesis by (simp only: select_test_bot [OF nT True] minimal)
+  next
+    case nP: False
+    have e: "{m \<in> lower_maximal data. rproj s m = \<kappa>} = {}" using impossible_at_no_point [OF DD cD d _ nP] by blast
+    show ?thesis by (simp only: e select_test_FF [OF nT nP] kleene_bex_empty below_refl)
+  qed
+qed
+
+lemma kleene_bex_const_TT: "(\<exists>\<^sub>K m\<in>S. TT) = (if S = {} then FF else TT)"
+  by (cases "S = {}") (auto simp: kleene_bex_TT_iff)
+
 theorem ext_sound_key_at: "ext_sound (key_at_ext c)"
 proof (rule ext_soundI, simp only: key_at_ext_simps)
   fix D D' :: "('r, 'k) split_pd" and data F k
   assume DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
   have fib: "fiber data c c F k = {m \<in> lower_maximal data. rproj c m = proj c\<cdot>k}"
     by (simp add: fiber_def join_meet_self)
-  have esem: "esem (key_at c) data F k = (if fiber data c c F k = {} then Absent else Present\<cdot>(proj c\<cdot>k))"
-    by simp
+  have esem: "esem (key_at c) data F k = (\<exists>\<^sub>K m\<in>fiber data c c F k. (\<Lambda> _. TT)\<cdot>m) \<odot> Present\<cdot>(proj c\<cdot>k)"
+    by (cases "fiber data c c F k = {}") (simp_all add: kleene_bex_const_TT)
   show "key_at_sem c D k \<sqsubseteq> esem (key_at c) data F k"
-  proof (cases "split_possible_at c (proj c\<cdot>k) D")
-    case nP: False
-    have "fiber data c c F k = {}" using fib impossible_at_no_point [OF DD cD d _ nP] by blast
-    then show ?thesis by (simp only: if_P [OF nP] esem) simp
-  next
-    case P: True
-    show ?thesis
-    proof (cases "\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k")
-      case True
-      then obtain y where y: "split_definite y D" "rproj c y = proj c\<cdot>k" by blast
-      show ?thesis
-      proof (cases "maximal_at c (proj c\<cdot>k)")
-        case mx: True
-        have mx': "maximal_at c (rproj c y)" using mx y(2) by simp
-        obtain m where m: "m \<in> lower_maximal data" "rproj c m = rproj c y"
-          using definite_maximal_point [OF DD d y(1) mx'] by blast
-        have "fiber data c c F k \<noteq> {}" using fib m y(2) by auto
-        then show ?thesis using P True mx by simp
-      next
-        case False
-        have "Present\<cdot>(proj c\<cdot>k) + Absent \<sqsubseteq> esem (key_at c) data F k"
-          unfolding esem by (simp add: plus_option_pd_below1 plus_option_pd_below2)
-        then show ?thesis using P True False by simp
-      qed
-    next
-      case False
-      show ?thesis by (simp only: if_not_P [OF False] not_not [THEN iffD2, OF P] if_False minimal)
-    qed
-  qed
+    unfolding esem fib by (intro monofun_cfun_fun monofun_cfun_arg select_test_sound [OF DD cD d])
 qed
 
 theorem ext_lawful_key_at: "ext_lawful (key_at_ext c)"
@@ -392,19 +414,23 @@ theorem ext_lawful_key_at: "ext_lawful (key_at_ext c)"
 
 subsection \<open>Table columns\<close>
 
-text \<open>A column at a key maximal at its key part \<open>a\<close> where some definite row has that key is
-  present, with the column function of the join of the sections of the definite rows there: in a
-  conforming dataset above, the rows at the key carry one section, above all of them.  At a partial
-  key the value is not determined: a row there may move up, and another row may come to the key with
-  an unrelated section, so it is undecided.  It is absent where no possible key projects to the key.\<close>
+text \<open>A column is the selection test at its key part, multiplied by the column function of the
+  join of the sections of the definite rows selected there: those at the key part, where it is
+  maximal.  In a conforming dataset above, the rows at a maximal key carry one section, above all of
+  them.  At a partial key nothing is selected: a row there may move up, and another row may come to
+  the key with an unrelated section.\<close>
 
 definition col_sections :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'r set" where
   "col_sections c a D k = {y \<downharpoonright> c | y. split_definite y D \<and> rproj a y = proj a\<cdot>k}"
 
+definition col_value :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'r" where
+  "col_value c a D k = (if maximal_at a (proj a\<cdot>k) then lub (col_sections c a D k) else \<bottom>)"
+
 abbreviation column_sem :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::bifinite) \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> 'k \<Rightarrow> 'w option_pd" where
-  "column_sem c a v D k \<equiv> if maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}
-     then Present\<cdot>(v\<cdot>(lub (col_sections c a D k)))
-     else if split_possible_at a (proj a\<cdot>k) D then \<bottom> else Absent"
+  "column_sem c a v D k \<equiv> select_test a (proj a\<cdot>k) (\<Lambda> _. TT) D \<odot> Present\<cdot>(v\<cdot>(col_value c a D k))"
+
+lemma lub_empty: "lub {} = (\<bottom> :: 'a::pcpo)"
+  by (rule lub_eqI) (simp add: is_lub_def)
 
 definition column_ext :: "'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('r \<rightarrow> 'w::bifinite) \<Rightarrow> ('k, 'f, 'r, 'w) expr_ext" where
   "column_ext c a v = with_ext (column c a v) (\<lambda>D F k. column_sem c a v D k)"
@@ -426,57 +452,48 @@ proof (rule ext_soundI, simp only: column_ext_simps)
   have cf: "entry_conf ?e data F" using conf by (simp add: fconf_def)
   have fib: "fiber data a a F k = {m \<in> lower_maximal data. rproj a m = proj a\<cdot>k}"
     by (simp add: fiber_def join_meet_self)
+  let ?t = "select_test a (proj a\<cdot>k) (\<Lambda> _. TT) D"
+  have t: "?t \<sqsubseteq> (\<exists>\<^sub>K m\<in>fiber data a a F k. TT)"
+    using select_test_sound [OF DD cD d, of a "proj a\<cdot>k" "\<Lambda> _. TT"] unfolding fib by simp
   show "column_sem c a v D k \<sqsubseteq> esem (column c a v) data F k"
-  proof (cases "maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}")
+  proof (cases "fiber data a a F k = {}")
     case True
-    then have mx: "maximal_at a (proj a\<cdot>k)" and ne: "col_sections c a D k \<noteq> {}" by simp_all
-    have point: "\<exists>m. m \<in> fiber data a a F k \<and> y \<sqsubseteq> m"
-      if y: "split_definite y D" "rproj a y = proj a\<cdot>k" for y
-    proof -
-      have "maximal_at a (rproj a y)" using mx y(2) by simp
-      then obtain m where "m \<in> lower_maximal data" "y \<sqsubseteq> m" "rproj a m = rproj a y"
-        using definite_maximal_point [OF DD d y(1)] by blast
-      then show ?thesis using fib y(2) by auto
-    qed
-    obtain y0 where y0: "split_definite y0 D" "rproj a y0 = proj a\<cdot>k"
-      using ne by (auto simp: col_sections_def)
-    obtain m where m: "m \<in> fiber data a a F k" "y0 \<sqsubseteq> m" using point [OF y0] by blast
-    have ub: "col_sections c a D k <| m \<downharpoonright> c"
-    proof (rule is_ubI)
-      fix z assume "z \<in> col_sections c a D k"
-      then obtain y where y: "split_definite y D" "rproj a y = proj a\<cdot>k" "z = y \<downharpoonright> c"
-        by (auto simp: col_sections_def)
-      obtain m' where m': "m' \<in> fiber data a a F k" "y \<sqsubseteq> m'" using point [OF y(1,2)] by blast
-      have "y \<downharpoonright> c \<sqsubseteq> m' \<downharpoonright> c" by (intro monofun_cfun_arg m'(2))
-      also have "\<dots> = m \<downharpoonright> c" by (rule column_fiber_section [OF cf m(1) m'(1)])
-      finally show "z \<sqsubseteq> m \<downharpoonright> c" by (simp only: y(3))
-    qed
-    have "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = (\<lambda>_. v\<cdot>(m \<downharpoonright> c)) ` fiber data a a F k"
-      by (rule image_cong [OF refl]) (simp add: column_fiber_section [OF cf m(1)])
-    then have V: "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = {v\<cdot>(m \<downharpoonright> c)}"
-      using m(1) by (auto simp: image_constant_conv)
-    have "fiber data a a F k \<noteq> {}" using m(1) by blast
-    then have esem: "esem (column c a v) data F k = Present\<cdot>(v\<cdot>(m \<downharpoonright> c))" by (simp add: V)
-    have "lub (col_sections c a D k) \<sqsubseteq> m \<downharpoonright> c" by (rule lub_belowI [OF ne ub])
-    then have "Present\<cdot>(v\<cdot>(lub (col_sections c a D k))) \<sqsubseteq> esem (column c a v) data F k"
-      unfolding esem by (simp add: monofun_cfun_arg)
+    have "?t \<odot> Present\<cdot>(v\<cdot>(col_value c a D k)) \<sqsubseteq> FF \<odot> Present\<cdot>(v\<cdot>(col_value c a D k))"
+      by (intro monofun_cfun_fun monofun_cfun_arg) (use t True in simp)
     then show ?thesis using True by simp
   next
-    case nP: False
-    show ?thesis
-    proof (cases "split_possible_at a (proj a\<cdot>k) D")
+    case False
+    then obtain m where m: "m \<in> fiber data a a F k" by blast
+    have "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = (\<lambda>_. v\<cdot>(m \<downharpoonright> c)) ` fiber data a a F k"
+      by (rule image_cong [OF refl]) (simp add: column_fiber_section [OF cf m])
+    then have V: "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = {v\<cdot>(m \<downharpoonright> c)}"
+      using m by (auto simp: image_constant_conv)
+    have esem: "esem (column c a v) data F k = TT \<odot> Present\<cdot>(v\<cdot>(m \<downharpoonright> c))" using False by (simp add: V)
+    have tT: "?t \<sqsubseteq> TT" using t False by (simp add: kleene_bex_const_TT)
+    have cv: "col_value c a D k \<sqsubseteq> m \<downharpoonright> c"
+    proof (cases "maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}")
       case True
-      show ?thesis by (simp only: if_not_P [OF nP] if_P [OF True] minimal)
-    next
-      case nA: False
-      have "fiber data a a F k = {}"
-      proof (rule ccontr)
-        assume "fiber data a a F k \<noteq> {}"
-        then obtain m where m: "m \<in> lower_maximal data" "rproj a m = proj a\<cdot>k" using fib by blast
-        show False using impossible_at_no_point [OF DD cD d m(1) nA] m(2) by blast
+      then have mx: "maximal_at a (proj a\<cdot>k)" and ne: "col_sections c a D k \<noteq> {}" by simp_all
+      have ub: "col_sections c a D k <| m \<downharpoonright> c"
+      proof (rule is_ubI)
+        fix z assume "z \<in> col_sections c a D k"
+        then obtain y where y: "split_definite y D" "rproj a y = proj a\<cdot>k" "z = y \<downharpoonright> c"
+          by (auto simp: col_sections_def)
+        have "maximal_at a (rproj a y)" using mx y(2) by simp
+        then obtain m' where m': "m' \<in> lower_maximal data" "y \<sqsubseteq> m'" "rproj a m' = rproj a y"
+          using definite_maximal_point [OF DD d y(1)] by blast
+        have m'F: "m' \<in> fiber data a a F k" using fib m'(1,3) y(2) by simp
+        have "y \<downharpoonright> c \<sqsubseteq> m' \<downharpoonright> c" by (intro monofun_cfun_arg m'(2))
+        also have "\<dots> = m \<downharpoonright> c" by (rule column_fiber_section [OF cf m m'F])
+        finally show "z \<sqsubseteq> m \<downharpoonright> c" by (simp only: y(3))
       qed
-      then show ?thesis by (simp only: if_not_P [OF nP] if_not_P [OF nA] column_simps) simp
+      show ?thesis unfolding col_value_def by (simp only: if_P [OF mx]) (rule lub_belowI [OF ne ub])
+    next
+      case False
+      then show ?thesis unfolding col_value_def by (auto simp: lub_empty)
     qed
+    show ?thesis unfolding esem
+      by (rule monofun_cfun [OF monofun_cfun_arg [OF tT] monofun_cfun_arg [OF monofun_cfun_arg [OF cv]]])
   qed
 qed
 
@@ -646,54 +663,23 @@ theorem ext_lawful_combine: "ext_lawful X\<^sub>1 \<Longrightarrow> ext_lawful X
 
 subsection \<open>Presence tests\<close>
 
-text \<open>A group is populated where some definite row at a key maximal at the fiber's LOD passes
-  the frame's filter: the data point above it is in the fiber and passes too.  It is unpopulated
-  where no possible key projects to the key, and undecided otherwise.\<close>
+text \<open>A group is populated as far as the selection test of the frame's filter at the fiber's key
+  part says: populated where some definite row there passes the filter and the part is maximal (the
+  data point above it is in the fiber and passes too), unpopulated where no possible key may end up
+  at the part, and undecided otherwise.\<close>
 
 definition populated_ext :: "('r, 'k) split_pd \<Rightarrow> 'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> tr" where
-  "populated_ext D a \<rho> F k = (if maximal_at (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) \<and>
-       (\<exists>y. split_definite y D \<and> rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k \<and> fguard \<rho> F\<cdot>y = TT)
-     then TT
-     else if split_possible_at (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) D then \<bottom> else FF)"
+  "populated_ext D a \<rho> F k = select_test (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) (fguard \<rho> F) D"
+
+lemma populated_ext_TT:
+  "maximal_at (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) \<Longrightarrow> split_definite y D \<Longrightarrow>
+     rproj (a \<squnion> (\<rho> \<sqinter> flod F)) y = proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k \<Longrightarrow> fguard \<rho> F\<cdot>y = TT \<Longrightarrow> populated_ext D a \<rho> F k = TT"
+  unfolding populated_ext_def by (rule select_test_TT)
 
 lemma populated_ext_sound:
   assumes DD: "D \<sqsubseteq> D'" and cD: "compact D'" and d: "split_rows\<cdot>D' = up\<cdot>data"
   shows "populated_ext D a \<rho> F k \<sqsubseteq> populated data a \<rho> F k"
-proof -
-  let ?L = "a \<squnion> (\<rho> \<sqinter> flod F)"
-  have fib: "fiber data a \<rho> F k = {m \<in> lower_maximal data. rproj ?L m = proj ?L\<cdot>k}"
-    by (simp add: fiber_def)
-  show ?thesis
-  proof (cases "maximal_at ?L (proj ?L\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj ?L y = proj ?L\<cdot>k \<and> fguard \<rho> F\<cdot>y = TT)")
-    case True
-    then obtain y where mx: "maximal_at ?L (proj ?L\<cdot>k)" and y: "split_definite y D" "rproj ?L y = proj ?L\<cdot>k"
-      and g: "fguard \<rho> F\<cdot>y = TT" by blast
-    have mx': "maximal_at ?L (rproj ?L y)" using mx y(2) by simp
-    obtain m where m: "m \<in> lower_maximal data" "y \<sqsubseteq> m" "rproj ?L m = rproj ?L y"
-      using definite_maximal_point [OF DD d y(1) mx'] by blast
-    have mF: "m \<in> fiber data a \<rho> F k" using fib m(1,3) y(2) by simp
-    have "TT \<sqsubseteq> fguard \<rho> F\<cdot>m" unfolding g [symmetric] by (rule monofun_cfun_arg [OF m(2)])
-    then have "fguard \<rho> F\<cdot>m = TT" by simp
-    then have "populated data a \<rho> F k = TT" unfolding populated_def kleene_bex_TT_iff using mF by blast
-    then show ?thesis unfolding populated_ext_def using True by simp
-  next
-    case nT: False
-    show ?thesis
-    proof (cases "split_possible_at ?L (proj ?L\<cdot>k) D")
-      case True
-      show ?thesis unfolding populated_ext_def by (simp only: if_not_P [OF nT] if_P [OF True] minimal)
-    next
-      case nA: False
-      have "fiber data a \<rho> F k = {}"
-      proof (rule ccontr)
-        assume "fiber data a \<rho> F k \<noteq> {}"
-        then obtain m where m: "m \<in> lower_maximal data" "rproj ?L m = proj ?L\<cdot>k" using fib by blast
-        show False using impossible_at_no_point [OF DD cD d m(1) nA] m(2) by blast
-      qed
-      then show ?thesis unfolding populated_ext_def populated_def by (simp only: if_not_P [OF nT] if_not_P [OF nA]) simp
-    qed
-  qed
-qed
+  unfolding populated_ext_def populated_def fiber_def by (rule select_test_sound [OF DD cD d])
 
 definition present_at_ext :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext" where
   "present_at_ext a \<rho> X = with_ext (present_at a \<rho> X)
@@ -1060,36 +1046,92 @@ proof -
   then show ?thesis unfolding lub_range_shift [OF ch] DZ .
 qed
 
+text \<open>At a compact key part the selection test is monotone and decided at a finite stage: a
+  definite row at a maximal part makes the part possible, and both the definite rows passing a
+  continuous test and the impossibility are witnessed at a stage.\<close>
+
+lemma select_test_TT_possible:
+  "compact \<kappa> \<Longrightarrow> maximal_at s \<kappa> \<Longrightarrow> split_definite y D \<Longrightarrow> rproj s y = \<kappa> \<Longrightarrow> split_possible_at s \<kappa> D"
+  using definite_maximal_possible [of y D s] by simp
+
+lemma select_test_FF_iff: "compact \<kappa> \<Longrightarrow> select_test s \<kappa> g D = FF \<longleftrightarrow> \<not> split_possible_at s \<kappa> D"
+  unfolding select_test_def by (auto dest: select_test_TT_possible)
+
+lemma select_test_mono:
+  assumes k: "compact \<kappa>" and le: "D \<sqsubseteq> D'"
+  shows "select_test s \<kappa> g D \<sqsubseteq> select_test s \<kappa> g D'"
+proof -
+  let ?T = "\<lambda>D. maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT)"
+  show ?thesis
+  proof (cases "?T D")
+    case True
+    then obtain y where mx: "maximal_at s \<kappa>" and y: "split_definite y D" "rproj s y = \<kappa>" "g\<cdot>y = TT" by blast
+    show ?thesis by (simp only: select_test_TT [OF mx y(1) y(2,3)] select_test_TT [OF mx split_definite_mono [OF y(1) le] y(2,3)] below_refl)
+  next
+    case nT: False
+    show ?thesis
+    proof (cases "split_possible_at s \<kappa> D")
+      case True
+      show ?thesis by (simp only: select_test_bot [OF nT True] minimal)
+    next
+      case nP: False
+      then have nP': "\<not> split_possible_at s \<kappa> D'" using split_possible_at_below [OF _ le] by blast
+      show ?thesis by (simp only: select_test_FF_iff [OF k, THEN iffD2, OF nP] select_test_FF_iff [OF k, THEN iffD2, OF nP'] below_refl)
+    qed
+  qed
+qed
+
+lemma select_test_lub:
+  assumes k: "compact \<kappa>" and Y: "chain Y"
+  shows "select_test s \<kappa> g (\<Squnion>i. Y i) \<sqsubseteq> (\<Squnion>i. select_test s \<kappa> g (Y i))"
+proof -
+  let ?T = "\<lambda>D. maximal_at s \<kappa> \<and> (\<exists>y. split_definite y D \<and> rproj s y = \<kappa> \<and> g\<cdot>y = TT)"
+  have ch: "chain (\<lambda>i. select_test s \<kappa> g (Y i))" by (rule chainI) (simp add: select_test_mono [OF k] chainE [OF Y])
+  have stage: "select_test s \<kappa> g (\<Squnion>i. Y i) \<sqsubseteq> (\<Squnion>i. select_test s \<kappa> g (Y i))"
+    if "select_test s \<kappa> g (\<Squnion>i. Y i) = select_test s \<kappa> g (Y i)" for i
+    unfolding that by (rule is_ub_thelub [OF ch])
+  show ?thesis
+  proof (cases "?T (\<Squnion>i. Y i)")
+    case True
+    then obtain y where mx: "maximal_at s \<kappa>" and y: "split_definite y (\<Squnion>i. Y i)" "rproj s y = \<kappa>"
+      and gy: "g\<cdot>y = TT" by blast
+    let ?f = "\<Lambda> y. (rproj s y, g\<cdot>y)"
+    obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "?f\<cdot>y' = ?f\<cdot>y"
+      by (rule compact_approx_value [of ?f y]) (simp add: y(2) gy k compact_TT)
+    obtain i where i: "split_definite y' (Y i)"
+      by (rule split_definite_lub_compact [OF Y y'(1) split_definite_below [OF y(1) y'(2)]])
+    have e: "rproj s y' = \<kappa>" "g\<cdot>y' = TT" using y'(3) y(2) gy by simp_all
+    show ?thesis by (rule stage [of i]) (simp only: select_test_TT [OF mx y(1) y(2) gy] select_test_TT [OF mx i e])
+  next
+    case nT: False
+    show ?thesis
+    proof (cases "split_possible_at s \<kappa> (\<Squnion>i. Y i)")
+      case True
+      show ?thesis by (simp only: select_test_bot [OF nT True] minimal)
+    next
+      case nP: False
+      then obtain i where i: "\<not> split_possible_at s \<kappa> (Y i)" using split_possible_at_lub [OF Y] by blast
+      show ?thesis by (rule stage [of i]) (simp only: select_test_FF_iff [OF k, THEN iffD2, OF i] select_test_FF_iff [OF k, THEN iffD2, OF nP])
+    qed
+  qed
+qed
+
+lemma select_test_chain_mult:
+  assumes k: "compact \<kappa>" and Y: "chain Y" and x: "chain X"
+  shows "select_test s \<kappa> g (\<Squnion>i. Y i) \<odot> (\<Squnion>i. X i) \<sqsubseteq> (\<Squnion>i. select_test s \<kappa> g (Y i) \<odot> X i)"
+proof -
+  have t: "chain (\<lambda>i. select_test s \<kappa> g (Y i))" by (rule chainI) (simp add: select_test_mono [OF k] chainE [OF Y])
+  have "select_test s \<kappa> g (\<Squnion>i. Y i) \<odot> (\<Squnion>i. X i) \<sqsubseteq> (\<Squnion>i. select_test s \<kappa> g (Y i)) \<odot> (\<Squnion>i. X i)"
+    by (intro monofun_cfun_fun monofun_cfun_arg select_test_lub [OF k Y])
+  also have "\<dots> = (\<Squnion>i. select_test s \<kappa> g (Y i) \<odot> X i)"
+    by (simp add: contlub_cfun_arg [OF t] lub_APP [OF ch2ch_Rep_cfunR [OF t] x])
+  finally show ?thesis .
+qed
+
 lemma key_at_sem_mono:
   assumes c: "lod_small c" and le: "D \<sqsubseteq> D'"
   shows "key_at_sem c D k \<sqsubseteq> key_at_sem c D' k"
-proof (cases "split_possible_at c (proj c\<cdot>k) D")
-  case nP: False
-  then have "\<not> split_possible_at c (proj c\<cdot>k) D'" using split_possible_at_below [OF _ le] by blast
-  then show ?thesis using nP by simp
-next
-  case P: True
-  show ?thesis
-  proof (cases "\<exists>y. split_definite y D \<and> rproj c y = proj c\<cdot>k")
-    case A: True
-    then obtain y where y: "split_definite y D" "rproj c y = proj c\<cdot>k" by blast
-    have A': "\<exists>y. split_definite y D' \<and> rproj c y = proj c\<cdot>k" using split_definite_mono [OF y(1) le] y(2) by blast
-    show ?thesis
-    proof (cases "maximal_at c (proj c\<cdot>k)")
-      case mx: True
-      have "split_possible_at c (rproj c y) D'"
-        by (rule definite_maximal_possible [OF split_definite_mono [OF y(1) le]]) (simp_all add: y(2) mx lod_small_proj [OF c])
-      then have P': "split_possible_at c (proj c\<cdot>k) D'" by (simp only: y(2))
-      show ?thesis by (simp only: not_not [THEN iffD2, OF P] not_not [THEN iffD2, OF P'] if_False if_P [OF A] if_P [OF A'] if_P [OF mx] below_refl)
-    next
-      case False
-      then show ?thesis using P A A' by (auto simp: plus_option_pd_below2)
-    qed
-  next
-    case False
-    show ?thesis by (simp only: not_not [THEN iffD2, OF P] if_False if_not_P [OF False] minimal)
-  qed
-qed
+  by (intro monofun_cfun_fun monofun_cfun_arg select_test_mono [OF lod_small_proj [OF c] le])
 
 theorem ext_mono_key_at: "lod_small c \<Longrightarrow> ext_mono (key_at_ext c)"
   by (rule ext_monoI) (simp add: key_at_sem_mono)
@@ -1100,32 +1142,9 @@ theorem ext_cont_key_at:
 proof (rule ext_contI2 [OF ext_mono_key_at [OF c]], simp only: key_at_ext_simps)
   fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and k
   assume Y: "chain Y"
-  have ch: "chain (\<lambda>i. key_at_sem c (Y i) k)" by (rule chainI) (simp add: key_at_sem_mono [OF c] chainE [OF Y])
-  have stage: "key_at_sem c (\<Squnion>i. Y i) k \<sqsubseteq> (\<Squnion>i. key_at_sem c (Y i) k)" if "key_at_sem c (\<Squnion>i. Y i) k = key_at_sem c (Y i) k" for i
-    unfolding that by (rule is_ub_thelub [OF ch])
   show "key_at_sem c (\<Squnion>i. Y i) k \<sqsubseteq> (\<Squnion>i. key_at_sem c (Y i) k)"
-  proof (cases "split_possible_at c (proj c\<cdot>k) (\<Squnion>i. Y i)")
-    case nP: False
-    then obtain i where i: "\<not> split_possible_at c (proj c\<cdot>k) (Y i)" using split_possible_at_lub [OF Y] by blast
-    show ?thesis by (rule stage [of i]) (simp add: nP i)
-  next
-    case P: True
-    have Pi: "split_possible_at c (proj c\<cdot>k) (Y i)" for i by (rule split_possible_at_below [OF P is_ub_thelub [OF Y]])
-    show ?thesis
-    proof (cases "\<exists>y. split_definite y (\<Squnion>i. Y i) \<and> rproj c y = proj c\<cdot>k")
-      case True
-      then obtain y where y: "split_definite y (\<Squnion>i. Y i)" "rproj c y = proj c\<cdot>k" by blast
-      obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "(proj c oo row_key)\<cdot>y' = (proj c oo row_key)\<cdot>y"
-        by (rule compact_approx_value [of "proj c oo row_key" y]) (simp add: y(2) lod_small_proj [OF c])
-      obtain i where i: "split_definite y' (Y i)"
-        by (rule split_definite_lub_compact [OF Y y'(1) split_definite_below [OF y(1) y'(2)]])
-      have Ai: "\<exists>y. split_definite y (Y i) \<and> rproj c y = proj c\<cdot>k" using i y'(3) y(2) by auto
-      show ?thesis by (rule stage [of i]) (simp add: P Pi True Ai)
-    next
-      case False
-      show ?thesis by (simp only: not_not [THEN iffD2, OF P] if_False if_not_P [OF False] minimal)
-    qed
-  qed
+    using select_test_chain_mult [OF lod_small_proj [OF c] Y chain_const [of "Present\<cdot>(proj c\<cdot>k)"], where s=c and g="\<Lambda> _. TT"]
+    by simp
 qed
 
 text \<open>At an LOD-bounded frame and a small lower part, the fiber's key parts are compact, and
@@ -1137,72 +1156,20 @@ lemma compact_fiber_key:
   using F unfolding lod_bounded_def
   by (intro lod_small_proj lod_small_sup [OF a] lod_small_below [OF _ lattice_meet_le2])
 
+lemma populated_ext_FF_iff:
+  "lod_small a \<Longrightarrow> lod_bounded F \<Longrightarrow>
+     populated_ext D a \<rho> F k = FF \<longleftrightarrow> \<not> split_possible_at (a \<squnion> (\<rho> \<sqinter> flod F)) (proj (a \<squnion> (\<rho> \<sqinter> flod F))\<cdot>k) D"
+  unfolding populated_ext_def by (rule select_test_FF_iff [OF compact_fiber_key])
+
 lemma populated_ext_mono:
   assumes a: "lod_small a" and F: "lod_bounded F" and le: "D \<sqsubseteq> D'"
   shows "populated_ext D a \<rho> F k \<sqsubseteq> populated_ext D' a \<rho> F k"
-proof -
-  let ?L = "a \<squnion> (\<rho> \<sqinter> flod F)"
-  let ?T = "\<lambda>D. maximal_at ?L (proj ?L\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj ?L y = proj ?L\<cdot>k \<and> fguard \<rho> F\<cdot>y = TT)"
-  have TT: "?T D \<Longrightarrow> ?T D'" using split_definite_mono [OF _ le] by blast
-  have TP: "?T D' \<Longrightarrow> split_possible_at ?L (proj ?L\<cdot>k) D'"
-    using definite_maximal_possible [of _ D' ?L] compact_fiber_key [OF a F] by fastforce
-  show ?thesis
-  proof (cases "?T D")
-    case True
-    have T': "?T D'" by (rule TT [OF True])
-    show ?thesis unfolding populated_ext_def by (simp only: if_P [OF True] if_P [OF T'] below_refl)
-  next
-    case nT: False
-    show ?thesis
-    proof (cases "split_possible_at ?L (proj ?L\<cdot>k) D")
-      case True
-      show ?thesis unfolding populated_ext_def by (simp only: if_not_P [OF nT] if_P [OF True] minimal)
-    next
-      case nP: False
-      then have nP': "\<not> split_possible_at ?L (proj ?L\<cdot>k) D'" using split_possible_at_below [OF _ le] by blast
-      then have nT': "\<not> ?T D'" using TP by blast
-      show ?thesis unfolding populated_ext_def
-        by (simp only: if_not_P [OF nT] if_not_P [OF nP] if_not_P [OF nT'] if_not_P [OF nP'] below_refl)
-    qed
-  qed
-qed
+  unfolding populated_ext_def by (rule select_test_mono [OF compact_fiber_key [OF a F] le])
 
 lemma populated_ext_lub:
   assumes a: "lod_small a" and F: "lod_bounded F" and Y: "chain Y"
   shows "populated_ext (\<Squnion>i. Y i) a \<rho> F k \<sqsubseteq> (\<Squnion>i. populated_ext (Y i) a \<rho> F k)"
-proof -
-  let ?L = "a \<squnion> (\<rho> \<sqinter> flod F)"
-  let ?T = "\<lambda>D. maximal_at ?L (proj ?L\<cdot>k) \<and> (\<exists>y. split_definite y D \<and> rproj ?L y = proj ?L\<cdot>k \<and> fguard \<rho> F\<cdot>y = TT)"
-  have ch: "chain (\<lambda>i. populated_ext (Y i) a \<rho> F k)" by (rule chainI) (simp add: populated_ext_mono [OF a F] chainE [OF Y])
-  have stage: "populated_ext (\<Squnion>i. Y i) a \<rho> F k \<sqsubseteq> (\<Squnion>i. populated_ext (Y i) a \<rho> F k)"
-    if "populated_ext (\<Squnion>i. Y i) a \<rho> F k = populated_ext (Y i) a \<rho> F k" for i
-    unfolding that by (rule is_ub_thelub [OF ch])
-  show ?thesis
-  proof (cases "?T (\<Squnion>i. Y i)")
-    case True
-    then obtain y where mx: "maximal_at ?L (proj ?L\<cdot>k)" and y: "split_definite y (\<Squnion>i. Y i)" "rproj ?L y = proj ?L\<cdot>k"
-      and g: "fguard \<rho> F\<cdot>y = TT" by blast
-    let ?f = "\<Lambda> y. (rproj ?L y, fguard \<rho> F\<cdot>y)"
-    obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "?f\<cdot>y' = ?f\<cdot>y"
-      by (rule compact_approx_value [of ?f y]) (simp add: y(2) g compact_fiber_key [OF a F] compact_TT)
-    obtain i where i: "split_definite y' (Y i)"
-      by (rule split_definite_lub_compact [OF Y y'(1) split_definite_below [OF y(1) y'(2)]])
-    have Ti: "?T (Y i)" using mx i y'(3) y(2) g by auto
-    show ?thesis by (rule stage [of i]) (simp only: populated_ext_def if_P [OF True] if_P [OF Ti])
-  next
-    case nT: False
-    show ?thesis
-    proof (cases "split_possible_at ?L (proj ?L\<cdot>k) (\<Squnion>i. Y i)")
-      case True
-      show ?thesis unfolding populated_ext_def by (simp only: if_not_P [OF nT] if_P [OF True] minimal)
-    next
-      case nP: False
-      then obtain i where i: "\<not> split_possible_at ?L (proj ?L\<cdot>k) (Y i)" using split_possible_at_lub [OF Y] by blast
-      have nTi: "\<not> ?T (Y i)" using nT split_definite_mono [OF _ is_ub_thelub [OF Y]] by blast
-      show ?thesis by (rule stage [of i]) (simp only: populated_ext_def if_not_P [OF nT] if_not_P [OF nP] if_not_P [OF nTi] if_not_P [OF i])
-    qed
-  qed
-qed
+  unfolding populated_ext_def by (rule select_test_lub [OF compact_fiber_key [OF a F] Y])
 
 theorem ext_mono_present_at: "lod_small (emind X \<squnion> a) \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (present_at_ext a \<rho> X)"
   by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg populated_ext_mono ext_monoD)
@@ -1276,46 +1243,30 @@ lemma col_sections_mono: "D \<sqsubseteq> D' \<Longrightarrow> col_sections c a 
 lemma lub_subset_below: "S \<noteq> {} \<Longrightarrow> S \<subseteq> T \<Longrightarrow> T <| (b :: 'a::bounded_complete) \<Longrightarrow> lub S \<sqsubseteq> lub T"
   by (rule lub_belowI) (auto intro: below_lubI is_ub_upward simp: is_ub_def)
 
+lemma col_value_mono_below:
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))"
+    and cf: "conforming_rows (split_rows\<cdot>C)" and le: "D \<sqsubseteq> D'" and le': "D' \<sqsubseteq> C"
+  shows "col_value c a D k \<sqsubseteq> col_value c a D' k"
+proof (cases "maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}")
+  case True
+  then have mx: "maximal_at a (proj a\<cdot>k)" and ne: "col_sections c a D k \<noteq> {}" by simp_all
+  have neC: "col_sections c a C k \<noteq> {}" using ne col_sections_mono [OF below_trans [OF le le'], of c a k] by blast
+  obtain b where b: "col_sections c a C k <| b" using col_sections_ub [OF fd cf mx neC] by blast
+  have b': "col_sections c a D' k <| b" using b col_sections_mono [OF le', of c a k] by (auto simp: is_ub_def)
+  have "lub (col_sections c a D k) \<sqsubseteq> lub (col_sections c a D' k)"
+    by (rule lub_subset_below [OF ne col_sections_mono [OF le] b'])
+  then show ?thesis unfolding col_value_def by (simp only: if_P [OF mx])
+next
+  case False
+  then show ?thesis unfolding col_value_def by (auto simp: lub_empty)
+qed
+
 lemma column_sem_mono_below:
   assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "lod_small a"
     and cf: "conforming_rows (split_rows\<cdot>C)" and le: "D \<sqsubseteq> D'" and le': "D' \<sqsubseteq> C"
   shows "column_sem c a v D k \<sqsubseteq> column_sem c a v D' k"
-proof -
-  let ?C = "\<lambda>D. maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}"
-  have CC: "?C D \<Longrightarrow> ?C D'" using col_sections_mono [OF le] by blast
-  have CP: "?C D' \<Longrightarrow> split_possible_at a (proj a\<cdot>k) D'"
-  proof -
-    assume "?C D'"
-    then obtain y where y: "split_definite y D'" "rproj a y = proj a\<cdot>k" and mx: "maximal_at a (proj a\<cdot>k)"
-      by (auto simp: col_sections_def)
-    have "split_possible_at a (rproj a y) D'"
-      by (rule definite_maximal_possible [OF y(1)]) (simp_all only: y(2) mx lod_small_proj [OF ca])
-    then show ?thesis by (simp only: y(2))
-  qed
-  show ?thesis
-  proof (cases "?C D")
-    case True
-    have T': "?C D'" by (rule CC [OF True])
-    obtain b where b: "col_sections c a C k <| b"
-      using col_sections_ub [OF fd cf] T' col_sections_mono [OF le', of c a k] by blast
-    have b': "col_sections c a D' k <| b" using b col_sections_mono [OF le', of c a k] by (auto simp: is_ub_def)
-    have "lub (col_sections c a D k) \<sqsubseteq> lub (col_sections c a D' k)"
-      using True by (intro lub_subset_below [OF _ col_sections_mono [OF le] b']) simp
-    then show ?thesis by (simp only: if_P [OF True] if_P [OF T'] monofun_cfun_arg)
-  next
-    case nC: False
-    show ?thesis
-    proof (cases "split_possible_at a (proj a\<cdot>k) D")
-      case True
-      show ?thesis by (simp only: if_not_P [OF nC] if_P [OF True] minimal)
-    next
-      case nP: False
-      then have nP': "\<not> split_possible_at a (proj a\<cdot>k) D'" using split_possible_at_below [OF _ le] by blast
-      then have nC': "\<not> ?C D'" using CP by blast
-      show ?thesis by (simp only: if_not_P [OF nC] if_not_P [OF nP] if_not_P [OF nC'] if_not_P [OF nP'] below_refl)
-    qed
-  qed
-qed
+  by (rule monofun_cfun [OF monofun_cfun_arg [OF select_test_mono [OF lod_small_proj [OF ca] le]]
+        monofun_cfun_arg [OF monofun_cfun_arg [OF col_value_mono_below [OF fd cf le le']]]])
 
 lemma column_sem_mono:
   "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> lod_small a \<Longrightarrow> conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow>
@@ -1326,102 +1277,99 @@ theorem ext_mono_column:
   "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> lod_small a \<Longrightarrow> ext_mono (column_ext c a v)"
   by (rule ext_monoI) (simp add: column_sem_mono_below)
 
+text \<open>The selected sections at the lub are approximated by sections at the stages, at the same key.\<close>
+
+lemma col_value_lub:
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "lod_small a"
+    and Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
+  shows "col_value c a (\<Squnion>i. Y i) k \<sqsubseteq> (\<Squnion>i. col_value c a (Y i) k)"
+proof (cases "maximal_at a (proj a\<cdot>k) \<and> col_sections c a (\<Squnion>i. Y i) k \<noteq> {}")
+  case True
+  let ?C = "\<lambda>D. maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}"
+  let ?L = "\<Squnion>i. Y i"
+  have YC: "Y i \<sqsubseteq> C" for i by (rule ext_cont_below [OF LC Y])
+  have ch: "chain (\<lambda>i. col_value c a (Y i) k)" by (rule chainI) (rule col_value_mono_below [OF fd cC chainE [OF Y] YC])
+  have mx: "maximal_at a (proj a\<cdot>k)" and ne: "col_sections c a ?L k \<noteq> {}" using True by simp_all
+  have kc: "compact (proj a\<cdot>k)" by (rule lod_small_proj [OF ca])
+  obtain r :: "nat \<Rightarrow> 'r \<rightarrow> 'r" where r: "approx_chain r" using bifinite by blast
+  interpret R: approx_chain r by (fact r)
+  have approx: "\<exists>j y'. y' \<in> col_sections c a (Y j) k \<and> r n\<cdot>z \<sqsubseteq> y'" if z: "z \<in> col_sections c a ?L k" for z n
+  proof -
+    obtain y where y: "split_definite y ?L" "rproj a y = proj a\<cdot>k" "z = y \<downharpoonright> c"
+      using z by (auto simp: col_sections_def)
+    let ?f = "\<Lambda> y. (rproj a y, r n\<cdot>(y \<downharpoonright> c))"
+    have "compact (?f\<cdot>y)" by (simp add: y(2) kc finite_deflation.compact [OF R.finite_deflation_approx])
+    then obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "?f\<cdot>y' = ?f\<cdot>y" by (rule compact_approx_value)
+    obtain j where j: "split_definite y' (Y j)"
+      by (rule split_definite_lub_compact [OF Y y'(1) split_definite_below [OF y(1) y'(2)]])
+    have "y' \<downharpoonright> c \<in> col_sections c a (Y j) k" using j y'(3) y(2) by (auto simp: col_sections_def)
+    moreover have "r n\<cdot>z \<sqsubseteq> y' \<downharpoonright> c"
+    proof -
+      have "r n\<cdot>z = r n\<cdot>(y' \<downharpoonright> c)" using y'(3) y(3) by simp
+      also have "\<dots> \<sqsubseteq> y' \<downharpoonright> c" by (rule deflation.below [OF finite_deflation_imp_deflation [OF R.finite_deflation_approx]])
+      finally show ?thesis .
+    qed
+    ultimately show ?thesis by blast
+  qed
+  obtain z0 where z0: "z0 \<in> col_sections c a ?L k" using ne by blast
+  obtain i0 y0 where i0: "y0 \<in> col_sections c a (Y i0) k" using approx [OF z0, of 0] by blast
+  have Ci: "?C (Y (j + i0))" for j using mx col_sections_mono [OF chain_mono [OF Y le_add2]] i0 by blast
+  let ?l = "\<lambda>j. lub (col_sections c a (Y (j + i0)) k)"
+  have ub: "\<exists>b. col_sections c a (Y (j + i0)) k <| b" for j
+  proof -
+    have sub: "col_sections c a (Y (j + i0)) k \<subseteq> col_sections c a C k" by (rule col_sections_mono [OF YC])
+    have "col_sections c a C k \<noteq> {}" using Ci [of j] sub by blast
+    then obtain b where "col_sections c a C k <| b" using col_sections_ub [OF fd cC mx] by blast
+    then show ?thesis using sub by (auto simp: is_ub_def)
+  qed
+  have l: "?l j = col_value c a (Y (j + i0)) k" for j unfolding col_value_def by (simp only: if_P [OF mx])
+  have lch: "chain ?l" unfolding l by (rule chain_shift [OF ch])
+  have sec: "z \<sqsubseteq> ?l j" if "z \<in> col_sections c a (Y j') k" "j' \<le> j + i0" for z j j'
+  proof -
+    obtain b where b: "col_sections c a (Y (j + i0)) k <| b" using ub by blast
+    have "z \<in> col_sections c a (Y (j + i0)) k" using that col_sections_mono [OF chain_mono [OF Y that(2)]] by blast
+    then show ?thesis by (rule below_lubI [OF b, rotated])
+  qed
+  have below: "lub (col_sections c a ?L k) \<sqsubseteq> (\<Squnion>j. ?l j)"
+  proof (rule lub_belowI [OF ne], rule is_ubI)
+    fix z assume z: "z \<in> col_sections c a ?L k"
+    have "r n\<cdot>z \<sqsubseteq> (\<Squnion>j. ?l j)" for n
+    proof -
+      obtain j y' where y': "y' \<in> col_sections c a (Y j) k" "r n\<cdot>z \<sqsubseteq> y'" using approx [OF z] by blast
+      have "y' \<sqsubseteq> ?l j" by (rule sec [OF y'(1)]) simp
+      then show ?thesis by (rule below_trans [OF y'(2) below_trans [OF _ is_ub_thelub [OF lch]]])
+    qed
+    then have "(\<Squnion>n. r n\<cdot>z) \<sqsubseteq> (\<Squnion>j. ?l j)" by (intro lub_below ch2ch_Rep_cfunL R.chain_approx)
+    then show "z \<sqsubseteq> (\<Squnion>j. ?l j)" by (simp add: contlub_cfun_fun [OF R.chain_approx, symmetric] R.lub_approx)
+  qed
+  have "col_value c a ?L k = lub (col_sections c a ?L k)" unfolding col_value_def by (simp only: if_P [OF mx])
+  also have "\<dots> \<sqsubseteq> (\<Squnion>j. col_value c a (Y (j + i0)) k)" using below by (simp only: l)
+  also have "\<dots> = (\<Squnion>i. col_value c a (Y i) k)" by (rule lub_range_shift [OF ch])
+  finally show ?thesis .
+next
+  case False
+  then show ?thesis unfolding col_value_def by (auto simp: lub_empty)
+qed
+
 theorem ext_cont_column:
   assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "lod_small a"
   shows "ext_cont (column_ext c a v)"
 proof (rule ext_contI2 [OF ext_mono_column [OF fd ca]], simp only: column_ext_simps)
   fix Y :: "nat \<Rightarrow> ('r, 'k) split_pd" and C k
   assume Y: "chain Y" and cC: "conforming_rows (split_rows\<cdot>C)" and LC: "(\<Squnion>i. Y i) \<sqsubseteq> C"
-  let ?C = "\<lambda>D. maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}"
-  let ?L = "\<Squnion>i. Y i"
   have YC: "Y i \<sqsubseteq> C" for i by (rule ext_cont_below [OF LC Y])
-  have ch: "chain (\<lambda>i. column_sem c a v (Y i) k)" by (rule chainI) (rule column_sem_mono_below [OF fd ca cC chainE [OF Y] YC])
-  have stage: "column_sem c a v ?L k \<sqsubseteq> (\<Squnion>i. column_sem c a v (Y i) k)"
-    if "column_sem c a v ?L k \<sqsubseteq> column_sem c a v (Y i) k" for i
-    by (rule below_trans [OF that is_ub_thelub [OF ch]])
-  show "column_sem c a v ?L k \<sqsubseteq> (\<Squnion>i. column_sem c a v (Y i) k)"
-  proof (cases "?C ?L")
-    case True
-    then have mx: "maximal_at a (proj a\<cdot>k)" and ne: "col_sections c a ?L k \<noteq> {}" by simp_all
-    have kc: "compact (proj a\<cdot>k)" by (rule lod_small_proj [OF ca])
-    text \<open>Each section at the lub is approximated by sections at the stages, at the same key.\<close>
-    obtain r :: "nat \<Rightarrow> 'r \<rightarrow> 'r" where r: "approx_chain r" using bifinite by blast
-    interpret R: approx_chain r by (fact r)
-    have approx: "\<exists>j y'. y' \<in> col_sections c a (Y j) k \<and> r n\<cdot>z \<sqsubseteq> y'" if z: "z \<in> col_sections c a ?L k" for z n
-    proof -
-      obtain y where y: "split_definite y ?L" "rproj a y = proj a\<cdot>k" "z = y \<downharpoonright> c"
-        using z by (auto simp: col_sections_def)
-      let ?f = "\<Lambda> y. (rproj a y, r n\<cdot>(y \<downharpoonright> c))"
-      have "compact (?f\<cdot>y)" by (simp add: y(2) kc finite_deflation.compact [OF R.finite_deflation_approx])
-      then obtain y' where y': "compact y'" "y' \<sqsubseteq> y" "?f\<cdot>y' = ?f\<cdot>y" by (rule compact_approx_value)
-      obtain j where j: "split_definite y' (Y j)"
-        by (rule split_definite_lub_compact [OF Y y'(1) split_definite_below [OF y(1) y'(2)]])
-      have "y' \<downharpoonright> c \<in> col_sections c a (Y j) k" using j y'(3) y(2) by (auto simp: col_sections_def)
-      moreover have "r n\<cdot>z \<sqsubseteq> y' \<downharpoonright> c"
-      proof -
-        have "r n\<cdot>z = r n\<cdot>(y' \<downharpoonright> c)" using y'(3) y(3) by simp
-        also have "\<dots> \<sqsubseteq> y' \<downharpoonright> c" by (rule deflation.below [OF finite_deflation_imp_deflation [OF R.finite_deflation_approx]])
-        finally show ?thesis .
-      qed
-      ultimately show ?thesis by blast
-    qed
-    obtain z0 where z0: "z0 \<in> col_sections c a ?L k" using ne by blast
-    obtain i0 y0 where i0: "y0 \<in> col_sections c a (Y i0) k" using approx [OF z0, of 0] by blast
-    have Ci: "?C (Y (j + i0))" for j using mx col_sections_mono [OF chain_mono [OF Y le_add2]] i0 by blast
-    let ?l = "\<lambda>j. lub (col_sections c a (Y (j + i0)) k)"
-    have ub: "\<exists>b. col_sections c a (Y (j + i0)) k <| b" for j
-    proof -
-      have sub: "col_sections c a (Y (j + i0)) k \<subseteq> col_sections c a C k" by (rule col_sections_mono [OF YC])
-      have "col_sections c a C k \<noteq> {}" using Ci [of j] sub by blast
-      then obtain b where "col_sections c a C k <| b" using col_sections_ub [OF fd cC mx] by blast
-      then show ?thesis using sub by (auto simp: is_ub_def)
-    qed
-    have lch: "chain ?l"
-    proof (rule chainI)
-      fix j
-      have e: "Suc j + i0 = Suc (j + i0)" by simp
-      obtain b where b: "col_sections c a (Y (Suc (j + i0))) k <| b" using ub [of "Suc j"] unfolding e by blast
-      have "lub (col_sections c a (Y (j + i0)) k) \<sqsubseteq> lub (col_sections c a (Y (Suc (j + i0))) k)"
-        by (rule lub_subset_below [OF _ col_sections_mono [OF chainE [OF Y]] b]) (use Ci in simp)
-      then show "?l j \<sqsubseteq> ?l (Suc j)" by (simp only: e)
-    qed
-    have sec: "z \<sqsubseteq> ?l j" if "z \<in> col_sections c a (Y j') k" "j' \<le> j + i0" for z j j'
-    proof -
-      obtain b where b: "col_sections c a (Y (j + i0)) k <| b" using ub by blast
-      have "z \<in> col_sections c a (Y (j + i0)) k" using that col_sections_mono [OF chain_mono [OF Y that(2)]] by blast
-      then show ?thesis by (rule below_lubI [OF b, rotated])
-    qed
-    have below: "lub (col_sections c a ?L k) \<sqsubseteq> (\<Squnion>j. ?l j)"
-    proof (rule lub_belowI [OF ne], rule is_ubI)
-      fix z assume z: "z \<in> col_sections c a ?L k"
-      have "r n\<cdot>z \<sqsubseteq> (\<Squnion>j. ?l j)" for n
-      proof -
-        obtain j y' where y': "y' \<in> col_sections c a (Y j) k" "r n\<cdot>z \<sqsubseteq> y'" using approx [OF z] by blast
-        have "y' \<sqsubseteq> ?l j" by (rule sec [OF y'(1)]) simp
-        then show ?thesis by (rule below_trans [OF y'(2) below_trans [OF _ is_ub_thelub [OF lch]]])
-      qed
-      then have "(\<Squnion>n. r n\<cdot>z) \<sqsubseteq> (\<Squnion>j. ?l j)" by (intro lub_below ch2ch_Rep_cfunL R.chain_approx)
-      then show "z \<sqsubseteq> (\<Squnion>j. ?l j)" by (simp add: contlub_cfun_fun [OF R.chain_approx, symmetric] R.lub_approx)
-    qed
-    have "column_sem c a v ?L k = Present\<cdot>(v\<cdot>(lub (col_sections c a ?L k)))" by (simp only: if_P [OF True])
-    also have "\<dots> \<sqsubseteq> Present\<cdot>(v\<cdot>(\<Squnion>j. ?l j))" by (intro monofun_cfun_arg below)
-    also have "\<dots> = (\<Squnion>j. Present\<cdot>(v\<cdot>(?l j)))" by (simp add: contlub_cfun_arg [OF lch] contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF lch]])
-    also have "\<dots> = (\<Squnion>j. column_sem c a v (Y (j + i0)) k)" by (simp only: if_P [OF Ci])
-    also have "\<dots> = (\<Squnion>i. column_sem c a v (Y i) k)" by (rule lub_range_shift [OF ch])
-    finally show ?thesis .
-  next
-    case nC: False
-    show ?thesis
-    proof (cases "split_possible_at a (proj a\<cdot>k) ?L")
-      case True
-      show ?thesis by (simp only: if_not_P [OF nC] if_P [OF True] minimal)
-    next
-      case nP: False
-      then obtain i where i: "\<not> split_possible_at a (proj a\<cdot>k) (Y i)" using split_possible_at_lub [OF Y] by blast
-      have nCi: "\<not> ?C (Y i)" using nC col_sections_mono [OF is_ub_thelub [OF Y]] by blast
-      show ?thesis by (rule stage [of i]) (simp only: if_not_P [OF nC] if_not_P [OF nP] if_not_P [OF nCi] if_not_P [OF i] below_refl)
-    qed
-  qed
+  have ch: "chain (\<lambda>i. col_value c a (Y i) k)" by (rule chainI) (rule col_value_mono_below [OF fd cC chainE [OF Y] YC])
+  let ?x = "\<lambda>i. Present\<cdot>(v\<cdot>(col_value c a (Y i) k))"
+  have x: "chain ?x" by (rule chainI) (intro monofun_cfun_arg chainE [OF ch])
+  have "Present\<cdot>(v\<cdot>(col_value c a (\<Squnion>i. Y i) k)) \<sqsubseteq> Present\<cdot>(v\<cdot>(\<Squnion>i. col_value c a (Y i) k))"
+    by (intro monofun_cfun_arg col_value_lub [OF fd ca Y cC LC])
+  also have "\<dots> = (\<Squnion>i. ?x i)" by (simp add: contlub_cfun_arg [OF ch] contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF ch]])
+  finally have xl: "Present\<cdot>(v\<cdot>(col_value c a (\<Squnion>i. Y i) k)) \<sqsubseteq> (\<Squnion>i. ?x i)" .
+  have "column_sem c a v (\<Squnion>i. Y i) k \<sqsubseteq> select_test a (proj a\<cdot>k) (\<Lambda> _. TT) (\<Squnion>i. Y i) \<odot> (\<Squnion>i. ?x i)"
+    by (intro monofun_cfun_arg xl)
+  also have "\<dots> \<sqsubseteq> (\<Squnion>i. column_sem c a v (Y i) k)"
+    by (rule select_test_chain_mult [OF lod_small_proj [OF ca] Y x])
+  finally show "column_sem c a v (\<Squnion>i. Y i) k \<sqsubseteq> (\<Squnion>i. column_sem c a v (Y i) k)" .
 qed
 
 
