@@ -455,6 +455,126 @@ proof -
     unfolding split_select_keyguard [OF c] split_select_keyguard [OF ck] split_keyguard_pand e ..
 qed
 
+text \<open>Selections at two LODs, at the parts of one key, are the selection at the join of the LODs.
+  Both parts are exact and maximal exactly when their join is; one part is not below its target
+  exactly when the join is not.\<close>
+
+lemma tr_eqI: "(x = TT \<longleftrightarrow> y = TT) \<Longrightarrow> (x = FF \<longleftrightarrow> y = FF) \<Longrightarrow> x = (y :: tr)"
+  by (cases x rule: trE; cases y rule: trE) simp_all
+
+lemma join_below_join:
+  "a \<sqsubseteq> c \<Longrightarrow> b \<sqsubseteq> d \<Longrightarrow> a \<Up> b \<Longrightarrow> c \<Up> d \<Longrightarrow> a \<squnion> b \<sqsubseteq> c \<squnion> (d :: 'a::bounded_complete)"
+  by (rule is_lubD2 [OF joinable_lub]) (auto intro: below_trans joinableD is_ubI)
+
+lemma at_part_join:
+  assumes k1: "proj L\<^sub>1\<cdot>\<kappa> = \<kappa>\<^sub>1" and k2: "proj L\<^sub>2\<cdot>\<kappa> = \<kappa>\<^sub>2"
+  shows "pand\<cdot>(at_part L\<^sub>1 \<kappa>\<^sub>1\<cdot>k)\<cdot>(at_part L\<^sub>2 \<kappa>\<^sub>2\<cdot>k) = at_part (L\<^sub>1 \<squnion> L\<^sub>2) (proj (L\<^sub>1 \<squnion> L\<^sub>2)\<cdot>\<kappa>)\<cdot>k"
+proof (rule tr_eqI)
+  let ?J = "L\<^sub>1 \<squnion> L\<^sub>2"
+  have kJ: "proj ?J\<cdot>\<kappa> = \<kappa>\<^sub>1 \<squnion> \<kappa>\<^sub>2" by (simp only: proj_sup k1 k2)
+  have kb: "proj L\<cdot>x \<sqsubseteq> x" for L x by (rule deflation.below [OF proj_defl])
+  have jk: "\<kappa>\<^sub>1 \<Up> \<kappa>\<^sub>2" using kb k1 k2 by (metis joinableI)
+  have jx: "proj L\<^sub>1\<cdot>k \<Up> proj L\<^sub>2\<cdot>k" by (rule joinableI [OF kb kb])
+  have p1: "proj L\<^sub>1\<cdot>(proj ?J\<cdot>x) = proj L\<^sub>1\<cdot>x" and p2: "proj L\<^sub>2\<cdot>(proj ?J\<cdot>x) = proj L\<^sub>2\<cdot>x" for x
+    by (rule proj_le, rule lattice_join_ge1, rule proj_le, rule lattice_join_ge2)
+  have kJ1: "proj L\<^sub>1\<cdot>(proj ?J\<cdot>\<kappa>) = \<kappa>\<^sub>1" and kJ2: "proj L\<^sub>2\<cdot>(proj ?J\<cdot>\<kappa>) = \<kappa>\<^sub>2" using p1 p2 k1 k2 by simp_all
+  show "pand\<cdot>(at_part L\<^sub>1 \<kappa>\<^sub>1\<cdot>k)\<cdot>(at_part L\<^sub>2 \<kappa>\<^sub>2\<cdot>k) = TT \<longleftrightarrow> at_part ?J (proj ?J\<cdot>\<kappa>)\<cdot>k = TT"
+  proof
+    assume "pand\<cdot>(at_part L\<^sub>1 \<kappa>\<^sub>1\<cdot>k)\<cdot>(at_part L\<^sub>2 \<kappa>\<^sub>2\<cdot>k) = TT"
+    then have c1: "compact \<kappa>\<^sub>1" and m1: "maximal_at L\<^sub>1 \<kappa>\<^sub>1" and e1: "proj L\<^sub>1\<cdot>k = \<kappa>\<^sub>1"
+      and c2: "compact \<kappa>\<^sub>2" and m2: "maximal_at L\<^sub>2 \<kappa>\<^sub>2" and e2: "proj L\<^sub>2\<cdot>k = \<kappa>\<^sub>2"
+      by (simp_all add: pand_TT_iff at_part_TT_iff)
+    have "compact (\<kappa>\<^sub>1 \<squnion> \<kappa>\<^sub>2)" by (rule compact_join [OF c1 c2 jk])
+    moreover have "maximal_at ?J (\<kappa>\<^sub>1 \<squnion> \<kappa>\<^sub>2)" by (rule maximal_at_join [OF m1 m2 jk])
+    moreover have "proj ?J\<cdot>k = \<kappa>\<^sub>1 \<squnion> \<kappa>\<^sub>2" by (simp only: proj_sup e1 e2)
+    ultimately show "at_part ?J (proj ?J\<cdot>\<kappa>)\<cdot>k = TT" by (simp add: at_part_TT_iff kJ)
+  next
+    assume "at_part ?J (proj ?J\<cdot>\<kappa>)\<cdot>k = TT"
+    then have c: "compact (proj ?J\<cdot>\<kappa>)" and m: "maximal_at ?J (proj ?J\<cdot>\<kappa>)" and e: "proj ?J\<cdot>k = proj ?J\<cdot>\<kappa>"
+      by (simp_all add: at_part_TT_iff)
+    have "compact \<kappa>\<^sub>1" using compact_proj_compact [OF c, of L\<^sub>1] kJ1 by simp
+    moreover have "maximal_at L\<^sub>1 \<kappa>\<^sub>1" using maximal_at_proj [OF lattice_join_ge1 m] kJ1 by simp
+    moreover have "proj L\<^sub>1\<cdot>k = \<kappa>\<^sub>1" using p1 [of k] e kJ1 by simp
+    moreover have "compact \<kappa>\<^sub>2" using compact_proj_compact [OF c, of L\<^sub>2] kJ2 by simp
+    moreover have "maximal_at L\<^sub>2 \<kappa>\<^sub>2" using maximal_at_proj [OF lattice_join_ge2 m] kJ2 by simp
+    moreover have "proj L\<^sub>2\<cdot>k = \<kappa>\<^sub>2" using p2 [of k] e kJ2 by simp
+    ultimately show "pand\<cdot>(at_part L\<^sub>1 \<kappa>\<^sub>1\<cdot>k)\<cdot>(at_part L\<^sub>2 \<kappa>\<^sub>2\<cdot>k) = TT" by (simp add: pand_TT_iff at_part_TT_iff)
+  qed
+  show "pand\<cdot>(at_part L\<^sub>1 \<kappa>\<^sub>1\<cdot>k)\<cdot>(at_part L\<^sub>2 \<kappa>\<^sub>2\<cdot>k) = FF \<longleftrightarrow> at_part ?J (proj ?J\<cdot>\<kappa>)\<cdot>k = FF"
+  proof -
+    have "proj ?J\<cdot>k \<sqsubseteq> proj ?J\<cdot>\<kappa> \<longleftrightarrow> proj L\<^sub>1\<cdot>k \<sqsubseteq> \<kappa>\<^sub>1 \<and> proj L\<^sub>2\<cdot>k \<sqsubseteq> \<kappa>\<^sub>2"
+    proof
+      assume le: "proj ?J\<cdot>k \<sqsubseteq> proj ?J\<cdot>\<kappa>"
+      have "proj L\<^sub>1\<cdot>(proj ?J\<cdot>k) \<sqsubseteq> proj L\<^sub>1\<cdot>(proj ?J\<cdot>\<kappa>)" and "proj L\<^sub>2\<cdot>(proj ?J\<cdot>k) \<sqsubseteq> proj L\<^sub>2\<cdot>(proj ?J\<cdot>\<kappa>)"
+        using le by (simp_all add: monofun_cfun_arg)
+      then show "proj L\<^sub>1\<cdot>k \<sqsubseteq> \<kappa>\<^sub>1 \<and> proj L\<^sub>2\<cdot>k \<sqsubseteq> \<kappa>\<^sub>2" by (simp only: p1 p2 kJ1 kJ2 k1 k2)
+    next
+      assume "proj L\<^sub>1\<cdot>k \<sqsubseteq> \<kappa>\<^sub>1 \<and> proj L\<^sub>2\<cdot>k \<sqsubseteq> \<kappa>\<^sub>2"
+      then have "proj L\<^sub>1\<cdot>k \<squnion> proj L\<^sub>2\<cdot>k \<sqsubseteq> \<kappa>\<^sub>1 \<squnion> \<kappa>\<^sub>2" using join_below_join jx jk by blast
+      then show "proj ?J\<cdot>k \<sqsubseteq> proj ?J\<cdot>\<kappa>" by (simp only: proj_sup k1 k2)
+    qed
+    then show ?thesis by (auto simp: pand_FF_iff at_part_FF_iff)
+  qed
+qed
+
+lemma split_select_join:
+  assumes c1: "compact \<kappa>\<^sub>1" and c2: "compact \<kappa>\<^sub>2" and k1: "proj L\<^sub>1\<cdot>\<kappa> = \<kappa>\<^sub>1" and k2: "proj L\<^sub>2\<cdot>\<kappa> = \<kappa>\<^sub>2"
+  shows "split_select L\<^sub>1 \<kappa>\<^sub>1\<cdot>(split_select L\<^sub>2 \<kappa>\<^sub>2\<cdot>D) = split_select (L\<^sub>1 \<squnion> L\<^sub>2) (proj (L\<^sub>1 \<squnion> L\<^sub>2)\<cdot>\<kappa>)\<cdot>D"
+proof -
+  have jk: "\<kappa>\<^sub>1 \<Up> \<kappa>\<^sub>2" using k1 k2 by (metis joinableI deflation.below [OF proj_defl])
+  have cJ: "compact (proj (L\<^sub>1 \<squnion> L\<^sub>2)\<cdot>\<kappa>)" unfolding proj_sup k1 k2 by (rule compact_join [OF c1 c2 jk])
+  have e: "(\<Lambda> k. pand\<cdot>(at_part L\<^sub>1 \<kappa>\<^sub>1\<cdot>k)\<cdot>(at_part L\<^sub>2 \<kappa>\<^sub>2\<cdot>k)) = at_part (L\<^sub>1 \<squnion> L\<^sub>2) (proj (L\<^sub>1 \<squnion> L\<^sub>2)\<cdot>\<kappa>)"
+    by (rule cfun_eqI) (simp add: at_part_join [OF k1 k2])
+  show ?thesis
+    unfolding split_select_keyguard [OF c1] split_select_keyguard [OF c2] split_select_keyguard [OF cJ] split_keyguard_pand e ..
+qed
+
+text \<open>Selection commutes with the guard filters, and with a view whose key part covers the
+  selected LOD; views compose.\<close>
+
+lemma split_select_keyguard_comm: "split_select s \<kappa>\<cdot>(split_keyguard h\<cdot>D) = split_keyguard h\<cdot>(split_select s \<kappa>\<cdot>D)"
+  by (induct D rule: split_pd.principal_induct) (simp, simp, rule split_principal_eqI, auto)
+
+lemma split_select_rowguard_comm: "split_select s \<kappa>\<cdot>(split_rowguard g\<cdot>D) = split_rowguard g\<cdot>(split_select s \<kappa>\<cdot>D)"
+  by (induct D rule: split_pd.principal_induct) (simp, simp, rule split_principal_eqI, auto)
+
+lemma rproj_view_section: "s \<sqsubseteq> snd v \<Longrightarrow> rproj s (y \<downharpoonright> (fst v \<squnion> key_supp\<cdot>(snd v))) = rproj s y"
+proof -
+  assume sv: "s \<sqsubseteq> snd v"
+  have "rproj (snd v) (y \<downharpoonright> (fst v \<squnion> key_supp\<cdot>(snd v))) = rproj (snd v) y"
+    by (rule rproj_section) (rule lattice_join_ge2)
+  then have "proj s\<cdot>(rproj (snd v) (y \<downharpoonright> (fst v \<squnion> key_supp\<cdot>(snd v)))) = proj s\<cdot>(rproj (snd v) y)" by simp
+  then show ?thesis by (simp only: proj_le [OF sv])
+qed
+
+lemma split_select_view:
+  assumes sv: "s \<sqsubseteq> snd v"
+  shows "split_select s \<kappa>\<cdot>(split_view v\<cdot>D) = split_view v\<cdot>(split_select s \<kappa>\<cdot>D)"
+proof (induct D rule: split_pd.principal_induct)
+  case (2 t)
+  have r: "{x \<in> vrow v ` srows t. maximal_at s \<kappa> \<and> rproj s (Rep_compact_basis x) = \<kappa>}
+      = vrow v ` {x \<in> srows t. maximal_at s \<kappa> \<and> rproj s (Rep_compact_basis x) = \<kappa>}"
+    by (auto simp: rproj_view_section [OF sv])
+  have k: "{u \<in> vkeyb v ` skeys t. proj s\<cdot>(Rep_compact_basis u) \<sqsubseteq> \<kappa>}
+      = vkeyb v ` {u \<in> skeys t. proj s\<cdot>(Rep_compact_basis u) \<sqsubseteq> \<kappa>}"
+    by (auto simp: proj_le [OF sv])
+  show ?case by (simp, rule split_principal_eqI) (simp_all only: srows_SSelect skeys_SSelect srows_SView skeys_SView r k)
+qed simp
+
+lemma split_view_view:
+  assumes c: "fst v' \<sqsubseteq> fst v" and b: "snd v' \<sqsubseteq> snd v"
+  shows "split_view v'\<cdot>(split_view v\<cdot>D) = split_view v'\<cdot>D"
+proof (induct D rule: split_pd.principal_induct)
+  case (2 t)
+  have s: "fst v' \<squnion> key_supp\<cdot>(snd v') \<sqsubseteq> fst v \<squnion> key_supp\<cdot>(snd v)"
+    by (rule lattice_join_mono [OF c key_supp_mono [OF b]])
+  have r: "vrow v' (vrow v x) = vrow v' x" for x
+    by (simp add: Rep_compact_basis_inject [symmetric] proj_le [OF s])
+  have k: "vkeyb v' (vkeyb v u) = vkeyb v' u" for u
+    by (simp add: Rep_compact_basis_inject [symmetric] proj_le [OF b])
+  show ?case by (simp only: split_view_principal, rule split_principal_eqI) (simp_all add: image_image r k)
+qed simp
+
 subsection \<open>Refutation by a key test\<close>
 
 text \<open>A key test refutes the part when it is false on every selected possible key: the selected
