@@ -827,6 +827,259 @@ lemma gcontent_possible: "split_possible_at K \<kappa> (gcontent_ext D e F k) \<
         and \<Psi> = "\<lambda>t. SRowGuard _ (SKeyGuard _ (SSelect _ _ t))"])
      (auto intro: SRowGuard_split_mono SKeyGuard_split_mono SSelect_split_mono)
 
+
+subsection \<open>The aggregate on its contents\<close>
+
+text \<open>Members whose value is the fold's unit do not change it, and members below the unit only
+  lower it.\<close>
+
+lemma agg_fold_neutral_left:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and B: "finite B" and AB: "A \<subseteq> B"
+    and v: "\<And>a. a \<in> B - A \<Longrightarrow> v a = Absent"
+  shows "agg_fold f v A = agg_fold f v B"
+proof -
+  interpret agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
+    unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd [OF f])
+  show ?thesis unfolding agg_fold_finite [OF f B] agg_fold_finite [OF f finite_subset [OF AB B]]
+    using B AB v by (intro agg.mono_neutral_left) auto
+qed
+
+lemma agg_fold_below_unit:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and B: "finite B" and AB: "A \<subseteq> B"
+    and v: "\<And>a. a \<in> B - A \<Longrightarrow> v a \<sqsubseteq> Absent"
+  shows "agg_fold f v B \<sqsubseteq> agg_fold f v A"
+proof -
+  let ?w = "\<lambda>a. if a \<in> A then v a else Absent"
+  have "agg_fold f v B \<sqsubseteq> agg_fold f ?w B" by (rule agg_fold_mono [OF f B]) (use v in auto)
+  also have "\<dots> = agg_fold f ?w A" by (rule agg_fold_neutral_left [OF f B AB, symmetric]) simp
+  also have "\<dots> = agg_fold f v A" by (rule agg_fold_cong [OF f]) simp_all
+  finally show ?thesis .
+qed
+
+lemma tr_mult_plus_Absent: "t \<noteq> TT \<Longrightarrow> t \<odot> x + Absent = t \<odot> x"
+  by (cases t rule: trE) (simp_all add: plus_option_pd_assoc)
+
+text \<open>The aggregate's argument contents at an inner key are read off its released contents at the
+  outer key; the inner key's presence off the fold guard's content.  The content aggregate folds
+  these over the inner keys definite and possible in the fold guard's content.\<close>
+
+definition agg_inner_g :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow>
+    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list" where
+  "agg_inner_g X F \<kappa> Gr = map2 (\<lambda>e G. sel_select (esel e) F \<kappa>\<cdot>G) (eguards X) Gr"
+
+definition agg_inner_v :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> 'k \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list" where
+  "agg_inner_v X \<kappa> Xr = map2 (\<lambda>e V. split_view (eview e)\<cdot>(split_select (elower e) (proj (elower e)\<cdot>\<kappa>)\<cdot>V)) (evalues X) Xr"
+
+definition cagg_value :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
+    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "cagg_value X c Gs Xs F \<kappa> = split_present (split_select (kd X F) \<kappa>\<cdot>(hd Gs)) \<odot>
+     c (agg_inner_g X F \<kappa> (tl Gs)) (agg_inner_v X \<kappa> Xs) F \<kappa>"
+
+definition cagg_member :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow>
+    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "cagg_member X c Gs Xs F k \<kappa> = (if \<kappa> \<in> agg_definite X (hd Gs) F k then cagg_value X c Gs Xs F \<kappa>
+     else cagg_value X c Gs Xs F \<kappa> + Absent)"
+
+definition cagg_glb :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v) expr_ext \<Rightarrow>
+    (('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd) \<Rightarrow>
+    ('r, 'k) split_pd list \<Rightarrow> ('r, 'k) split_pd list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd" where
+  "cagg_glb f X c Gs Xs F k = glb {agg_fold f (cagg_member X c Gs Xs F k) (agg_definite X (hd Gs) F k \<union> C) | C.
+     finite C \<and> C \<subseteq> agg_possible X (hd Gs) F k}"
+
+text \<open>The aggregate's selected parts at the outer key are compact.\<close>
+
+lemma agg_upper_compact:
+  assumes k: "sel_compact (aggregate_ext f X) F k" and S: "S \<in> set (esels X)"
+  shows "compact (proj (upper_part S \<sqinter> flod F)\<cdot>k)"
+proof -
+  have "sel \<bottom> (upper_part S) \<in> set (esels (aggregate_ext f X))" using S by (auto simp: image_iff)
+  then have "compact (proj (sel_at (sel \<bottom> (upper_part S)) (flod F))\<cdot>k)" using k by blast
+  then show ?thesis by (simp only: selector.select_convs lattice_join_bot_left)
+qed
+
+lemma agg_frame_compact:
+  assumes k: "sel_compact (aggregate_ext f X) F k"
+  shows "compact (proj (flod F)\<cdot>k)"
+proof -
+  have "sel \<bottom> \<top> \<in> set (esels (aggregate_ext f X))" by simp
+  then have "compact (proj (sel_at (sel \<bottom> \<top>) (flod F))\<cdot>k)" using k by blast
+  then show ?thesis by (simp only: selector.select_convs lattice_meet_top_left lattice_join_bot_left)
+qed
+
+text \<open>An inner key at the key LOD is compact: its part at the inner minimal LOD is, if that is
+  small, and its part at the frame LOD is the outer key.\<close>
+
+lemma inner_key_compact:
+  assumes m: "lod_small (emind X)" and kK: "proj (kd X F)\<cdot>\<kappa> = \<kappa>" and ck: "compact (proj (flod F)\<cdot>\<kappa>)"
+  shows "compact \<kappa>"
+proof -
+  have "compact (proj (emind X)\<cdot>\<kappa> \<squnion> proj (flod F)\<cdot>\<kappa>)"
+    by (rule compact_join [OF lod_small_proj [OF m] ck joinableI [OF proj_below proj_below]])
+  then show ?thesis by (simp only: proj_sup [symmetric] kK)
+qed
+
+lemma agg_inner_contents:
+  assumes k: "sel_compact (aggregate_ext f X) F k" and kk: "proj (flod F)\<cdot>\<kappa> = k" and c: "compact \<kappa>"
+  shows "agg_inner_g X F \<kappa> (gcontents_ext D (map release (eguards X)) F k) = gcontents_ext D (eguards X) F \<kappa>"
+    and "agg_inner_v X \<kappa> (vcontents_ext D (map release (evalues X)) F k) = vcontents_ext D (evalues X) F \<kappa>"
+proof -
+  have cS: "compact (proj (sel_at (esel e) (flod F))\<cdot>\<kappa>)" for e :: "('k, 'p) entry"
+    by (rule compact_proj_compact [OF c])
+  show "agg_inner_g X F \<kappa> (gcontents_ext D (map release (eguards X)) F k) = gcontents_ext D (eguards X) F \<kappa>"
+    unfolding agg_inner_g_def map_map comp_def map2_map
+  proof (rule map_cong [OF refl])
+    fix e assume e: "e \<in> set (eguards X)"
+    show "sel_select (esel e) F \<kappa>\<cdot>(gcontent_ext D (release e) F k) = gcontent_ext D e F \<kappa>"
+      unfolding sel_select_def
+      by (rule inner_gcontent [OF kk cS agg_upper_compact [OF k esels_guardI [OF e]], symmetric])
+  qed
+  show "agg_inner_v X \<kappa> (vcontents_ext D (map release (evalues X)) F k) = vcontents_ext D (evalues X) F \<kappa>"
+    unfolding agg_inner_v_def map_map comp_def map2_map
+  proof (rule map_cong [OF refl])
+    fix e assume e: "e \<in> set (evalues X)"
+    show "split_view (eview e)\<cdot>(split_select (elower e) (proj (elower e)\<cdot>\<kappa>)\<cdot>(vcontent_ext D (release e) F k)) = vcontent_ext D e F \<kappa>"
+      by (rule inner_vcontent [OF kk cS agg_upper_compact [OF k esels_valueI [OF e]], symmetric])
+  qed
+qed
+
+text \<open>At an inner key, the aggregate's member value is the content one.\<close>
+
+lemma agg_value_contents:
+  assumes c: "ext_csem X c" and D: "conf_bounded D" and k: "sel_compact (aggregate_ext f X) F k"
+    and kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj (kd X F)\<cdot>\<kappa> = \<kappa>" and c\<kappa>: "compact \<kappa>"
+  shows "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> =
+    cagg_value X c (gcontents_ext D (eguards (aggregate_ext f X)) F k) (vcontents_ext D (evalues (aggregate_ext f X)) F k) F \<kappa>"
+proof -
+  have sk: "sel_compact X F \<kappa>" by (blast intro: compact_proj_compact [OF c\<kappa>])
+  show ?thesis
+    unfolding cagg_value_def aggregate_ext_simps aggregate_simps list.map list.sel
+      agg_inner_contents [OF k kk c\<kappa>] inner_presence [OF kk kK c\<kappa>, symmetric] ext_csemD [OF c D sk] ..
+qed
+
+text \<open>The inner keys definite or possible at the outer key lie in the key LOD above the outer key.\<close>
+
+lemma agg_keys_at:
+  assumes "\<kappa> \<in> agg_definite X D F k \<union> agg_possible X D F k"
+  shows "proj (flod F)\<cdot>\<kappa> = k \<and> proj (kd X F)\<cdot>\<kappa> = \<kappa> \<and> \<kappa> \<in> Rep_cfun (proj (kd X F)) ` conforming_keyspace"
+  using assms unfolding agg_definite_def agg_possible_def by (auto simp: maximal_at_lives proj_idem)
+
+lemma present_select_TT:
+  assumes c: "compact \<kappa>" and p: "split_present (split_select K \<kappa>\<cdot>G) = TT"
+  shows "\<exists>y. split_definite y G \<and> rproj K y = \<kappa>"
+proof -
+  have "select_test K \<kappa> (\<Lambda> _. TT) (\<Lambda> _. TT) G = TT" unfolding select_test_guarded [OF c] using p by simp
+  then show ?thesis unfolding select_test_def by (auto split: if_split_asm)
+qed
+
+lemma present_select_FF:
+  assumes c: "compact \<kappa>" and p: "\<not> split_possible_at K \<kappa> G"
+  shows "split_present (split_select K \<kappa>\<cdot>G) = FF"
+  using select_test_impossible [OF c p, where g = "\<Lambda> _. TT" and h = "\<Lambda> _. TT"] unfolding select_test_guarded [OF c] by simp
+
+text \<open>At a compact dataset below a conforming one, the aggregate is the content aggregate of its
+  contents.  The fold guard's content has fewer definite and possible inner keys than the dataset,
+  but the missing ones do not change the greatest lower bound: a key definite in the dataset only
+  is not present for sure, so its member is already below the unit; a key possible in the dataset
+  only is refuted, so its member is the unit.\<close>
+
+theorem agg_glb_contents:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and c: "ext_csem X c" and m: "lod_small (emind X)"
+    and D: "conf_bounded D" and cD: "compact D" and k: "sel_compact (aggregate_ext f X) F k"
+  shows "agg_glb f X D F k = cagg_glb f X c (gcontents_ext D (eguards (aggregate_ext f X)) F k)
+    (vcontents_ext D (evalues (aggregate_ext f X)) F k) F k"
+proof -
+  let ?Gs = "gcontents_ext D (eguards (aggregate_ext f X)) F k" and ?Xs = "vcontents_ext D (evalues (aggregate_ext f X)) F k"
+  let ?G = "gcontent_ext D (mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)) F k" and ?K = "kd X F"
+  have hG: "hd ?Gs = ?G" by simp
+  let ?DefD = "agg_definite X D F k" and ?PosD = "agg_possible X D F k"
+  let ?DefG = "agg_definite X ?G F k" and ?PosG = "agg_possible X ?G F k"
+  let ?MD = "agg_member X D F k" and ?MG = "cagg_member X c ?Gs ?Xs F k"
+  let ?p = "\<lambda>\<kappa>. split_present (split_select ?K \<kappa>\<cdot>?G)"
+  have ck: "compact (proj (flod F)\<cdot>k)" by (rule agg_frame_compact [OF k])
+  have key: "proj (flod F)\<cdot>\<kappa> = k" "proj ?K\<cdot>\<kappa> = \<kappa>" "\<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace" "compact \<kappa>"
+    if "\<kappa> \<in> ?DefD \<union> ?PosD" for \<kappa>
+  proof -
+    show kk: "proj (flod F)\<cdot>\<kappa> = k" and kK: "proj ?K\<cdot>\<kappa> = \<kappa>" and "\<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
+      using agg_keys_at [OF that] by simp_all
+    have "compact (proj (flod F)\<cdot>\<kappa>)" using ck by (simp only: kk [symmetric] proj_idem)
+    then show "compact \<kappa>" by (rule inner_key_compact [OF m kK])
+  qed
+  have defG: "?DefG \<subseteq> ?DefD" unfolding agg_definite_def using gcontent_definite by blast
+  have posG: "?PosG \<subseteq> ?PosD" unfolding agg_possible_def using gcontent_possible by blast
+  have val: "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> = cagg_value X c ?Gs ?Xs F \<kappa>"
+    if "\<kappa> \<in> ?DefD \<union> ?PosD" for \<kappa>
+    by (rule agg_value_contents [OF c D k key(1,2,4) [OF that]])
+  have pv: "cagg_value X c ?Gs ?Xs F \<kappa> = ?p \<kappa> \<odot> c (agg_inner_g X F \<kappa> (tl ?Gs)) (agg_inner_v X \<kappa> ?Xs) F \<kappa>" for \<kappa>
+    unfolding cagg_value_def hG ..
+  have nTT: "?p \<kappa> \<noteq> TT" if d: "\<kappa> \<in> ?DefD" and n: "\<kappa> \<notin> ?DefG" for \<kappa>
+  proof
+    assume T: "?p \<kappa> = TT"
+    obtain y where y: "split_definite y ?G" "rproj ?K y = \<kappa>"
+      using present_select_TT [OF key(4) [OF UnI1 [OF d]] T] by blast
+    have "\<kappa> \<in> ?DefG" using d y unfolding agg_definite_def by blast
+    then show False using n by blast
+  qed
+  have FF: "?p \<kappa> = FF" if "\<kappa> \<in> ?DefD \<union> ?PosD" "\<kappa> \<notin> ?PosG" for \<kappa>
+  proof (rule present_select_FF [OF key(4) [OF that(1)]])
+    show "\<not> split_possible_at ?K \<kappa> ?G" using that key(1,3) [OF that(1)] unfolding agg_possible_def by blast
+  qed
+  have mem: "?MD \<kappa> = ?MG \<kappa>" if "\<kappa> \<in> ?DefD \<union> ?PosD" for \<kappa>
+  proof (cases "\<kappa> \<in> ?DefG")
+    case True
+    then show ?thesis using defG val [OF that] unfolding agg_member_def cagg_member_def hG by auto
+  next
+    case nG: False
+    show ?thesis
+    proof (cases "\<kappa> \<in> ?DefD")
+      case True
+      have "cagg_value X c ?Gs ?Xs F \<kappa> + Absent = cagg_value X c ?Gs ?Xs F \<kappa>"
+        unfolding pv by (rule tr_mult_plus_Absent [OF nTT [OF True nG]])
+      then show ?thesis using True nG val [OF that] unfolding agg_member_def cagg_member_def hG by simp
+    next
+      case False
+      then show ?thesis using nG val [OF that] unfolding agg_member_def cagg_member_def hG by simp
+    qed
+  qed
+  have absG: "?MG \<kappa> = Absent" if "\<kappa> \<in> ?DefD \<union> ?PosD" "\<kappa> \<notin> ?PosG" for \<kappa>
+  proof -
+    have "cagg_value X c ?Gs ?Xs F \<kappa> = Absent" unfolding pv FF [OF that] by simp
+    then show ?thesis unfolding cagg_member_def by simp
+  qed
+  have lowG: "?MG \<kappa> \<sqsubseteq> Absent" if "\<kappa> \<notin> ?DefG" for \<kappa>
+    using that unfolding cagg_member_def hG by (simp add: plus_option_pd_below2)
+  have fD: "finite ?DefD" by (rule agg_definite_finite [OF cD])
+  let ?SD = "{agg_fold f ?MD (?DefD \<union> C) | C. finite C \<and> C \<subseteq> ?PosD}"
+  let ?SG = "{agg_fold f ?MG (?DefG \<union> C) | C. finite C \<and> C \<subseteq> ?PosG}"
+  have SD: "agg_glb f X D F k = glb ?SD" unfolding agg_glb_def ..
+  have SG: "cagg_glb f X c ?Gs ?Xs F k = glb ?SG" unfolding cagg_glb_def hG ..
+  have "glb ?SD \<sqsubseteq> glb ?SG"
+  proof (rule glb_greatest, blast, intro ballI)
+    fix y assume "y \<in> ?SG"
+    then obtain C where y: "y = agg_fold f ?MG (?DefG \<union> C)" and fC: "finite C" and C: "C \<subseteq> ?PosG" by blast
+    have "glb ?SD \<sqsubseteq> agg_fold f ?MD (?DefD \<union> C)"
+      by (rule glb_below, rule CollectI, rule exI [of _ C]) (use fC C posG in blast)
+    also have "\<dots> = agg_fold f ?MG (?DefD \<union> C)" by (rule agg_fold_cong [OF f refl], rule mem) (use C posG in blast)
+    also have "\<dots> \<sqsubseteq> y" unfolding y
+      by (rule agg_fold_below_unit [OF f finite_UnI [OF fD fC]]) (use defG lowG in blast)+
+    finally show "glb ?SD \<sqsubseteq> y" .
+  qed
+  moreover have "glb ?SG \<sqsubseteq> glb ?SD"
+  proof (rule glb_greatest, blast, intro ballI)
+    fix x assume "x \<in> ?SD"
+    then obtain C' where x: "x = agg_fold f ?MD (?DefD \<union> C')" and fC': "finite C'" and C': "C' \<subseteq> ?PosD" by blast
+    let ?C = "(?DefD \<union> C') \<inter> ?PosG"
+    have "glb ?SG \<sqsubseteq> agg_fold f ?MG (?DefG \<union> ?C)"
+      by (rule glb_below, rule CollectI, rule exI [of _ ?C]) (use fD fC' in auto)
+    also have "\<dots> = agg_fold f ?MG (?DefD \<union> C')"
+      by (rule agg_fold_neutral_left [OF f finite_UnI [OF fD fC']]) (use defG absG C' in blast)+
+    also have "\<dots> = x" unfolding x by (rule agg_fold_cong [OF f refl], rule mem [symmetric]) (use C' in blast)
+    finally show "glb ?SG \<sqsubseteq> x" .
+  qed
+  ultimately show ?thesis unfolding SD SG by (rule below_antisym)
+qed
+
 end
 
 end
