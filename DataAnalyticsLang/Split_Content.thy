@@ -148,6 +148,116 @@ lemma split_select_principal [simp]:
   "split_select s \<kappa>\<cdot>(split_principal t) = split_principal (SSelect s \<kappa> t)"
   unfolding split_select_def by (simp add: split_pd.extension_principal SSelect_split_mono)
 
+text \<open>Selection keeps a maybe-unit whose key may end up at the part, and distributes over unions.\<close>
+
+lemma SSelect_SKey: "proj s\<cdot>(Rep_compact_basis k) \<sqsubseteq> \<kappa> \<Longrightarrow> SSelect s \<kappa> (SKey k) = SKey k"
+  by (rule split_basis_eqI) auto
+
+lemma split_select_maybe_unit_imp:
+  "proj s\<cdot>k \<sqsubseteq> \<kappa> \<longrightarrow> split_select s \<kappa>\<cdot>(split_maybe_unit\<cdot>k :: ('r, 'k) split_pd) = split_maybe_unit\<cdot>k"
+proof (induct k rule: compact_basis.principal_induct)
+  show "adm (\<lambda>k. proj s\<cdot>k \<sqsubseteq> \<kappa> \<longrightarrow> split_select s \<kappa>\<cdot>(split_maybe_unit\<cdot>k :: ('r, 'k) split_pd) = split_maybe_unit\<cdot>k)"
+  proof (rule admI, rule impI)
+    fix Y :: "nat \<Rightarrow> 'k"
+    assume Y: "chain Y" and h: "\<forall>i. proj s\<cdot>(Y i) \<sqsubseteq> \<kappa> \<longrightarrow> split_select s \<kappa>\<cdot>(split_maybe_unit\<cdot>(Y i) :: ('r, 'k) split_pd) = split_maybe_unit\<cdot>(Y i)"
+      and l: "proj s\<cdot>(\<Squnion>i. Y i) \<sqsubseteq> \<kappa>"
+    have "proj s\<cdot>(Y i) \<sqsubseteq> \<kappa>" for i by (rule below_trans [OF monofun_cfun_arg [OF is_ub_thelub [OF Y]] l])
+    then have e: "split_select s \<kappa>\<cdot>(split_maybe_unit\<cdot>(Y i) :: ('r, 'k) split_pd) = split_maybe_unit\<cdot>(Y i)" for i
+      using h by blast
+    show "split_select s \<kappa>\<cdot>(split_maybe_unit\<cdot>(\<Squnion>i. Y i) :: ('r, 'k) split_pd) = split_maybe_unit\<cdot>(\<Squnion>i. Y i)"
+      by (simp add: contlub_cfun_arg [OF Y] contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF Y]] e)
+  qed
+next
+  fix k :: "'k compact_basis"
+  show "proj s\<cdot>(Rep_compact_basis k) \<sqsubseteq> \<kappa> \<longrightarrow>
+      split_select s \<kappa>\<cdot>(split_maybe_unit\<cdot>(Rep_compact_basis k) :: ('r, 'k) split_pd) = split_maybe_unit\<cdot>(Rep_compact_basis k)"
+    by (simp add: SSelect_SKey)
+qed
+
+lemma split_select_maybe_unit:
+  "proj s\<cdot>k \<sqsubseteq> \<kappa> \<Longrightarrow> split_select s \<kappa>\<cdot>(split_maybe_unit\<cdot>k :: ('r, 'k) split_pd) = split_maybe_unit\<cdot>k"
+  using split_select_maybe_unit_imp by blast
+
+lemma split_select_plus: "split_select s \<kappa>\<cdot>(xs \<union>\<^sub>s ys) = split_select s \<kappa>\<cdot>xs \<union>\<^sub>s split_select s \<kappa>\<cdot>ys"
+  apply (induct xs rule: split_pd.principal_induct, simp)
+  apply (induct ys rule: split_pd.principal_induct, simp)
+  apply (simp, rule split_principal_eqI, auto)
+  done
+
+text \<open>A possible key that may end up at the part bounds the selected possible keys.\<close>
+
+lemma split_select_keys_possible:
+  assumes p: "split_possible k D" and k: "proj s\<cdot>k \<sqsubseteq> \<kappa>"
+  shows "split_keys\<cdot>(split_select s \<kappa>\<cdot>D) \<sqsubseteq> down\<cdot>{k}\<sharp>"
+proof -
+  have u: "D \<union>\<^sub>s split_maybe_unit\<cdot>k = D" using p unfolding split_possible_def split_incl_def .
+  have "split_select s \<kappa>\<cdot>D = split_select s \<kappa>\<cdot>(D \<union>\<^sub>s split_maybe_unit\<cdot>k)" by (simp only: u)
+  also have "\<dots> = split_select s \<kappa>\<cdot>D \<union>\<^sub>s split_maybe_unit\<cdot>k"
+    by (simp only: split_select_plus split_select_maybe_unit [OF k])
+  finally have e: "split_select s \<kappa>\<cdot>D = split_select s \<kappa>\<cdot>D \<union>\<^sub>s split_maybe_unit\<cdot>k" .
+  have "split_keys\<cdot>(split_select s \<kappa>\<cdot>D) \<sqsubseteq> split_keys\<cdot>(split_maybe_unit\<cdot>k :: ('r, 'k) split_pd)"
+    by (subst e) (rule split_keys_plus_below)
+  then show ?thesis by simp
+qed
+
+subsection \<open>Refutation by a key test\<close>
+
+text \<open>A key test refutes the part when it is false on every selected possible key: the selected
+  keys, mapped through the test, are no keys at all or only false.  The test is monotone in the
+  dataset, and decided at a finite stage.\<close>
+
+lemma compact_down: "compact x \<Longrightarrow> compact (down\<cdot>x)"
+  unfolding compact_def
+proof (rule admI)
+  fix Y :: "nat \<Rightarrow> 'a top"
+  assume c: "adm (\<lambda>y. \<not> x \<sqsubseteq> y)" and Y: "chain Y" and n: "\<forall>i. \<not> down\<cdot>x \<sqsubseteq> Y i"
+  from Y show "\<not> down\<cdot>x \<sqsubseteq> (\<Squnion>i. Y i)"
+  proof (cases rule: top_chain_cases)
+    case (down X)
+    have "\<not> x \<sqsubseteq> X i" for i using n down(2) by (simp add: down_beta below_Of)
+    then have "\<not> x \<sqsubseteq> (\<Squnion>i. X i)" using compact_below_lub_iff [OF c [folded compact_def] down(1)] by blast
+    then show ?thesis using down(3) by (simp add: down_beta below_Of)
+  next
+    case Top
+    then obtain i where "Y i = Top" by blast
+    then show ?thesis using n below_Top by metis
+  qed
+qed
+
+definition split_refuted :: "'k semi_factor \<Rightarrow> 'k \<Rightarrow> ('k \<rightarrow> tr) \<Rightarrow> ('r, 'k) split_pd \<Rightarrow> bool" where
+  "split_refuted s \<kappa> h D \<longleftrightarrow> down\<cdot>{FF}\<sharp> \<sqsubseteq> cmap_top\<cdot>(upper_map\<cdot>h)\<cdot>(split_keys\<cdot>(split_select s \<kappa>\<cdot>D))"
+
+lemma split_refuted_mono: "split_refuted s \<kappa> h D \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> split_refuted s \<kappa> h D'"
+  unfolding split_refuted_def by (erule below_trans) (intro monofun_cfun_arg)
+
+lemma split_refuted_lub:
+  assumes Y: "chain Y" and r: "split_refuted s \<kappa> h (\<Squnion>i. Y i)"
+  obtains i where "split_refuted s \<kappa> h (Y i)"
+proof -
+  let ?F = "\<lambda>D. cmap_top\<cdot>(upper_map\<cdot>h)\<cdot>(split_keys\<cdot>(split_select s \<kappa>\<cdot>D))"
+  have ch: "chain (\<lambda>i. ?F (Y i))" by (intro ch2ch_Rep_cfunR Y)
+  have "?F (\<Squnion>i. Y i) = (\<Squnion>i. ?F (Y i))"
+    by (simp only: contlub_cfun_arg [OF Y] contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF Y]]
+        contlub_cfun_arg [OF ch2ch_Rep_cfunR [OF ch2ch_Rep_cfunR [OF Y]]])
+  then have "down\<cdot>{FF}\<sharp> \<sqsubseteq> (\<Squnion>i. ?F (Y i))" using r unfolding split_refuted_def by simp
+  then obtain i where "down\<cdot>{FF}\<sharp> \<sqsubseteq> ?F (Y i)"
+    using compact_below_lub_iff [OF compact_down [OF compact_upper_unit [OF compact_FF]] ch] by blast
+  then show ?thesis using that unfolding split_refuted_def by blast
+qed
+
+text \<open>A refuted part has no possible key there on which the test is not false.\<close>
+
+lemma split_refuted_possible:
+  assumes r: "split_refuted s \<kappa> h D" and p: "split_possible k D" and k: "proj s\<cdot>k \<sqsubseteq> \<kappa>"
+  shows "h\<cdot>k = FF"
+proof -
+  have b: "cmap_top\<cdot>(upper_map\<cdot>h)\<cdot>(split_keys\<cdot>(split_select s \<kappa>\<cdot>D)) \<sqsubseteq> down\<cdot>{h\<cdot>k}\<sharp>"
+    using monofun_cfun_arg [OF split_select_keys_possible [OF p k], of "cmap_top\<cdot>(upper_map\<cdot>h)"] by simp
+  have "down\<cdot>{FF}\<sharp> \<sqsubseteq> down\<cdot>{h\<cdot>k}\<sharp>" by (rule below_trans [OF r [unfolded split_refuted_def] b])
+  then have "FF \<sqsubseteq> h\<cdot>k" by (simp add: down_beta below_Of)
+  then show ?thesis by simp
+qed
+
 end
 
 end
