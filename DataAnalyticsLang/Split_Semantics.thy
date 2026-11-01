@@ -266,6 +266,31 @@ proof (rule contI)
     using ext_contD [OF c F R conf] by simp
 qed
 
+text \<open>\<^emph>\<open>Monotonicity below conforming datasets\<close>: the extended semantics grows along datasets
+  below a split dataset with conforming definite rows.  Their compact approximants need not
+  conform, so this is what lets a semantics be extended from the compact datasets.\<close>
+
+definition ext_mono :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
+  "ext_mono X \<longleftrightarrow> (\<forall>D D' C F k. lod_bounded F \<longrightarrow> conforming_rows (split_rows\<cdot>C) \<longrightarrow> D \<sqsubseteq> D' \<longrightarrow> D' \<sqsubseteq> C \<longrightarrow>
+     sem_ext X D F k \<sqsubseteq> sem_ext X D' F k)"
+
+lemma ext_monoI:
+  "(\<And>D D' C F k. lod_bounded F \<Longrightarrow> conforming_rows (split_rows\<cdot>C) \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> D' \<sqsubseteq> C \<Longrightarrow>
+     sem_ext X D F k \<sqsubseteq> sem_ext X D' F k) \<Longrightarrow> ext_mono X"
+  unfolding ext_mono_def by blast
+
+lemma ext_monoD:
+  "ext_mono X \<Longrightarrow> lod_bounded F \<Longrightarrow> conforming_rows (split_rows\<cdot>C) \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow> D' \<sqsubseteq> C \<Longrightarrow>
+     sem_ext X D F k \<sqsubseteq> sem_ext X D' F k"
+  unfolding ext_mono_def by blast
+
+lemma ext_contI_mono:
+  assumes m: "ext_mono X"
+    and l: "\<And>(Y :: nat \<Rightarrow> ('r, 'k) split_pd) F k. lod_bounded F \<Longrightarrow> chain Y \<Longrightarrow>
+      (\<And>i. conforming_rows (split_rows\<cdot>(Y i))) \<Longrightarrow> sem_ext X (\<Squnion>i. Y i) F k \<sqsubseteq> (\<Squnion>i. sem_ext X (Y i) F k)"
+  shows "ext_cont X"
+  by (rule ext_contI2 [OF ext_monoD [OF m _ _ _ below_refl] l])
+
 definition ext_fun :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('r, 'k) conf_split \<rightarrow> 'v option_pd" where
   "ext_fun X F k = (\<Lambda> D. sem_ext X (Rep_conf_split D) F k)"
 
@@ -1227,9 +1252,9 @@ lemma col_sections_mono: "D \<sqsubseteq> D' \<Longrightarrow> col_sections c a 
 lemma lub_subset_below: "S \<noteq> {} \<Longrightarrow> S \<subseteq> T \<Longrightarrow> T <| (b :: 'a::bounded_complete) \<Longrightarrow> lub S \<sqsubseteq> lub T"
   by (rule lub_belowI) (auto intro: below_lubI is_ub_upward simp: is_ub_def)
 
-lemma column_sem_mono:
+lemma column_sem_mono_below:
   assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "compact a"
-    and cf: "conforming_rows (split_rows\<cdot>D')" and le: "D \<sqsubseteq> D'"
+    and cf: "conforming_rows (split_rows\<cdot>C)" and le: "D \<sqsubseteq> D'" and le': "D' \<sqsubseteq> C"
   shows "column_sem c a v D k \<sqsubseteq> column_sem c a v D' k"
 proof -
   let ?C = "\<lambda>D. maximal_at a (proj a\<cdot>k) \<and> col_sections c a D k \<noteq> {}"
@@ -1247,9 +1272,11 @@ proof -
   proof (cases "?C D")
     case True
     have T': "?C D'" by (rule CC [OF True])
-    obtain b where b: "col_sections c a D' k <| b" using col_sections_ub [OF fd cf] T' by blast
+    obtain b where b: "col_sections c a C k <| b"
+      using col_sections_ub [OF fd cf] T' col_sections_mono [OF le', of c a k] by blast
+    have b': "col_sections c a D' k <| b" using b col_sections_mono [OF le', of c a k] by (auto simp: is_ub_def)
     have "lub (col_sections c a D k) \<sqsubseteq> lub (col_sections c a D' k)"
-      using True by (intro lub_subset_below [OF _ col_sections_mono [OF le] b]) simp
+      using True by (intro lub_subset_below [OF _ col_sections_mono [OF le] b']) simp
     then show ?thesis by (simp only: if_P [OF True] if_P [OF T'] monofun_cfun_arg)
   next
     case nC: False
@@ -1265,6 +1292,11 @@ proof -
     qed
   qed
 qed
+
+lemma column_sem_mono:
+  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> compact a \<Longrightarrow> conforming_rows (split_rows\<cdot>D') \<Longrightarrow> D \<sqsubseteq> D' \<Longrightarrow>
+    column_sem c a v D k \<sqsubseteq> column_sem c a v D' k"
+  by (rule column_sem_mono_below [OF _ _ _ _ below_refl])
 
 theorem ext_cont_column:
   assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and ca: "compact a"
@@ -1361,6 +1393,40 @@ next
     qed
   qed
 qed
+
+
+subsection \<open>Monotonicity of the combinators below conforming datasets\<close>
+
+theorem ext_mono_const: "ext_mono (const_ext v)"
+  by (rule ext_monoI) simp
+
+theorem ext_mono_smap: "ext_mono X \<Longrightarrow> ext_mono (smap_ext g X)"
+  by (rule ext_monoI) (simp add: monofun_cfun_arg ext_monoD)
+
+theorem ext_mono_restrict: "ext_mono X \<Longrightarrow> ext_mono (restrict_ext \<gamma> X)"
+  unfolding ext_mono_def by simp
+
+theorem ext_mono_filtfor: "ext_mono X \<Longrightarrow> ext_mono (filtfor_ext \<tau> G X)"
+  unfolding ext_mono_def by (simp add: lod_bounded_ffor)
+
+theorem ext_mono_include_dims: "compact M \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (include_dims_ext M X)"
+  unfolding ext_mono_def by (simp add: lod_bounded_finclude)
+
+theorem ext_mono_combine: "ext_mono X\<^sub>1 \<Longrightarrow> ext_mono X\<^sub>2 \<Longrightarrow> ext_mono (combine_ext f X\<^sub>1 X\<^sub>2)"
+  by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg ext_monoD)
+
+theorem ext_mono_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_mono X) \<Longrightarrow> ext_mono (tuple_ext Xs)"
+  by (induct Xs) (simp_all add: ext_mono_const const_ext_def [symmetric] ext_mono_combine)
+
+theorem ext_mono_key_at: "compact c \<Longrightarrow> ext_mono (key_at_ext c)"
+  by (rule ext_monoI) (simp add: key_at_sem_mono)
+
+theorem ext_mono_present_at: "compact (emind X \<squnion> a) \<Longrightarrow> ext_mono X \<Longrightarrow> ext_mono (present_at_ext a \<rho> X)"
+  by (rule ext_monoI) (simp add: monofun_cfun monofun_cfun_arg populated_ext_mono ext_monoD)
+
+theorem ext_mono_column:
+  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> compact a \<Longrightarrow> ext_mono (column_ext c a v)"
+  by (rule ext_monoI) (simp add: column_sem_mono_below)
 
 end
 
