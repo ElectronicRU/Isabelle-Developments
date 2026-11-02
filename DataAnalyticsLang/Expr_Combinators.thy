@@ -489,7 +489,7 @@ definition present_at :: "'k semi_factor \<Rightarrow> 'k semi_factor \<Rightarr
   "present_at a \<rho> E = \<lparr>emind = emind E \<squnion> a, eguards = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue gtrue \<bottom> # eguards E,
      evalues = evalues E,
      esem = \<lambda>data F k. populated data (emind E \<squnion> a) \<rho> F k \<odot> esem E data F (proj (kd E F)\<cdot>k),
-     csem = \<lambda>Gs. \<Lambda> Xs. case hd Gs \<bottom> of None \<Rightarrow> Absent | Some t \<Rightarrow> t \<odot> csem E (tl Gs)\<cdot>Xs\<rparr>"
+     csem = \<lambda>Gs. \<Lambda> Xs. hd Gs \<bottom> \<odot> csem E (tl Gs)\<cdot>Xs\<rparr>"
 
 abbreviation present :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'v) expr" where
   "present E \<equiv> present_at \<bottom> \<top> E"
@@ -499,25 +499,24 @@ lemma present_at_simps [simp]:
   "eguards (present_at a \<rho> E) = mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue gtrue \<bottom> # eguards E"
   "evalues (present_at a \<rho> E) = evalues E"
   "esem (present_at a \<rho> E) data F k = populated data (emind E \<squnion> a) \<rho> F k \<odot> esem E data F (proj (kd E F)\<cdot>k)"
-  "csem (present_at a \<rho> E) Gs\<cdot>Xs = (case hd Gs \<bottom> of None \<Rightarrow> Absent | Some t \<Rightarrow> t \<odot> csem E (tl Gs)\<cdot>Xs)"
-  by (simp_all add: present_at_def split: option.split)
+  "csem (present_at a \<rho> E) Gs\<cdot>Xs = hd Gs \<bottom> \<odot> csem E (tl Gs)\<cdot>Xs"
+  by (simp_all add: present_at_def)
 
 lemma cstrict_present_at:
   assumes E: "cstrict E"
   shows "cstrict (present_at a \<rho> E)"
 proof (rule cstrictI)
-  fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
+  fix Gs :: "('k \<Rightarrow> tr) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (present_at a \<rho> E))" and lx: "length Xs = length (evalues (present_at a \<rho> E))"
     and fin: "gfinite Gs" and c: "csem (present_at a \<rho> E) Gs\<cdot>Xs \<noteq> Absent"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
   have fin': "gfinite Gs'" using fin by (simp add: Gs)
   have lx': "length Xs = length (evalues E)" using lx by simp
-  obtain t where t: "G \<bottom> = Some t" and c': "t \<odot> csem E Gs'\<cdot>Xs \<noteq> Absent"
-    using c by (cases "G \<bottom>") (simp_all add: Gs)
-  have tF: "t \<noteq> FF" and cE: "csem E Gs'\<cdot>Xs \<noteq> Absent" using tr_mult_not_Absent[OF c'] by simp_all
+  have c': "G \<bottom> \<odot> csem E Gs'\<cdot>Xs \<noteq> Absent" using c by (simp add: Gs)
+  have tF: "G \<bottom> \<noteq> FF" and cE: "csem E Gs'\<cdot>Xs \<noteq> Absent" using tr_mult_not_Absent[OF c'] by simp_all
   have "\<not> gfalse G'" if "G' \<in> set Gs'" for G' using cstrictD[OF E l' lx' fin' that] cE by blast
-  moreover have "\<not> gfalse G" using t tF by (auto simp: gfalse_def)
+  moreover have "\<not> gfalse G" using tF by (auto simp: gfalse_def)
   ultimately show "\<forall>G\<in>set Gs. \<not> gfalse G" by (simp add: Gs)
 qed
 
@@ -535,8 +534,7 @@ proof (rule semilawfulI, simp_all only: present_at_simps)
   then show "emind E \<squnion> a = fold (\<squnion>) (map lower_part (map esel (?h # eguards E) @ map esel (evalues E))) \<bottom>"
     by (simp add: lattice_join_bot_right)
   show "populated data (emind E \<squnion> a) \<rho> F k \<odot> esem E data F (proj (kd E F)\<cdot>k)
-      = (case hd (gcontents data (?h # eguards E) F k) \<bottom> of None \<Rightarrow> Absent
-         | Some t \<Rightarrow> t \<odot> csem E (tl (gcontents data (?h # eguards E) F k))\<cdot>(contents data (evalues E) F k))"
+      = hd (gcontents data (?h # eguards E) F k) \<bottom> \<odot> csem E (tl (gcontents data (?h # eguards E) F k))\<cdot>(contents data (evalues E) F k)"
     if d: "fconf (evalues E) data F" for data F k
   proof -
     have h: "hd (gcontents data (?h # eguards E) F k) \<bottom> =
@@ -545,7 +543,7 @@ proof (rule semilawfulI, simp_all only: present_at_simps)
     have t: "tl (gcontents data (?h # eguards E) F k) = gcontents data (eguards E) F k" by simp
     have v: "esem E data F (proj (kd E F)\<cdot>k) = csem_at E data F k"
       by (simp only: semilawful_csem_conf[OF ES d proj_idem] contents_own_key[OF ES])
-    show ?thesis by (simp only: h t v gex_mult populated_def)
+    show ?thesis by (simp only: h t v gex_def populated_def)
   qed
 qed
 
@@ -663,7 +661,7 @@ proof -
   have t: "Rep_cfun (gtruth e F) = (\<lambda>y. pand\<cdot>(fguard (eupper e) F\<cdot>y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y))))"
     by (simp add: fun_eq_iff gtruth_split)
   have one: "gcontent D e F k = (\<lambda>q. if q = rproj (ekeys e) y
-      then Some (pand\<cdot>(\<exists>\<^sub>K z\<in>gfiber D e F k. fguard (eupper e) F\<cdot>z)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y)))) else None)"
+      then pand\<cdot>(\<exists>\<^sub>K z\<in>gfiber D e F k. fguard (eupper e) F\<cdot>z)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y))) else FF)"
     if dD: "conforms D" and y: "y \<in> gfiber D e F k" for D y
     unfolding fun_eq_iff gcontent_def t
     by (intro allI row_guard_entry_image[OF r dD _ y lattice_join_ge1[of "elower e" "eupper e \<sqinter> flod F"]])
@@ -678,7 +676,7 @@ text \<open>A binary function of two expressions: each is evaluated under the fr
   after the other.  Any operator of any arity is a map after combining.\<close>
 
 definition combine_csem :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<Rightarrow> ('k, 'f, 'r, 'a::bifinite, 'z) expr_scheme \<Rightarrow> ('k, 'f, 'r, 'b::bifinite, 'y) expr_scheme \<Rightarrow>
-    ('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'c::bifinite option_pd" where
+    ('k \<Rightarrow> tr) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'c::bifinite option_pd" where
   "combine_csem f E\<^sub>1 E\<^sub>2 Gs Xs = lift2_option_pd f\<cdot>
      (csem E\<^sub>1 (take (length (eguards E\<^sub>1)) Gs)\<cdot>(take (length (evalues E\<^sub>1)) Xs))\<cdot>
      (csem E\<^sub>2 (drop (length (eguards E\<^sub>1)) Gs)\<cdot>(drop (length (evalues E\<^sub>1)) Xs))"
@@ -704,7 +702,7 @@ lemma cstrict_combine:
   assumes E\<^sub>1: "cstrict E\<^sub>1" and E\<^sub>2: "cstrict E\<^sub>2"
   shows "cstrict (combine f E\<^sub>1 E\<^sub>2)"
 proof (rule cstrictI)
-  fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
+  fix Gs :: "('k \<Rightarrow> tr) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (combine f E\<^sub>1 E\<^sub>2))" and lx: "length Xs = length (evalues (combine f E\<^sub>1 E\<^sub>2))"
     and fin: "gfinite Gs" and c: "csem (combine f E\<^sub>1 E\<^sub>2) Gs\<cdot>Xs \<noteq> Absent"
   let ?n = "length (eguards E\<^sub>1)" and ?m = "length (evalues E\<^sub>1)"

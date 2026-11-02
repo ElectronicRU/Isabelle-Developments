@@ -197,28 +197,26 @@ proof -
 qed
 
 text \<open>A released guard's content is read off likewise: at an inner key part, the existential over
-  the keys in the slice with that key part, where there are any; an existential needs no
-  uniqueness.\<close>
+  the keys in the slice with that key part; an existential needs no uniqueness.\<close>
 
-definition agg_gpick :: "('k, 'p) entry \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> tr option) \<Rightarrow> 'k \<Rightarrow> tr option" where
-  "agg_gpick e p G q = gex {q0 \<in> dom G. proj (elower e)\<cdot>q0 = proj (elower e)\<cdot>p \<and> proj (ekeys e)\<cdot>q0 = q} (\<lambda>q0. the (G q0))"
+definition agg_gpick :: "('k, 'p) entry \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> tr) \<Rightarrow> 'k \<Rightarrow> tr" where
+  "agg_gpick e p G q = gex {q0. proj (elower e)\<cdot>q0 = proj (elower e)\<cdot>p \<and> proj (ekeys e)\<cdot>q0 = q} G"
 
 definition agg_inner :: "('k, 'r semi_factor) entry list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
   "agg_inner es Xs p = map2 (\<lambda>e X. agg_pick e p X) es Xs"
 
-definition agg_ginner :: "('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> ('k \<Rightarrow> tr option) list \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> tr option) list" where
+definition agg_ginner :: "('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> ('k \<Rightarrow> tr) list \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> tr) list" where
   "agg_ginner gs Gs p = map2 (\<lambda>e G. agg_gpick e p G) gs Gs"
 
 lemma cont_agg_inner: "cont (\<lambda>Xs. agg_inner es Xs p)"
   unfolding agg_inner_def by (rule cont_map2) (simp add: cont_agg_pick[unfolded eta_cfun])
 
 text \<open>The content semantics folds the inner content semantics, multiplied by the fold guard, over
-  the keys where the fold guard is defined and not false, reading the inner contents at each off the outer
-  ones.\<close>
+  the support of the fold guard, reading the inner contents at each key off the outer ones.\<close>
 
-definition agg_csem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v, 'z) expr_scheme \<Rightarrow> ('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option_pd" where
-  "agg_csem f E Gs Xs = agg_fold f (\<lambda>p. the (hd Gs p) \<odot> csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p))
-     {p \<in> dom (hd Gs). the (hd Gs p) \<noteq> FF}"
+definition agg_csem :: "('v::bifinite \<rightarrow> 'v \<rightarrow> 'v) \<Rightarrow> ('k, 'f, 'r, 'v, 'z) expr_scheme \<Rightarrow> ('k \<Rightarrow> tr) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<Rightarrow> 'v option_pd" where
+  "agg_csem f E Gs Xs = agg_fold f (\<lambda>p. hd Gs p \<odot> csem E (agg_ginner (eguards E) (tl Gs) p)\<cdot>(agg_inner (evalues E) Xs p))
+     (gsupp (hd Gs))"
 
 text \<open>It is continuous in the value contents: the fold's index set is decided by the fold guard,
   and the fold is continuous in the members.\<close>
@@ -407,14 +405,14 @@ proof (induct Gs gs rule: list_induct2)
   then show ?case by (cases "G = G0") (auto simp: agg_gpick_gfalse)
 qed simp
 
-lemma dom_agg_gpick: "dom (agg_gpick e p G) \<subseteq> Rep_cfun (proj (ekeys e)) ` dom G"
-  by (auto simp: agg_gpick_def dom_def gex_def)
+lemma gsupp_agg_gpick: "gsupp (agg_gpick e p G) \<subseteq> Rep_cfun (proj (ekeys e)) ` gsupp G"
+  by (auto simp: agg_gpick_def gsupp_def gex_def kleene_bex_not_FF)
 
 lemma agg_ginner_gfinite: "length Gs = length gs \<Longrightarrow> gfinite Gs \<Longrightarrow> gfinite (agg_ginner gs Gs p)"
   unfolding agg_ginner_def
 proof (induct Gs gs rule: list_induct2)
   case (Cons G Gs e gs)
-  have "finite (dom (agg_gpick e p G))" using Cons(3) by (auto intro: finite_subset[OF dom_agg_gpick])
+  have "finite (gsupp (agg_gpick e p G))" using Cons(3) by (auto intro: finite_subset[OF gsupp_agg_gpick])
   then show ?case using Cons by simp
 qed simp
 
@@ -422,24 +420,24 @@ lemma cstrict_aggregate:
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and E: "cstrict E"
   shows "cstrict (aggregate f E)"
 proof (rule cstrictI)
-  fix Gs :: "('k \<Rightarrow> tr option) list" and Xs :: "('k \<Rightarrow> 'r option) list"
+  fix Gs :: "('k \<Rightarrow> tr) list" and Xs :: "('k \<Rightarrow> 'r option) list"
   assume l: "length Gs = length (eguards (aggregate f E))" and lx: "length Xs = length (evalues (aggregate f E))"
     and fin: "gfinite Gs" and c: "csem (aggregate f E) Gs\<cdot>Xs \<noteq> Absent"
   then obtain G Gs' where Gs: "Gs = G # Gs'" and l': "length Gs' = length (eguards E)"
     by (auto simp: length_Suc_conv)
-  have fG: "finite {p \<in> dom G. the (G p) \<noteq> FF}" and fin': "gfinite Gs'" using fin by (simp_all add: Gs)
+  have fG: "finite (gsupp G)" and fin': "gfinite Gs'" using fin by (simp_all add: Gs)
   have lx': "length Xs = length (evalues E)" using lx by simp
   let ?\<Phi> = "\<lambda>p. csem E (agg_ginner (eguards E) Gs' p)\<cdot>(agg_inner (evalues E) Xs p)"
-  have c': "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) {p \<in> dom G. the (G p) \<noteq> FF} \<noteq> Absent" using c unfolding aggregate_csem[OF f] agg_csem_def Gs list.sel .
-  have ne: "\<exists>p\<in>{p \<in> dom G. the (G p) \<noteq> FF}. the (G p) \<odot> ?\<Phi> p \<noteq> Absent"
+  have c': "agg_fold f (\<lambda>p. G p \<odot> ?\<Phi> p) (gsupp G) \<noteq> Absent" using c unfolding aggregate_csem[OF f] agg_csem_def Gs list.sel .
+  have ne: "\<exists>p\<in>gsupp G. G p \<odot> ?\<Phi> p \<noteq> Absent"
   proof (rule ccontr)
-    assume "\<not> (\<exists>p\<in>{p \<in> dom G. the (G p) \<noteq> FF}. the (G p) \<odot> ?\<Phi> p \<noteq> Absent)"
-    then have "agg_fold f (\<lambda>p. the (G p) \<odot> ?\<Phi> p) {p \<in> dom G. the (G p) \<noteq> FF} = Absent"
+    assume "\<not> (\<exists>p\<in>gsupp G. G p \<odot> ?\<Phi> p \<noteq> Absent)"
+    then have "agg_fold f (\<lambda>p. G p \<odot> ?\<Phi> p) (gsupp G) = Absent"
       by (intro agg_fold_absent[OF f fG]) blast
     then show False using c' by contradiction
   qed
-  then obtain p t where p: "G p = Some t" and pt: "t \<odot> ?\<Phi> p \<noteq> Absent" by (auto simp: dom_def)
-  have "\<not> gfalse G" using p tr_mult_not_Absent[OF pt] by (auto simp: gfalse_def)
+  then obtain p where pt: "G p \<odot> ?\<Phi> p \<noteq> Absent" by blast
+  have "\<not> gfalse G" using tr_mult_not_Absent[OF pt] by (auto simp: gfalse_def)
   moreover have "\<not> gfalse G'" if G': "G' \<in> set Gs'" for G'
   proof
     assume em: "gfalse G'"
@@ -517,10 +515,10 @@ proof -
       let ?\<Phi> = "\<lambda>p. csem E (agg_ginner (eguards E) ?G p)\<cdot>(agg_inner (evalues E) ?X p)"
       have hd: "?H = (\<lambda>p. gex {y \<in> ?Z. rproj ?m y = p} (Rep_cfun (frows F)))"
         by (simp add: fun_eq_iff gcontent_gtrue agg_fiber[OF k1])
-      have dH: "dom ?H = ?P" unfolding hd by (rule dom_gex_classes)
+      have HP: "p \<in> ?P" if "?H p \<noteq> FF" for p using that unfolding hd gex_def by (auto simp: kleene_bex_not_FF)
       have tl: "tl (gcontents data ?gs F k) = ?G"
         by (simp only: list.map(2) list.sel(3))
-      have tH: "the (?H (?\<pi> \<kappa>)) = ?t \<kappa>" if \<kappa>: "\<kappa> \<in> ?K" for \<kappa>
+      have tH: "?H (?\<pi> \<kappa>) = ?t \<kappa>" if \<kappa>: "\<kappa> \<in> ?K" for \<kappa>
       proof -
         obtain y0 where y0: "y0 \<in> ?Z" "\<kappa> = rproj (?m \<squnion> flod F) y0" using \<kappa> by blast
         have \<kappa>\<kappa>: "proj (?m \<squnion> flod F)\<cdot>\<kappa> = \<kappa>" by (simp only: y0(2) proj_idem)
@@ -528,8 +526,7 @@ proof -
         have fb: "fiber data ?m \<top> F \<kappa> = {y \<in> ?Z. rproj ?m y = ?\<pi> \<kappa>}"
           unfolding fiber_top[OF \<kappa>\<kappa>] unfolding y0(2) release_key_parts(2) rproj_sup_eq Lk
           by (auto simp: afiber_def)
-        have ne: "{y \<in> ?Z. rproj ?m y = ?\<pi> \<kappa>} \<noteq> {}" using y0 by (auto simp: release_key_parts(2))
-        show ?thesis unfolding populated_def fguard_top fb hd gex_Some[OF ne] by simp
+        show ?thesis unfolding populated_def fguard_top fb hd gex_def by simp
       qed
       have pt: "?\<Phi> (?\<pi> \<kappa>) = ?v \<kappa>" if \<kappa>: "\<kappa> \<in> ?K" for \<kappa>
       proof -
@@ -548,7 +545,7 @@ proof -
         have "proj (kd E F)\<cdot>\<kappa> = \<kappa>" by (simp only: y(2) proj_idem)
         then show ?thesis by (simp only: g c semilawful_csem_conf[OF ES d])
       qed
-      let ?I = "{\<kappa> \<in> ?K. ?t \<kappa> \<noteq> FF}" and ?J = "{p \<in> dom ?H. the (?H p) \<noteq> FF}"
+      let ?I = "{\<kappa> \<in> ?K. ?t \<kappa> \<noteq> FF}" and ?J = "gsupp ?H"
       have A: "bij_betw ?\<pi> ?I ?J"
       proof (rule bij_betw_subset[OF bij])
         show "?I \<subseteq> ?K" by blast
@@ -556,23 +553,22 @@ proof -
         proof (rule set_eqI, rule iffI)
           fix p assume "p \<in> ?\<pi> ` ?I"
           then obtain \<kappa> where \<kappa>: "\<kappa> \<in> ?K" "?t \<kappa> \<noteq> FF" "p = ?\<pi> \<kappa>" by blast
-          have "p \<in> dom ?H" unfolding dH \<kappa>(3) using bij_betw_imp_surj_on[OF bij] \<kappa>(1) by blast
-          then show "p \<in> ?J" using \<kappa> tH[OF \<kappa>(1)] by simp
+          then show "p \<in> ?J" using \<kappa> tH[OF \<kappa>(1)] by (simp add: gsupp_def)
         next
           fix p assume p: "p \<in> ?J"
-          then have "p \<in> ?\<pi> ` ?K" unfolding bij_betw_imp_surj_on[OF bij] dH[symmetric] by blast
+          then have "p \<in> ?\<pi> ` ?K" unfolding bij_betw_imp_surj_on[OF bij] using HP by (simp add: gsupp_def)
           then obtain \<kappa> where \<kappa>: "\<kappa> \<in> ?K" "p = ?\<pi> \<kappa>" by blast
-          then show "p \<in> ?\<pi> ` ?I" using p tH[OF \<kappa>(1)] by auto
+          then show "p \<in> ?\<pi> ` ?I" using p tH[OF \<kappa>(1)] by (auto simp: gsupp_def)
         qed
       qed
       have D: "inner_keys E data F k = ?I" by (simp only: inner_keys_def)
-      have "agg_fold f (\<lambda>\<kappa>. ?t \<kappa> \<odot> ?v \<kappa>) ?I = agg_fold f ((\<lambda>p. the (?H p) \<odot> ?\<Phi> p) \<circ> ?\<pi>) ?I"
+      have "agg_fold f (\<lambda>\<kappa>. ?t \<kappa> \<odot> ?v \<kappa>) ?I = agg_fold f ((\<lambda>p. ?H p \<odot> ?\<Phi> p) \<circ> ?\<pi>) ?I"
       proof (rule agg_fold_cong[OF f refl])
         fix \<kappa> assume "\<kappa> \<in> ?I"
         then have \<kappa>: "\<kappa> \<in> ?K" by blast
-        show "?t \<kappa> \<odot> ?v \<kappa> = ((\<lambda>p. the (?H p) \<odot> ?\<Phi> p) \<circ> ?\<pi>) \<kappa>" by (simp only: comp_apply tH[OF \<kappa>] pt[OF \<kappa>])
+        show "?t \<kappa> \<odot> ?v \<kappa> = ((\<lambda>p. ?H p \<odot> ?\<Phi> p) \<circ> ?\<pi>) \<kappa>" by (simp only: comp_apply tH[OF \<kappa>] pt[OF \<kappa>])
       qed
-      also have "\<dots> = agg_fold f (\<lambda>p. the (?H p) \<odot> ?\<Phi> p) ?J" by (rule agg_fold_bij[OF f A])
+      also have "\<dots> = agg_fold f (\<lambda>p. ?H p \<odot> ?\<Phi> p) ?J" by (rule agg_fold_bij[OF f A])
       finally have "agg_fold f (\<lambda>\<kappa>. ?t \<kappa> \<odot> ?v \<kappa>) (inner_keys E data F k) = agg_csem f E (gcontents data ?gs F k) ?X"
         unfolding agg_csem_def tl D .
       then show ?thesis by (simp only: beta_cfun[OF cont_agg_csem[OF f]])

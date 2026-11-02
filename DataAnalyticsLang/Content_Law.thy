@@ -72,15 +72,15 @@ abbreviation mk_value ::
   "'k selector \<Rightarrow> 'r semi_factor \<Rightarrow> 'k semi_factor \<Rightarrow> ('k::{domain, distributive_cpo}, 'r::{domain, distributive_cpo} semi_factor) entry" where
   "mk_value S c \<kappa> \<equiv> \<lparr>esel = S, ekeys = \<kappa>, epay = c\<rparr>"
 
-text \<open>An expression's content semantics takes the guards' contents, truth values at the keys where
-  they are defined, as a plain argument, and is continuous in the value entries' contents.\<close>
+text \<open>An expression's content semantics takes the guards' contents, truth values at the keys,
+  as a plain argument, and is continuous in the value entries' contents.\<close>
 
 record ('k::"domain", 'f::type, 'r::"{bifinite, distributive_cpo}", 'v::bifinite) expr =
   emind :: "'k semi_factor"
   eguards :: "('k, 'r guard \<times> 'k guard) entry list"
   evalues :: "('k, 'r semi_factor) entry list"
   esem :: "'r lower_pd \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'v option_pd"
-  csem :: "('k \<Rightarrow> tr option) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<rightarrow> 'v option_pd"
+  csem :: "('k \<Rightarrow> tr) list \<Rightarrow> ('k \<Rightarrow> 'r option) list \<rightarrow> 'v option_pd"
 
 hide_const (open) expr.truncate
 
@@ -172,35 +172,33 @@ proof
   qed
 qed
 
-text \<open>A guard's content at a key part: none when no row has it, else the Kleene existential over
-  the rows having it.  A content is \<^emph>\<open>false\<close> when it is false wherever it is defined: no row passes.\<close>
+text \<open>A guard's content at a key part: the Kleene existential over the rows having it, false where
+  no row has it.  Its \<^emph>\<open>support\<close> is where it is not false; it is \<^emph>\<open>false\<close> when it is false
+  everywhere: no row passes.\<close>
 
-definition gex :: "'a set \<Rightarrow> ('a \<Rightarrow> tr) \<Rightarrow> tr option" where
-  "gex S P = (if S = {} then None else Some (\<exists>\<^sub>K y\<in>S. P y))"
+definition gex :: "'a set \<Rightarrow> ('a \<Rightarrow> tr) \<Rightarrow> tr" where
+  "gex S P = (\<exists>\<^sub>K y\<in>S. P y)"
 
-definition gfalse :: "('k \<Rightarrow> tr option) \<Rightarrow> bool" where
-  "gfalse G \<longleftrightarrow> (\<forall>q t. G q = Some t \<longrightarrow> t = FF)"
+definition gsupp :: "('k \<Rightarrow> tr) \<Rightarrow> 'k set" where
+  "gsupp G = {q. G q \<noteq> FF}"
 
-text \<open>Guard contents are \<^emph>\<open>finite\<close> when each is defined at finitely many keys.  An aggregate
-  folds over the keys of its fold guard, and of infinitely many members it knows only presence.\<close>
+definition gfalse :: "('k \<Rightarrow> tr) \<Rightarrow> bool" where
+  "gfalse G \<longleftrightarrow> (\<forall>q. G q = FF)"
 
-definition gfinite :: "('k \<Rightarrow> tr option) list \<Rightarrow> bool" where
-  "gfinite Gs \<longleftrightarrow> (\<forall>G\<in>set Gs. finite (dom G))"
+text \<open>Guard contents are \<^emph>\<open>finite\<close> when each has a finite support.  An aggregate folds over the
+  support of its fold guard, and of infinitely many members it knows only presence.\<close>
+
+definition gfinite :: "('k \<Rightarrow> tr) list \<Rightarrow> bool" where
+  "gfinite Gs \<longleftrightarrow> (\<forall>G\<in>set Gs. finite (gsupp G))"
 
 lemma gfinite_simps [simp]:
-  "gfinite []" "gfinite (G # Gs) \<longleftrightarrow> finite (dom G) \<and> gfinite Gs" "gfinite (Gs @ Hs) \<longleftrightarrow> gfinite Gs \<and> gfinite Hs"
+  "gfinite []" "gfinite (G # Gs) \<longleftrightarrow> finite (gsupp G) \<and> gfinite Gs" "gfinite (Gs @ Hs) \<longleftrightarrow> gfinite Gs \<and> gfinite Hs"
   by (auto simp: gfinite_def)
 
 lemma gfinite_take: "gfinite Gs \<Longrightarrow> gfinite (take n Gs)" and gfinite_drop: "gfinite Gs \<Longrightarrow> gfinite (drop n Gs)"
   by (auto simp: gfinite_def dest: in_set_takeD in_set_dropD)
 
-lemma gex_None_iff [simp]: "gex S P = None \<longleftrightarrow> S = {}"
-  by (simp add: gex_def)
-
-lemma gex_Some: "S \<noteq> {} \<Longrightarrow> gex S P = Some (\<exists>\<^sub>K y\<in>S. P y)"
-  by (simp add: gex_def)
-
-lemma gex_empty [simp]: "gex {} P = None"
+lemma gex_empty [simp]: "gex {} P = FF"
   by (simp add: gex_def)
 
 lemma gex_cong: "S = T \<Longrightarrow> (\<And>x. x \<in> T \<Longrightarrow> P x = Q x) \<Longrightarrow> gex S P = gex T Q"
@@ -217,26 +215,8 @@ qed
 text \<open>Reading a content off the content of a refinement of its key parts: over the classes of a
   partition, the existentials collapse.\<close>
 
-lemma dom_gex_classes: "dom (\<lambda>q0. gex {x \<in> S. g x = q0} P) = g ` S"
-  by (auto simp: dom_def)
-
-lemma gex_classes:
-  "gex {q0 \<in> dom (\<lambda>q0. gex {x \<in> S. g x = q0} P). C q0} (\<lambda>q0. the (gex {x \<in> S. g x = q0} P)) = gex {x \<in> S. C (g x)} P"
-proof -
-  let ?Q = "{q0 \<in> g ` S. C q0}"
-  have e: "?Q = {} \<longleftrightarrow> {x \<in> S. C (g x)} = {}" by auto
-  have "(\<exists>\<^sub>K q0\<in>?Q. the (gex {x \<in> S. g x = q0} P)) = (\<exists>\<^sub>K q0\<in>?Q. \<exists>\<^sub>K x\<in>{x \<in> S. g x = q0}. P x)"
-    by (rule kleene_bex_cong[OF refl]) (auto simp: gex_def)
-  also have "\<dots> = (\<exists>\<^sub>K x\<in>{x \<in> S. g x \<in> ?Q}. P x)" by (rule kleene_bex_classes)
-  also have "{x \<in> S. g x \<in> ?Q} = {x \<in> S. C (g x)}" by auto
-  finally have b: "(\<exists>\<^sub>K q0\<in>?Q. the (gex {x \<in> S. g x = q0} P)) = (\<exists>\<^sub>K x\<in>{x \<in> S. C (g x)}. P x)" .
-  show ?thesis unfolding dom_gex_classes gex_def[of ?Q] gex_def[of "{x \<in> S. C (g x)}"] e b ..
-qed
-
-text \<open>Multiplying a result by a content's truth, absent where the content is undefined.\<close>
-
-lemma gex_mult: "(case gex S P of None \<Rightarrow> Absent | Some t \<Rightarrow> t \<odot> x) = (\<exists>\<^sub>K y\<in>S. P y) \<odot> x"
-  by (simp add: gex_def)
+lemma gex_classes: "gex {q0. C q0} (\<lambda>q0. gex {x \<in> S. g x = q0} P) = gex {x \<in> S. C (g x)} P"
+  unfolding gex_def kleene_bex_classes by simp
 
 subsection \<open>Continuity on contents\<close>
 
@@ -457,10 +437,10 @@ definition gfiber :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard)
 definition gtruth :: "('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'r guard" where
   "gtruth e F = gand (gand (amb F) (eguard e)) (gand (sopen (coarsen (eupper e) (slice F))) (ekguard e) oo row_key)"
 
-definition gcontent :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> tr option" where
+definition gcontent :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> 'k \<Rightarrow> tr" where
   "gcontent data e F k q = gex {y \<in> gfiber data e F k. rproj (ekeys e) y = q} (Rep_cfun (gtruth e F))"
 
-abbreviation gcontents :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> tr option) list" where
+abbreviation gcontents :: "'r lower_pd \<Rightarrow> ('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<Rightarrow> ('k \<Rightarrow> tr) list" where
   "gcontents data gs F k \<equiv> map (\<lambda>e. gcontent data e F k) gs"
 
 text \<open>Passing an entry is passing the frame's filters at its upper part and its own guards.\<close>
@@ -487,11 +467,11 @@ lemma gcontent_gtrue: "gcontent data (mk_guard S gtrue gtrue \<kappa>) F k q =
 
 lemma gcontent_gtrue_bot:
   "gcontent data (mk_guard S gtrue gtrue \<bottom>) F k =
-    (\<lambda>q. if q = \<bottom> then gex (fiber data (lower_part S) (upper_part S) F k) (Rep_cfun (fguard (upper_part S) F)) else None)"
+    (\<lambda>q. if q = \<bottom> then gex (fiber data (lower_part S) (upper_part S) F k) (Rep_cfun (fguard (upper_part S) F)) else FF)"
   by (simp add: fun_eq_iff gcontent_gtrue proj_bot eq_commute[of \<bottom>])
 
-lemma dom_gcontent: "dom (gcontent data e F k) = (\<lambda>y. rproj (ekeys e) y) ` gfiber data e F k"
-  by (auto simp: dom_def gcontent_def)
+lemma gsupp_gcontent: "gsupp (gcontent data e F k) \<subseteq> (\<lambda>y. rproj (ekeys e) y) ` gfiber data e F k"
+  by (auto simp: gsupp_def gcontent_def gex_def kleene_bex_not_FF)
 
 text \<open>A value entry's fiber is its selector's; its content graph pairs each row's key at the key
   part with its section at the columns, and the content is that graph as a map.\<close>
@@ -517,14 +497,14 @@ abbreviation contents :: "'r lower_pd \<Rightarrow> ('k, 'r semi_factor) entry l
 text \<open>The \<^emph>\<open>point families\<close> at a row and a key: each entry's content as if its fiber were that
   one row with that key.  A fiber of one row gives the point content.\<close>
 
-definition gpoint :: "('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> tr option) list" where
-  "gpoint gs p = map (\<lambda>e. [proj (ekeys e)\<cdot>(snd p) \<mapsto> TT]) gs"
+definition gpoint :: "('k, 'r guard \<times> 'k guard) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> tr) list" where
+  "gpoint gs p = map (\<lambda>e q. if q = proj (ekeys e)\<cdot>(snd p) then TT else FF) gs"
 
 definition point :: "('k, 'r semi_factor) entry list \<Rightarrow> 'r \<times> 'k \<Rightarrow> ('k \<Rightarrow> 'r option) list" where
   "point es p = map (\<lambda>e. [proj (ekeys e)\<cdot>(snd p) \<mapsto> fst p \<downharpoonright> ecols e]) es"
 
 lemma gpoint_simps [simp]:
-  "gpoint [] p = []" "gpoint (e # gs) p = [proj (ekeys e)\<cdot>(snd p) \<mapsto> TT] # gpoint gs p"
+  "gpoint [] p = []" "gpoint (e # gs) p = (\<lambda>q. if q = proj (ekeys e)\<cdot>(snd p) then TT else FF) # gpoint gs p"
   "gpoint (gs @ gs') p = gpoint gs p @ gpoint gs' p" "length (gpoint gs p) = length gs"
   by (simp_all add: gpoint_def)
 
@@ -569,7 +549,7 @@ lemma row_guard_entry_image:
   assumes r: "row_guard_entry e" and d: "conforms data" and Y: "Y \<subseteq> lower_maximal data"
     and x: "x \<in> Y" and aG: "elower e \<sqsubseteq> G" and agree: "\<And>y. y \<in> Y \<Longrightarrow> rproj G y = rproj G x"
   shows "gex {y \<in> Y. rproj (ekeys e) y = q} (\<lambda>y. pand\<cdot>(\<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>y)\<cdot>(ekguard e\<cdot>(row_key\<cdot>y)))) =
-    (if q = rproj (ekeys e) x then Some (pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(row_key\<cdot>x)))) else None)"
+    (if q = rproj (ekeys e) x then pand\<cdot>(\<exists>\<^sub>K y\<in>Y. \<phi> y)\<cdot>(pand\<cdot>(eguard e\<cdot>x)\<cdot>(ekguard e\<cdot>(row_key\<cdot>x))) else FF)"
 proof -
   have sG: "ekeys e \<sqsubseteq> G" and gk: "guard_keyed (elower e) (eguard e)" and kk: "kguard_keyed (elower e) (ekguard e)"
     using r aG unfolding row_guard_entry_def by (blast intro: below_trans)+
