@@ -161,28 +161,35 @@ next
   qed
 qed
 
-lemma split_approx_mono: "n \<le> m \<Longrightarrow> split_approx n\<cdot>z \<sqsubseteq> split_approx m\<cdot>z"
-  by (rule monofun_cfun_fun [OF chain_mono [OF split_approx.chain_approx]])
+lemma approx_chain_mono: "approx_chain a \<Longrightarrow> n \<le> m \<Longrightarrow> a n\<cdot>z \<sqsubseteq> a m\<cdot>z"
+  by (rule monofun_cfun_fun [OF chain_mono [OF approx_chain.chain_approx]])
 
-lemma split_approx_lub: "(\<Squnion>n. split_approx n\<cdot>z) = z"
-  using contlub_cfun_fun [OF split_approx.chain_approx, of z] split_approx.lub_approx by simp
+lemma approx_chain_lub:
+  assumes A: "approx_chain a"
+  shows "(\<Squnion>n. a n\<cdot>z) = z"
+  using contlub_cfun_fun [OF approx_chain.chain_approx [OF A], of z] approx_chain.lub_approx [OF A] by simp
 
-lemma approx_eventually_above:
-  assumes a: "compact a" and az: "a \<sqsubseteq> z"
-  shows "\<exists>n. \<forall>m\<ge>n. a \<sqsubseteq> split_approx m\<cdot>z"
+lemma approx_chain_eventually_above:
+  assumes A: "approx_chain a" and c: "compact b" and bz: "b \<sqsubseteq> z"
+  shows "\<exists>n. \<forall>m\<ge>n. b \<sqsubseteq> a m\<cdot>z"
 proof -
-  have ch: "chain (\<lambda>n. split_approx n\<cdot>z)" by (rule ch2ch_Rep_cfunL [OF split_approx.chain_approx])
-  obtain n where "a \<sqsubseteq> split_approx n\<cdot>z" using az compact_below_lub_iff [OF a ch] by (auto simp: split_approx_lub)
-  then show ?thesis by (blast intro: below_trans split_approx_mono)
+  have ch: "chain (\<lambda>n. a n\<cdot>z)" by (rule ch2ch_Rep_cfunL [OF approx_chain.chain_approx [OF A]])
+  obtain n where "b \<sqsubseteq> a n\<cdot>z" using bz compact_below_lub_iff [OF c ch] by (auto simp: approx_chain_lub [OF A])
+  then show ?thesis by (blast intro: below_trans approx_chain_mono [OF A])
 qed
 
-lemma approx_eventually_eq:
-  assumes "compact z"
-  shows "\<exists>n. \<forall>m\<ge>n. split_approx m\<cdot>z = z"
+lemma approx_chain_eventually_eq:
+  assumes A: "approx_chain a" and c: "compact z"
+  shows "\<exists>n. \<forall>m\<ge>n. a m\<cdot>z = z"
 proof -
-  obtain n where "z \<sqsubseteq> split_approx m\<cdot>z" if "m \<ge> n" for m using approx_eventually_above [OF assms below_refl] by blast
-  then show ?thesis by (blast intro: below_antisym split_approx.approx_below)
+  obtain n where "z \<sqsubseteq> a m\<cdot>z" if "m \<ge> n" for m using approx_chain_eventually_above [OF A c below_refl] by blast
+  then show ?thesis by (blast intro: below_antisym approx_chain.approx_below [OF A])
 qed
+
+lemmas split_approx_mono = approx_chain_mono [OF approx_chain_split_approx]
+  and split_approx_lub = approx_chain_lub [OF approx_chain_split_approx]
+  and approx_eventually_above = approx_chain_eventually_above [OF approx_chain_split_approx]
+  and approx_eventually_eq = approx_chain_eventually_eq [OF approx_chain_split_approx]
 
 
 context split_dataspace
@@ -231,74 +238,83 @@ text \<open>The key mix of a basis element at a key LOD has as definite part the
 definition kmkey :: "'k semi_factor \<Rightarrow> 'k compact_basis \<Rightarrow> 'k compact_basis" where
   "kmkey K u = Abs_compact_basis (proj K\<cdot>(Rep_compact_basis u))"
 
-definition kmapp :: "'k semi_factor \<Rightarrow> nat \<Rightarrow> 'r compact_basis \<Rightarrow> 'k compact_basis" where
-  "kmapp K n x = Abs_compact_basis (split_approx n\<cdot>(rproj K (Rep_compact_basis x)))"
+text \<open>The stages are formed along an approximation chain of the keys; the limit does not
+  depend on the chain.\<close>
+
+definition kmapp_with :: "(nat \<Rightarrow> 'k \<rightarrow> 'k) \<Rightarrow> 'k semi_factor \<Rightarrow> nat \<Rightarrow> 'r compact_basis \<Rightarrow> 'k compact_basis" where
+  "kmapp_with a K n x = Abs_compact_basis (a n\<cdot>(rproj K (Rep_compact_basis x)))"
 
 lemma Rep_kmkey [simp]: "Rep_compact_basis (kmkey K u) = proj K\<cdot>(Rep_compact_basis u)"
   unfolding kmkey_def by (simp add: compact_proj_compact)
 
-lemma Rep_kmapp [simp]: "Rep_compact_basis (kmapp K n x) = split_approx n\<cdot>(rproj K (Rep_compact_basis x))"
-  unfolding kmapp_def by simp
+lemma Rep_kmapp_with: "approx_chain a \<Longrightarrow> Rep_compact_basis (kmapp_with a K n x) = a n\<cdot>(rproj K (Rep_compact_basis x))"
+  unfolding kmapp_with_def by (simp add: approx_chain.compact_approx)
 
-definition kconf :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> bool" where
-  "kconf K t n \<longleftrightarrow> (\<forall>x\<in>srows t. \<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> split_approx n\<cdot>(rproj K (Rep_compact_basis x)))"
+definition kconf_with :: "(nat \<Rightarrow> 'k \<rightarrow> 'k) \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> bool" where
+  "kconf_with a K t n \<longleftrightarrow> (\<forall>x\<in>srows t. \<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> a n\<cdot>(rproj K (Rep_compact_basis x)))"
 
-lemma kconf_mono: "kconf K t n \<Longrightarrow> n \<le> m \<Longrightarrow> kconf K t m"
-  unfolding kconf_def by (meson below_trans split_approx_mono)
+lemma kconf_with_mono: "approx_chain a \<Longrightarrow> kconf_with a K t n \<Longrightarrow> n \<le> m \<Longrightarrow> kconf_with a K t m"
+  unfolding kconf_with_def by (meson below_trans approx_chain_mono)
 
-lemma kconf_eventually: "\<exists>N. \<forall>m\<ge>N. kconf K t m"
+lemma kconf_with_eventually:
+  assumes A: "approx_chain a"
+  shows "\<exists>N. \<forall>m\<ge>N. kconf_with a K t m"
 proof -
-  have "\<exists>N. \<forall>x\<in>srows t. \<forall>m\<ge>N. \<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> split_approx m\<cdot>(rproj K (Rep_compact_basis x))"
+  have "\<exists>N. \<forall>x\<in>srows t. \<forall>m\<ge>N. \<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> a m\<cdot>(rproj K (Rep_compact_basis x))"
   proof (rule finite_eventually [OF finite_srows])
     fix x assume x: "x \<in> srows t"
     obtain u where u: "u \<in> skeys t" and ux: "Rep_compact_basis u \<sqsubseteq> row_key\<cdot>(Rep_compact_basis x)"
       using split_basis_consistentD [OF x] by blast
     have "proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> rproj K (Rep_compact_basis x)" by (rule monofun_cfun_arg [OF ux])
-    then obtain n where "\<forall>m\<ge>n. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> split_approx m\<cdot>(rproj K (Rep_compact_basis x))"
-      using approx_eventually_above [OF compact_proj_compact [OF Rep_compact_basis']] by blast
-    then show "\<exists>n. \<forall>m\<ge>n. \<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> split_approx m\<cdot>(rproj K (Rep_compact_basis x))"
+    then obtain n where "\<forall>m\<ge>n. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> a m\<cdot>(rproj K (Rep_compact_basis x))"
+      using approx_chain_eventually_above [OF A compact_proj_compact [OF Rep_compact_basis']] by blast
+    then show "\<exists>n. \<forall>m\<ge>n. \<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> a m\<cdot>(rproj K (Rep_compact_basis x))"
       using u by blast
   qed
-  then show ?thesis unfolding kconf_def by blast
+  then show ?thesis unfolding kconf_with_def by blast
 qed
 
-lemma skm_consistent:
-  assumes kc: "kconf K t n"
-  shows "upper_le0 (Abs_pde_basis (kmkey K ` skeys t)) (Abs_pde_basis (kmapp K n ` srows t))"
+lemma skm_with_consistent:
+  assumes A: "approx_chain a" and kc: "kconf_with a K t n"
+  shows "upper_le0 (Abs_pde_basis (kmkey K ` skeys t)) (Abs_pde_basis (kmapp_with a K n ` srows t))"
   unfolding upper_le0_def Abs_pde_basis_inverse' [OF finite_imageI [OF finite_srows]] Abs_pde_basis_inverse' [OF finite_imageI [OF finite_skeys]]
 proof (intro ballI)
-  fix z assume "z \<in> kmapp K n ` srows t"
-  then obtain x where x: "x \<in> srows t" and z: "z = kmapp K n x" by blast
-  obtain u where u: "u \<in> skeys t" and ux: "proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> split_approx n\<cdot>(rproj K (Rep_compact_basis x))"
-    using kc x unfolding kconf_def by blast
-  have "kmkey K u \<sqsubseteq> z" unfolding z cb_below_iff Rep_kmkey Rep_kmapp by (rule ux)
+  fix z assume "z \<in> kmapp_with a K n ` srows t"
+  then obtain x where x: "x \<in> srows t" and z: "z = kmapp_with a K n x" by blast
+  obtain u where u: "u \<in> skeys t" and ux: "proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> a n\<cdot>(rproj K (Rep_compact_basis x))"
+    using kc x unfolding kconf_with_def by blast
+  have "kmkey K u \<sqsubseteq> z" unfolding z cb_below_iff Rep_kmkey Rep_kmapp_with [OF A] by (rule ux)
   then show "\<exists>w\<in>kmkey K ` skeys t. w \<sqsubseteq> z" using u by blast
 qed
 
-definition SKM :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> 'k mix_basis" where
-  "SKM K t n = MixB (Abs_pde_basis (kmapp K n ` srows t)) (Abs_pde_basis (kmkey K ` skeys t))"
+definition SKM_with :: "(nat \<Rightarrow> 'k \<rightarrow> 'k) \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> 'k mix_basis" where
+  "SKM_with a K t n = MixB (Abs_pde_basis (kmapp_with a K n ` srows t)) (Abs_pde_basis (kmkey K ` skeys t))"
 
-lemma mdef_SKM: "kconf K t n \<Longrightarrow> Rep_pde_basis (mdef (SKM K t n)) = kmapp K n ` srows t"
-  and mposs_SKM: "kconf K t n \<Longrightarrow> Rep_pde_basis (mposs (SKM K t n)) = kmkey K ` skeys t"
-  unfolding SKM_def by (simp_all add: skm_consistent)
+lemma mdef_SKM_with: "approx_chain a \<Longrightarrow> kconf_with a K t n \<Longrightarrow> Rep_pde_basis (mdef (SKM_with a K t n)) = kmapp_with a K n ` srows t"
+  and mposs_SKM_with: "approx_chain a \<Longrightarrow> kconf_with a K t n \<Longrightarrow> Rep_pde_basis (mposs (SKM_with a K t n)) = kmkey K ` skeys t"
+  unfolding SKM_with_def by (simp_all add: skm_with_consistent)
 
-definition kstage :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> 'k mix_pd" where
-  "kstage K t n = (if kconf K t n then mix_principal (SKM K t n) else \<bottom>)"
+definition kstage_with :: "(nat \<Rightarrow> 'k \<rightarrow> 'k) \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> 'k mix_pd" where
+  "kstage_with a K t n = (if kconf_with a K t n then mix_principal (SKM_with a K t n) else \<bottom>)"
 
-lemma kstage_mono:
-  assumes st: "split_le s t" and nm: "n \<le> m" and c: "kconf K t m"
-  shows "kstage K s n \<sqsubseteq> kstage K t m"
-proof (cases "kconf K s n")
+text \<open>A stage below a later stage of another chain, for a dataset above.\<close>
+
+lemma kstage_with_le:
+  assumes A: "approx_chain a" and B: "approx_chain b" and st: "split_le s t" and c: "kconf_with b K t m"
+    and ab: "\<And>x y. x \<in> srows s \<Longrightarrow> y \<in> srows t \<Longrightarrow> x \<sqsubseteq> y \<Longrightarrow> a n\<cdot>(rproj K (Rep_compact_basis x)) \<sqsubseteq> b m\<cdot>(rproj K (Rep_compact_basis y))"
+  shows "kstage_with a K s n \<sqsubseteq> kstage_with b K t m"
+proof (cases "kconf_with a K s n")
   case True
-  have "mix_le (SKM K s n) (SKM K t m)"
-    unfolding mix_le_def lower_le0_def upper_le0_def mdef_SKM [OF True] mposs_SKM [OF True] mdef_SKM [OF c] mposs_SKM [OF c]
+  have "mix_le (SKM_with a K s n) (SKM_with b K t m)"
+    unfolding mix_le_def lower_le0_def upper_le0_def mdef_SKM_with [OF A True] mposs_SKM_with [OF A True]
+      mdef_SKM_with [OF B c] mposs_SKM_with [OF B c]
   proof (intro conjI ballI)
-    fix z assume "z \<in> kmapp K n ` srows s"
-    then obtain x where x: "x \<in> srows s" and z: "z = kmapp K n x" by blast
+    fix z assume "z \<in> kmapp_with a K n ` srows s"
+    then obtain x where x: "x \<in> srows s" and z: "z = kmapp_with a K n x" by blast
     obtain y where y: "y \<in> srows t" and xy: "x \<sqsubseteq> y" using st x unfolding split_le_def hoare_le_def by blast
-    have "split_approx n\<cdot>(rproj K (Rep_compact_basis x)) \<sqsubseteq> split_approx m\<cdot>(rproj K (Rep_compact_basis y))"
-      by (rule below_trans [OF split_approx_mono [OF nm]]) (intro monofun_cfun_arg xy [unfolded cb_below_iff])
-    then show "\<exists>w\<in>kmapp K m ` srows t. z \<sqsubseteq> w" using y unfolding z cb_below_iff by auto
+    have "kmapp_with a K n x \<sqsubseteq> kmapp_with b K m y"
+      unfolding cb_below_iff Rep_kmapp_with [OF A] Rep_kmapp_with [OF B] by (rule ab [OF x y xy])
+    then show "\<exists>w\<in>kmapp_with b K m ` srows t. z \<sqsubseteq> w" using y unfolding z by blast
   next
     fix w assume "w \<in> kmkey K ` skeys t"
     then obtain v where v: "v \<in> skeys t" and w: "w = kmkey K v" by blast
@@ -306,28 +322,91 @@ proof (cases "kconf K s n")
     have "kmkey K u \<sqsubseteq> kmkey K v" unfolding cb_below_iff Rep_kmkey by (intro monofun_cfun_arg uv [unfolded cb_below_iff])
     then show "\<exists>z\<in>kmkey K ` skeys s. z \<sqsubseteq> w" using u unfolding w by blast
   qed
-  then show ?thesis using True c unfolding kstage_def by (simp add: mix_pd.principal_mono)
-qed (simp add: kstage_def)
+  then show ?thesis using True c unfolding kstage_with_def by (simp add: mix_pd.principal_mono)
+qed (simp add: kstage_with_def)
 
-lemma chain_kstage: "chain (kstage K t)"
+lemma kstage_with_mono:
+  assumes A: "approx_chain a" and st: "split_le s t" and nm: "n \<le> m" and c: "kconf_with a K t m"
+  shows "kstage_with a K s n \<sqsubseteq> kstage_with a K t m"
+  by (rule kstage_with_le [OF A A st c], rule below_trans [OF approx_chain_mono [OF A nm]])
+    (intro monofun_cfun_arg, simp only: cb_below_iff)
+
+lemma chain_kstage_with:
+  assumes A: "approx_chain a"
+  shows "chain (kstage_with a K t)"
 proof (rule chainI)
   fix n
-  show "kstage K t n \<sqsubseteq> kstage K t (Suc n)"
-  proof (cases "kconf K t (Suc n)")
+  show "kstage_with a K t n \<sqsubseteq> kstage_with a K t (Suc n)"
+  proof (cases "kconf_with a K t (Suc n)")
     case True
-    then show ?thesis by (rule kstage_mono [OF split_le_refl le_SucI [OF order_refl]])
+    then show ?thesis by (rule kstage_with_mono [OF A split_le_refl le_SucI [OF order_refl]])
   next
     case False
-    then have "\<not> kconf K t n" using kconf_mono [of K t n "Suc n"] by auto
-    then show ?thesis by (simp add: kstage_def)
+    then have "\<not> kconf_with a K t n" using kconf_with_mono [OF A, of K t n "Suc n"] by auto
+    then show ?thesis by (simp add: kstage_with_def)
   qed
 qed
 
-definition KM :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> 'k mix_pd" where
-  "KM K t = (\<Squnion>n. kstage K t n)"
+definition KM_with :: "(nat \<Rightarrow> 'k \<rightarrow> 'k) \<Rightarrow> 'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> 'k mix_pd" where
+  "KM_with a K t = (\<Squnion>n. kstage_with a K t n)"
+
+lemma KM_with_le:
+  assumes A: "approx_chain a" and B: "approx_chain b"
+  shows "KM_with a K t \<sqsubseteq> KM_with b K t"
+  unfolding KM_with_def
+proof (rule lub_below [OF chain_kstage_with [OF A]])
+  fix n
+  have "\<exists>N. \<forall>x\<in>srows t. \<forall>m\<ge>N. a n\<cdot>(rproj K (Rep_compact_basis x)) \<sqsubseteq> b m\<cdot>(rproj K (Rep_compact_basis x))"
+  proof (rule finite_eventually [OF finite_srows])
+    fix x
+    show "\<exists>N. \<forall>m\<ge>N. a n\<cdot>(rproj K (Rep_compact_basis x)) \<sqsubseteq> b m\<cdot>(rproj K (Rep_compact_basis x))"
+      by (rule approx_chain_eventually_above [OF B approx_chain.compact_approx [OF A] approx_chain.approx_below [OF A]])
+  qed
+  then obtain N1 where N1: "\<forall>x\<in>srows t. \<forall>m\<ge>N1. a n\<cdot>(rproj K (Rep_compact_basis x)) \<sqsubseteq> b m\<cdot>(rproj K (Rep_compact_basis x))" ..
+  obtain N2 where N2: "\<forall>m\<ge>N2. kconf_with b K t m" using kconf_with_eventually [OF B] by blast
+  let ?m = "max N1 N2"
+  have "kstage_with a K t n \<sqsubseteq> kstage_with b K t ?m"
+  proof (rule kstage_with_le [OF A B split_le_refl])
+    show "kconf_with b K t ?m" using N2 by simp
+    fix x y assume x: "x \<in> srows t" and "y \<in> srows t" and xy: "x \<sqsubseteq> y"
+    have "a n\<cdot>(rproj K (Rep_compact_basis x)) \<sqsubseteq> b ?m\<cdot>(rproj K (Rep_compact_basis x))" using N1 x by simp
+    also have "\<dots> \<sqsubseteq> b ?m\<cdot>(rproj K (Rep_compact_basis y))" by (intro monofun_cfun_arg) (simp only: xy [unfolded cb_below_iff])
+    finally show "a n\<cdot>(rproj K (Rep_compact_basis x)) \<sqsubseteq> b ?m\<cdot>(rproj K (Rep_compact_basis y))" .
+  qed
+  then show "kstage_with a K t n \<sqsubseteq> (\<Squnion>m. kstage_with b K t m)"
+    by (rule below_trans [OF _ is_ub_thelub [OF chain_kstage_with [OF B]]])
+qed
+
+theorem KM_with_indep: "approx_chain a \<Longrightarrow> approx_chain b \<Longrightarrow> KM_with a K t = KM_with b K t"
+  by (rule below_antisym) (simp_all add: KM_with_le)
+
+text \<open>The key mix of a basis element is its limit along the chosen approximation chain.\<close>
+
+abbreviation kmapp :: "'k semi_factor \<Rightarrow> nat \<Rightarrow> 'r compact_basis \<Rightarrow> 'k compact_basis" where
+  "kmapp \<equiv> kmapp_with split_approx"
+
+abbreviation kconf :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> bool" where
+  "kconf \<equiv> kconf_with split_approx"
+
+abbreviation SKM :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> 'k mix_basis" where
+  "SKM \<equiv> SKM_with split_approx"
+
+abbreviation kstage :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> nat \<Rightarrow> 'k mix_pd" where
+  "kstage \<equiv> kstage_with split_approx"
+
+abbreviation KM :: "'k semi_factor \<Rightarrow> ('r, 'k) split_basis \<Rightarrow> 'k mix_pd" where
+  "KM \<equiv> KM_with split_approx"
+
+lemmas Rep_kmapp [simp] = Rep_kmapp_with [OF approx_chain_split_approx]
+  and kconf_mono = kconf_with_mono [OF approx_chain_split_approx]
+  and kconf_eventually = kconf_with_eventually [OF approx_chain_split_approx]
+  and mdef_SKM = mdef_SKM_with [OF approx_chain_split_approx]
+  and mposs_SKM = mposs_SKM_with [OF approx_chain_split_approx]
+  and kstage_mono = kstage_with_mono [OF approx_chain_split_approx]
+  and chain_kstage = chain_kstage_with [OF approx_chain_split_approx]
 
 lemma KM_mono: "split_le s t \<Longrightarrow> KM K s \<sqsubseteq> KM K t"
-  unfolding KM_def
+  unfolding KM_with_def
 proof (rule lub_below [OF chain_kstage])
   fix n assume st: "split_le s t"
   obtain N where N: "\<forall>m\<ge>N. kconf K t m" using kconf_eventually by blast
@@ -357,19 +436,19 @@ lemma KM_possible: "mix_possible \<kappa> (KM K t) \<longleftrightarrow> (\<exis
 proof -
   obtain N where N: "\<forall>m\<ge>N. kconf K t m" using kconf_eventually by blast
   have st: "mix_possible \<kappa> (kstage K t n) \<longleftrightarrow> (kconf K t n \<longrightarrow> (\<exists>u\<in>skeys t. proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> \<kappa>))" for n
-    by (cases "kconf K t n") (simp_all add: kstage_def mix_possible_principal mposs_SKM)
-  show ?thesis unfolding KM_def mix_possible_lub [OF chain_kstage] st using N by blast
+    by (cases "kconf K t n") (simp_all add: kstage_with_def mix_possible_principal mposs_SKM)
+  show ?thesis unfolding KM_with_def mix_possible_lub [OF chain_kstage] st using N by blast
 qed
 
-lemma KM_definite:
+lemma KM_with_definite:
   assumes c: "compact q"
   shows "mix_definite q (KM K t) \<longleftrightarrow> (\<exists>x\<in>srows t. q \<sqsubseteq> rproj K (Rep_compact_basis x))"
 proof
   assume "mix_definite q (KM K t)"
-  then obtain n where d: "mix_definite q (kstage K t n)" unfolding KM_def mix_definite_lub [OF chain_kstage c] by blast
-  then have kc: "kconf K t n" by (cases "kconf K t n") (simp_all add: kstage_def)
+  then obtain n where d: "mix_definite q (kstage K t n)" unfolding KM_with_def mix_definite_lub [OF chain_kstage c] by blast
+  then have kc: "kconf K t n" by (cases "kconf K t n") (simp_all add: kstage_with_def)
   then obtain x where x: "x \<in> srows t" and qx: "q \<sqsubseteq> split_approx n\<cdot>(rproj K (Rep_compact_basis x))"
-    using d unfolding kstage_def by (auto simp: mix_definite_principal mdef_SKM)
+    using d unfolding kstage_with_def by (auto simp: mix_definite_principal mdef_SKM)
   then show "\<exists>x\<in>srows t. q \<sqsubseteq> rproj K (Rep_compact_basis x)" by (blast intro: below_trans split_approx.approx_below)
 next
   assume "\<exists>x\<in>srows t. q \<sqsubseteq> rproj K (Rep_compact_basis x)"
@@ -380,8 +459,8 @@ next
   have km: "kconf K t ?m" using N by simp
   have "q \<sqsubseteq> split_approx ?m\<cdot>(rproj K (Rep_compact_basis x))" using n by simp
   then have "mix_definite q (kstage K t ?m)"
-    using km x unfolding kstage_def by (auto simp: mix_definite_principal mdef_SKM)
-  then show "mix_definite q (KM K t)" unfolding KM_def by (rule mix_definite_mono [OF _ is_ub_thelub [OF chain_kstage]])
+    using km x unfolding kstage_with_def by (auto simp: mix_definite_principal mdef_SKM)
+  then show "mix_definite q (KM K t)" unfolding KM_with_def by (rule mix_definite_mono [OF _ is_ub_thelub [OF chain_kstage]])
 qed
 
 text \<open>Where the parts of the rows' keys are compact, the key mix of a basis element is compact.\<close>
@@ -403,17 +482,17 @@ proof -
   proof -
     have "split_approx m\<cdot>(rproj K (Rep_compact_basis x)) = split_approx ?N\<cdot>(rproj K (Rep_compact_basis x))"
       using N1 m x by simp
-    then show ?thesis unfolding kmapp_def by (rule arg_cong)
+    then show ?thesis unfolding kmapp_with_def by (rule arg_cong)
   qed
   have eq: "kstage K t (m + ?N) = kstage K t ?N" for m
   proof -
     have c1: "kconf K t (m + ?N)" and c2: "kconf K t ?N" using N2 by simp_all
     have im: "kmapp K (m + ?N) ` srows t = kmapp K ?N ` srows t" by (rule image_cong [OF refl ka]) simp_all
-    show ?thesis unfolding kstage_def if_P [OF c1] if_P [OF c2] SKM_def im ..
+    show ?thesis unfolding kstage_with_def if_P [OF c1] if_P [OF c2] SKM_with_def im ..
   qed
-  have "KM K t = (\<Squnion>m. kstage K t (m + ?N))" unfolding KM_def by (rule lub_range_shift [OF chain_kstage, symmetric])
+  have "KM K t = (\<Squnion>m. kstage K t (m + ?N))" unfolding KM_with_def by (rule lub_range_shift [OF chain_kstage, symmetric])
   also have "\<dots> = kstage K t ?N" by (simp only: eq lub_const)
-  finally show ?thesis using N2 by (simp add: kstage_def mix_pd.compact_principal)
+  finally show ?thesis using N2 by (simp add: kstage_with_def mix_pd.compact_principal)
 qed
 
 text \<open>A key part is possible in the key mix where it is possible in the dataset; a compact one is
@@ -439,7 +518,7 @@ proof -
   have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
   obtain i where "mix_definite q (KM K (Z i))"
     using d unfolding CZ split_keymix_chain(2) [OF Z] mix_definite_lub [OF split_keymix_chain(1) [OF Z] c] by blast
-  then obtain x where x: "x \<in> srows (Z i)" and qx: "q \<sqsubseteq> rproj K (Rep_compact_basis x)" unfolding KM_definite [OF c] by blast
+  then obtain x where x: "x \<in> srows (Z i)" and qx: "q \<sqsubseteq> rproj K (Rep_compact_basis x)" unfolding KM_with_definite [OF c] by blast
   have "split_definite (Rep_compact_basis x) C"
     by (rule split_definite_mono [OF generator_definite [OF x]]) (simp only: CZ is_ub_thelub [OF ch])
   then show ?thesis using qx by blast
@@ -466,7 +545,7 @@ proof -
     using dy unfolding split_definite_def by (rule monofun_cfun_arg)
   moreover have "mix_definite q (split_keymix K\<cdot>(split_open_unit\<cdot>(r n\<cdot>y)))"
   proof -
-    have d: "mix_definite q (KM K (SOpen ?a))" unfolding KM_definite [OF c] using n ya by simp
+    have d: "mix_definite q (KM K (SOpen ?a))" unfolding KM_with_definite [OF c] using n ya by simp
     have e: "split_open_unit\<cdot>(r n\<cdot>y) = split_principal (SOpen ?a)"
       using split_open_unit_Rep_compact_basis [of ?a] unfolding ya .
     show ?thesis unfolding e split_keymix_principal by (rule d)
@@ -578,12 +657,12 @@ proof (induct C rule: split_pd.principal_induct)
   obtain N2 where N2: "\<forall>m\<ge>N2. kconf K t m" using kconf_eventually by blast
   let ?N = "max N1 N2" and ?s = "SSelect L q t"
   have cs: "kconf K ?s m" if ctm: "kconf K t m" for m
-    unfolding kconf_def
+    unfolding kconf_with_def
   proof (intro ballI)
     fix x assume "x \<in> srows ?s"
     then have x: "x \<in> srows t" and xq: "rproj L (Rep_compact_basis x) = q" by simp_all
     obtain u where u: "u \<in> skeys t" and ux: "proj K\<cdot>(Rep_compact_basis u) \<sqsubseteq> split_approx m\<cdot>(rproj K (Rep_compact_basis x))"
-      using ctm x unfolding kconf_def by blast
+      using ctm x unfolding kconf_with_def by blast
     have "proj L\<cdot>(Rep_compact_basis u) \<sqsubseteq> q"
     proof -
       have "proj L\<cdot>(proj K\<cdot>(Rep_compact_basis u)) \<sqsubseteq> proj L\<cdot>(rproj K (Rep_compact_basis x))"
@@ -621,14 +700,14 @@ proof (induct C rule: split_pd.principal_induct)
         unfolding Rep_pde_basis_inject [symmetric] mposs_MSelect mposs_SKM [OF ct] mposs_SKM [OF cs [OF ct]]
         by (auto simp: pk)
     qed
-    then show ?thesis using ct cs [OF ct] unfolding kstage_def by simp
+    then show ?thesis using ct cs [OF ct] unfolding kstage_with_def by simp
   qed
   have "mix_select L q\<cdot>(KM K t) = (\<Squnion>m. mix_select L q\<cdot>(kstage K t m))"
-    unfolding KM_def by (rule contlub_cfun_arg [OF chain_kstage])
+    unfolding KM_with_def by (rule contlub_cfun_arg [OF chain_kstage])
   also have "\<dots> = (\<Squnion>m. mix_select L q\<cdot>(kstage K t (m + ?N)))"
     by (rule lub_range_shift [OF ch2ch_Rep_cfunR [OF chain_kstage], symmetric])
   also have "\<dots> = (\<Squnion>m. kstage K ?s (m + ?N))" by (simp only: st le_add2)
-  also have "\<dots> = KM K ?s" unfolding KM_def by (rule lub_range_shift [OF chain_kstage])
+  also have "\<dots> = KM K ?s" unfolding KM_with_def by (rule lub_range_shift [OF chain_kstage])
   finally show "split_keymix K\<cdot>(split_select L q\<cdot>(split_principal t)) = mix_select L q\<cdot>(split_keymix K\<cdot>(split_principal t))"
     by simp
 qed simp
