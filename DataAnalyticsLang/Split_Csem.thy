@@ -957,7 +957,7 @@ proof -
     fix e assume e: "e \<in> set (eguards X)"
     have LK: "sel_at (esel e) (flod F) \<sqsubseteq> gkeys e F" by (rule lattice_join_ge2)
     show "mix_select (sel_at (esel e) (flod F)) (proj (sel_at (esel e) (flod F))\<cdot>\<kappa>)\<cdot>(gmix_ext D (release e) F k) = gmix_ext D e F \<kappa>"
-      unfolding gmix_ext_def gkeys_release keymix_select [OF LK, symmetric]
+      unfolding gmix_ext_def gkeys_release keymix_select [OF LK cS, symmetric]
       by (simp only: inner_gcontent [OF kk cS agg_upper_compact [OF k esels_guardI [OF e]], symmetric])
   qed
   show "agg_inner_v X \<kappa> (vcontents_ext D (map release (evalues X)) F k) = vcontents_ext D (evalues X) F \<kappa>"
@@ -1054,7 +1054,7 @@ proof -
     fix \<kappa> assume p: "\<kappa> \<in> ?PosG"
     then have r: "proj (flod F)\<cdot>\<kappa> = k \<and> \<kappa> \<in> Rep_cfun (proj ?K) ` conforming_keyspace"
       and mp: "mix_possible \<kappa> (split_keymix ?K\<cdot>?gc)" unfolding magg_possible_def GK by simp_all
-    have "split_possible_at ?K \<kappa> ?gc" using mp unfolding keymix_possible [OF keyG [OF UnI2 [OF p]]] .
+    have "split_possible_at ?K \<kappa> ?gc" using mp unfolding keymix_possible .
     then show "\<kappa> \<in> ?PosD" unfolding agg_possible_def using r gcontent_possible by blast
   qed
   have val: "populated_ext D (emind X) \<top> F \<kappa> \<odot> sem_ext X D F \<kappa> = cagg_value X c ?Gs ?Xs F \<kappa>"
@@ -1280,8 +1280,27 @@ lemma cont_vcontent_ext [simp, cont2cont]: "cont (\<lambda>D. vcontent_ext D e F
 lemma compact_gcontent_ext: "compact D \<Longrightarrow> compact (gcontent_ext D e F k)"
   by (auto dest!: split_pd.compact_imp_principal simp: gcontent_ext_def sel_select_def split_pd.compact_principal)
 
-lemma compact_gmix_ext: "compact D \<Longrightarrow> compact (gmix_ext D e F k)"
-  unfolding gmix_ext_def by (rule compact_split_keymix [OF compact_gcontent_ext])
+text \<open>A guard content of a compact dataset is compact where the guard's own keys are small: the
+  rows' parts at the selected LOD are the compact selected part.\<close>
+
+lemma compact_gmix_ext:
+  assumes cD: "compact D" and s: "lod_small (ekeys e)" and c: "compact (proj (sel_at (esel e) (flod F))\<cdot>k)"
+  shows "compact (gmix_ext D e F k)"
+proof -
+  obtain t where t: "D = split_principal t" using split_pd.compact_imp_principal [OF cD] by blast
+  let ?L = "sel_at (esel e) (flod F)"
+  let ?t = "SRowGuard (gand (amb F) (eguard e)) (SKeyGuard (gand (sopen (coarsen (eupper e) (slice F))) (ekguard e)) (SSelect ?L (proj ?L\<cdot>k) t))"
+  have g: "gcontent_ext D e F k = split_principal ?t" unfolding gcontent_ext_def sel_select_def t by simp
+  have "compact (rproj (gkeys e F) (Rep_compact_basis x))" if x: "x \<in> srows ?t" for x
+  proof -
+    have xk: "rproj ?L (Rep_compact_basis x) = proj ?L\<cdot>k" using x by simp
+    have cL: "compact (rproj ?L (Rep_compact_basis x))" by (simp only: xk c)
+    have "compact (rproj (ekeys e) (Rep_compact_basis x) \<squnion> rproj ?L (Rep_compact_basis x))"
+      by (rule compact_join [OF lod_small_proj [OF s] cL joinableI [OF proj_below proj_below]])
+    then show ?thesis by (simp only: proj_sup)
+  qed
+  then show ?thesis unfolding gmix_ext_def g split_keymix_principal by (intro compact_KM ballI)
+qed
 
 lemma compact_vcontent_ext: "compact D \<Longrightarrow> compact (vcontent_ext D e F k)"
   by (auto dest!: split_pd.compact_imp_principal simp: vcontent_ext_def sel_select_def split_pd.compact_principal)
@@ -1333,12 +1352,15 @@ text \<open>The aggregate factors through its contents.  The compact datasets be
 
 theorem ext_csem_aggregate:
   assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and c: "ext_csem X c" and cm: "csem_mono X c" and m: "lod_small (emind X)"
+    and gk: "\<forall>e\<in>set (eguards (aggregate_ext f X)). lod_small (ekeys e)"
   shows "ext_csem (aggregate_ext f X) (cagg f X c)"
 proof (rule ext_csemI)
   fix D F k
   assume D: "conf_bounded D" and k: "sel_compact (aggregate_ext f X) F k"
   obtain C where DC: "D \<sqsubseteq> C" and cC: "conforming_rows (split_rows\<cdot>C)" using D by blast
   let ?gs = "eguards (aggregate_ext f X)" and ?vs = "evalues (aggregate_ext f X)"
+  have cg: "compact (gmix_ext D' e F k)" if cD': "compact D'" and e: "e \<in> set ?gs" for D' e
+    using compact_gmix_ext [OF cD'] gk k esels_guardI [OF e] e by blast
   let ?A = "agg_approx f X D F k"
   let ?B = "{cagg_glb f X c Gs\<^sub>0 Xs\<^sub>0 F k | Gs\<^sub>0 Xs\<^sub>0. (\<forall>x\<in>set Gs\<^sub>0. compact x) \<and> (\<forall>x\<in>set Xs\<^sub>0. compact x) \<and>
      list_all2 (\<sqsubseteq>) Gs\<^sub>0 (gcontents_ext D ?gs F k) \<and> list_all2 (\<sqsubseteq>) Xs\<^sub>0 (vcontents_ext D ?vs F k)}"
@@ -1353,7 +1375,7 @@ proof (rule ext_csemI)
       by (rule map_cont_below [OF cont_gmix_ext le])
     have lV: "list_all2 (\<sqsubseteq>) (vcontents_ext D\<^sub>0 ?vs F k) (vcontents_ext D ?vs F k)"
       by (rule map_cont_below [OF cont_vcontent_ext le])
-    have cG0: "\<forall>y\<in>set (gcontents_ext D\<^sub>0 ?gs F k). compact y" using compact_gmix_ext [OF cD] by simp
+    have cG0: "\<forall>y\<in>set (gcontents_ext D\<^sub>0 ?gs F k). compact y" using cg [OF cD] by auto
     have cX0: "\<forall>y\<in>set (vcontents_ext D\<^sub>0 ?vs F k). compact y" using compact_vcontent_ext [OF cD] by simp
     show ?thesis
       by (intro CollectI exI [of _ "gcontents_ext D\<^sub>0 ?gs F k"] exI [of _ "vcontents_ext D\<^sub>0 ?vs F k"] conjI eq cG0 cX0 lG lV)
@@ -1386,7 +1408,7 @@ proof (rule ext_csemI)
         by (rule map_cont_below [OF cont_gmix_ext DC'])
       show "list_all2 (\<sqsubseteq>) (vcontents_ext ?D ?vs F k) (vcontents_ext C ?vs F k)"
         by (rule map_cont_below [OF cont_vcontent_ext DC'])
-      show "compact (hd (gcontents_ext ?D ?gs F k))" by (simp add: compact_gmix_ext [OF cD])
+      show "compact (hd (gcontents_ext ?D ?gs F k))" using cg [OF cD, of "mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X)"] by simp
     qed
     also have "\<dots> = agg_glb f X ?D F k" by (rule agg_glb_contents [OF f c m D0 cD k, symmetric])
     finally have xl: "x \<sqsubseteq> agg_glb f X ?D F k" .

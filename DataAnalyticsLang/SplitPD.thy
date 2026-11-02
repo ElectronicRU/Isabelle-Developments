@@ -1020,11 +1020,9 @@ subsection \<open>Views act on datasets\<close>
 
 text \<open>For keyed rows, a view acts on datasets: it
   sections the rows to the view's columns and the support of its key part, and projects the
-  possible keys to the key part.  This is a deflation.  The keys of compact rows are compact, as
-  for a key column of a product.\<close>
+  possible keys to the key part.  This is a deflation.\<close>
 
-locale split_keyed = keyed +
-  assumes row_key_compact: "compact (x :: 'r::{domain, lod_domain, schema}) \<Longrightarrow> compact (row_key\<cdot>x :: 'k::{domain, lod_domain})"
+locale split_keyed = keyed
 begin
 
 definition vrow :: "('r, 'k) view \<Rightarrow> 'r compact_basis \<Rightarrow> 'r compact_basis" where
