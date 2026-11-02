@@ -136,6 +136,242 @@ proof -
   qed
 qed
 
+
+subsection \<open>Exact expressions\<close>
+
+text \<open>A key guard \<^emph>\<open>reads\<close> an LOD when it depends on keys only through their parts there.  An
+  expression reads within \<open>K\<close> at a frame when its entries' selected parts and keys lie below
+  \<open>K\<close>, and its guards' key guards read \<open>K\<close>.\<close>
+
+definition kreads :: "'k semi_factor \<Rightarrow> ('k \<rightarrow> tr) \<Rightarrow> bool" where
+  "kreads K h \<longleftrightarrow> (\<forall>u. h\<cdot>(proj K\<cdot>u) = h\<cdot>u)"
+
+abbreviation gkguard :: "('k, 'r guard \<times> 'k guard) entry \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k \<rightarrow> tr" where
+  "gkguard e F \<equiv> gand (sopen (coarsen (eupper e) (slice F))) (ekguard e)"
+
+definition reads_within :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> 'k semi_factor \<Rightarrow> bool" where
+  "reads_within X F K \<longleftrightarrow> (\<forall>S\<in>set (esels X). sel_at S (flod F) \<sqsubseteq> K) \<and>
+     (\<forall>e\<in>set (eguards X). ekeys e \<sqsubseteq> K \<and> kreads K (gkguard e F)) \<and> (\<forall>e\<in>set (evalues X). ekeys e \<sqsubseteq> K)"
+
+text \<open>An extended expression is \<^emph>\<open>exact\<close> when, at a saturated compact dataset under a frame
+  without an ambient filter, reading within the saturating LOD, it is the rigid semantics of the
+  data the dataset is definite about.\<close>
+
+definition ext_exact :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
+  "ext_exact X \<longleftrightarrow> (\<forall>t data F k K. mix_saturated K (KM K t) \<longrightarrow> split_rows\<cdot>(split_principal t) = up\<cdot>data \<longrightarrow>
+     conforms data \<longrightarrow> fconf (evalues X) data F \<longrightarrow> amb F = gtrue \<longrightarrow> reads_within X F K \<longrightarrow> proj (kd X F)\<cdot>k = k \<longrightarrow>
+     sem_ext X (split_principal t) F k = esem X data F k)"
+
+lemma ext_exactI:
+  "(\<And>t data F k K. mix_saturated K (KM K t) \<Longrightarrow> split_rows\<cdot>(split_principal t) = up\<cdot>data \<Longrightarrow>
+     conforms data \<Longrightarrow> fconf (evalues X) data F \<Longrightarrow> amb F = gtrue \<Longrightarrow> reads_within X F K \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     sem_ext X (split_principal t) F k = esem X data F k) \<Longrightarrow> ext_exact X"
+  unfolding ext_exact_def by blast
+
+lemma ext_exactD:
+  "ext_exact X \<Longrightarrow> mix_saturated K (KM K t) \<Longrightarrow> split_rows\<cdot>(split_principal t) = up\<cdot>data \<Longrightarrow>
+     conforms data \<Longrightarrow> fconf (evalues X) data F \<Longrightarrow> amb F = gtrue \<Longrightarrow> reads_within X F K \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     sem_ext X (split_principal t) F k = esem X data F k"
+  unfolding ext_exact_def by blast
+
+text \<open>The presence of a group at a part read within \<open>K\<close> is exact.\<close>
+
+lemma populated_ext_exact:
+  assumes s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data"
+    and LK: "a \<squnion> (\<rho> \<sqinter> flod F) \<sqsubseteq> K" and hK: "kreads K (sopen (coarsen \<rho> (slice F)))" and amb: "amb F = gtrue"
+  shows "populated_ext (split_principal t) a \<rho> F k = populated data a \<rho> F k"
+proof -
+  let ?L = "a \<squnion> (\<rho> \<sqinter> flod F)"
+  have "select_test ?L (proj ?L\<cdot>k) (\<Lambda> _. TT) (sopen (coarsen \<rho> (slice F))) (split_principal t) =
+      (\<exists>\<^sub>K m\<in>{m \<in> lower_maximal data. rproj ?L m = proj ?L\<cdot>k}. sopen (coarsen \<rho> (slice F))\<cdot>(row_key\<cdot>m))"
+    by (rule select_test_exact [OF s d LK proj_idem]) (use hK in \<open>simp add: kreads_def\<close>)
+  then show ?thesis unfolding populated_ext_def populated_def fiber_def fguard_split amb gtrue_def by simp
+qed
+
+theorem ext_exact_key_at: "ext_exact (key_at_ext c)"
+proof (rule ext_exactI, simp only: key_at_ext_simps key_at_simps)
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data"
+    and r: "reads_within (key_at_ext c) F K"
+  have cK: "c \<sqsubseteq> K" using r by (simp add: reads_within_def join_meet_self)
+  have fib: "fiber data c c F k = {m \<in> lower_maximal data. rproj c m = proj c\<cdot>k}" by (simp add: fiber_def join_meet_self)
+  have "select_test c (proj c\<cdot>k) (\<Lambda> _. TT) (\<Lambda> _. TT) (split_principal t) = (\<exists>\<^sub>K m\<in>fiber data c c F k. (\<Lambda> _. TT)\<cdot>(row_key\<cdot>m))"
+    unfolding fib by (rule select_test_exact [OF s d cK proj_idem]) simp
+  then show "key_at_sem c (split_principal t) k = (if fiber data c c F k = {} then Absent else Present\<cdot>(proj c\<cdot>k))"
+    by (simp add: kleene_bex_const_TT)
+qed
+
+theorem ext_exact_column: "ext_exact (column_ext c a v)"
+proof (rule ext_exactI, simp only: column_ext_simps)
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data"
+    and conf: "fconf (evalues (column c a v)) data F" and r: "reads_within (column_ext c a v) F K"
+  let ?D = "split_principal t" and ?e = "mk_value (sel a a) c a"
+  have aK: "a \<sqsubseteq> K" using r by (simp add: reads_within_def join_meet_self)
+  have cf: "entry_conf ?e data F" using conf by (simp add: fconf_def)
+  have fib: "fiber data a a F k = {m \<in> lower_maximal data. rproj a m = proj a\<cdot>k}" by (simp add: fiber_def join_meet_self)
+  have t0: "select_test a (proj a\<cdot>k) (\<Lambda> _. TT) (\<Lambda> _. TT) ?D = (\<exists>\<^sub>K m\<in>fiber data a a F k. (\<Lambda> _. TT)\<cdot>(row_key\<cdot>m))"
+    unfolding fib by (rule select_test_exact [OF s d aK proj_idem]) simp
+  then have t: "select_test a (proj a\<cdot>k) (\<Lambda> _. TT) (\<Lambda> _. TT) ?D = (\<exists>\<^sub>K m\<in>fiber data a a F k. TT)" by simp
+  show "column_sem c a v ?D k = esem (column c a v) data F k"
+  proof (cases "fiber data a a F k = {}")
+    case True
+    then show ?thesis using t by (simp add: kleene_bex_const_TT)
+  next
+    case False
+    then obtain m where m: "m \<in> fiber data a a F k" by blast
+    have mm: "m \<in> lower_maximal data" and mk: "rproj a m = proj a\<cdot>k" using m fib by simp_all
+    obtain x where x: "x \<in> srows t" and xm: "m = Rep_compact_basis x" using split_maximal_row_generator [OF d mm] by blast
+    have mx: "maximal_at a (proj a\<cdot>k)"
+      using maximal_at_proj [OF aK saturated_row_part [OF s x]] proj_le [OF aK] mk xm by simp
+    have "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = (\<lambda>_. v\<cdot>(m \<downharpoonright> c)) ` fiber data a a F k"
+      by (rule image_cong [OF refl]) (simp add: column_fiber_section [OF cf m])
+    then have V: "(\<lambda>y. v\<cdot>(y \<downharpoonright> c)) ` fiber data a a F k = {v\<cdot>(m \<downharpoonright> c)}" using m by (auto simp: image_constant_conv)
+    have ub: "col_sections c a ?D k <| m \<downharpoonright> c"
+    proof (rule is_ubI)
+      fix z assume "z \<in> col_sections c a ?D k"
+      then obtain y where y: "split_definite y ?D" "rproj a y = proj a\<cdot>k" "z = y \<downharpoonright> c" by (auto simp: col_sections_def)
+      have "maximal_at a (rproj a y)" using mx y(2) by simp
+      then obtain m' where m': "m' \<in> lower_maximal data" "y \<sqsubseteq> m'" "rproj a m' = rproj a y"
+        using definite_maximal_point [OF below_refl d y(1)] by blast
+      have m'F: "m' \<in> fiber data a a F k" using fib m'(1,3) y(2) by simp
+      have "y \<downharpoonright> c \<sqsubseteq> m' \<downharpoonright> c" by (intro monofun_cfun_arg m'(2))
+      then show "z \<sqsubseteq> m \<downharpoonright> c" using y(3) column_fiber_section [OF cf m m'F] by simp
+    qed
+    have inS: "m \<downharpoonright> c \<in> col_sections c a ?D k"
+      unfolding col_sections_def using generator_definite [OF x] xm mk by auto
+    have cv: "col_value c a ?D k = m \<downharpoonright> c"
+      unfolding col_value_def using mx is_lub_maximal [OF ub inS] by (simp add: lub_eqI)
+    show ?thesis using False t V cv by (simp add: kleene_bex_const_TT)
+  qed
+qed
+
+theorem ext_exact_const: "ext_exact (const_ext v)"
+  by (rule ext_exactI) simp
+
+theorem ext_exact_smap: "ext_exact X \<Longrightarrow> ext_exact (smap_ext g X)"
+  by (rule ext_exactI) (simp add: ext_exactD reads_within_def)
+
+theorem ext_exact_combine:
+  assumes X\<^sub>1: "ext_exact X\<^sub>1" and X\<^sub>2: "ext_exact X\<^sub>2"
+  shows "ext_exact (combine_ext f X\<^sub>1 X\<^sub>2)"
+proof (rule ext_exactI, simp only: combine_ext_simps combine_simps)
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
+    and conf: "fconf (evalues X\<^sub>1 @ evalues X\<^sub>2) data F" and amb: "amb F = gtrue"
+    and r: "reads_within (combine_ext f X\<^sub>1 X\<^sub>2) F K"
+  have c1: "fconf (evalues X\<^sub>1) data F" and c2: "fconf (evalues X\<^sub>2) data F" using conf by (simp_all add: fconf_def)
+  have r1: "reads_within X\<^sub>1 F K" and r2: "reads_within X\<^sub>2 F K" using r by (auto simp: reads_within_def)
+  show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 (split_principal t) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 (split_principal t) F (proj (kd X\<^sub>2 F)\<cdot>k)) =
+      lift2_option_pd f\<cdot>(esem X\<^sub>1 data F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(esem X\<^sub>2 data F (proj (kd X\<^sub>2 F)\<cdot>k))"
+    by (simp only: ext_exactD [OF X\<^sub>1 s d cd c1 amb r1 proj_idem] ext_exactD [OF X\<^sub>2 s d cd c2 amb r2 proj_idem])
+qed
+
+theorem ext_exact_present_at:
+  assumes X: "ext_exact X"
+  shows "ext_exact (present_at_ext a \<rho> X)"
+proof (rule ext_exactI, simp only: present_at_ext_simps present_at_simps)
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
+    and conf: "fconf (evalues X) data F" and amb: "amb F = gtrue" and r: "reads_within (present_at_ext a \<rho> X) F K"
+  let ?e = "mk_guard (sel (emind X \<squnion> a) \<rho>) gtrue gtrue \<bottom> :: ('k, 'r guard \<times> 'k guard) entry"
+  have LK: "(emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F) \<sqsubseteq> K" and hK: "kreads K (sopen (coarsen \<rho> (slice F)))"
+    using r unfolding reads_within_def by (auto simp: gand_gtrue)
+  have rX: "reads_within X F K" using r by (simp add: reads_within_def)
+  show "populated_ext (split_principal t) (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X (split_principal t) F (proj (kd X F)\<cdot>k) =
+      populated data (emind X \<squnion> a) \<rho> F k \<odot> esem X data F (proj (kd X F)\<cdot>k)"
+    by (simp only: populated_ext_exact [OF s d LK hK amb] ext_exactD [OF X s d cd conf amb rX proj_idem])
+qed
+
+
+text \<open>Including dimensions and filtering for keys move what the entries read along with the
+  frame.\<close>
+
+lemma gkguard_include: "gkguard (include_entry M e) F = gkguard e (finclude M F)"
+  by simp
+
+lemma gkguard_ffor: "gkguard e (ffor \<tau> G F) = gkguard (for_entry \<tau> G e) F"
+  by (simp add: coarsen_conj coarsen_coarsen sopen_gand gand_assoc)
+
+theorem ext_exact_include_dims:
+  assumes ES: "semilawful X" and X: "ext_exact X"
+  shows "ext_exact (include_dims_ext M X)"
+proof (rule ext_exactI, simp only: include_dims_ext_simps include_dims_simps(3,4))
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
+    and conf: "fconf (map (include_entry M) (evalues X)) data F" and amb: "amb F = gtrue"
+    and r: "reads_within (include_dims_ext M X) F K" and k: "proj (kd (include_dims M X) F)\<cdot>k = k"
+  have d': "fconf (evalues X) data (finclude M F)" using conf by (simp only: fconf_include)
+  have k': "proj (kd X (finclude M F))\<cdot>k = k" by (rule proj_fix_mono [OF include_dims_kd_below [OF ES] k])
+  have amb': "amb (finclude M F) = gtrue" using amb by simp
+  have r': "reads_within X (finclude M F) K"
+    unfolding reads_within_def
+  proof (intro conjI ballI)
+    fix S assume S: "S \<in> set (esels X)"
+    have ts: "include_sel M S \<in> set (esels (include_dims_ext M X))" using S by (auto simp: comp_def)
+    have "sel_at (include_sel M S) (flod F) \<sqsubseteq> K" using r ts unfolding reads_within_def by blast
+    then show "sel_at S (flod (finclude M F)) \<sqsubseteq> K" by (simp only: include_lod)
+  next
+    fix e assume e: "e \<in> set (eguards X)"
+    have fe: "include_entry M e \<in> set (eguards (include_dims_ext M X))" using e by simp
+    have "ekeys (include_entry M e) \<sqsubseteq> K" using r fe unfolding reads_within_def by blast
+    then show "ekeys e \<sqsubseteq> K" by simp
+  next
+    fix e assume e: "e \<in> set (eguards X)"
+    have fe: "include_entry M e \<in> set (eguards (include_dims_ext M X))" using e by simp
+    have "kreads K (gkguard (include_entry M e) F)" using r fe unfolding reads_within_def by blast
+    then show "kreads K (gkguard e (finclude M F))" by (simp only: gkguard_include)
+  next
+    fix e assume e: "e \<in> set (evalues X)"
+    have fe: "include_entry M e \<in> set (evalues (include_dims_ext M X))" using e by simp
+    have "ekeys (include_entry M e) \<sqsubseteq> K" using r fe unfolding reads_within_def by blast
+    then show "ekeys e \<sqsubseteq> K" by simp
+  qed
+  show "sem_ext X (split_principal t) (finclude M F) k = esem X data (finclude M F) k"
+    by (rule ext_exactD [OF X s d cd d' amb' r' k'])
+qed
+
+theorem ext_exact_filtfor:
+  assumes ES: "semilawful X" and X: "ext_exact X"
+  shows "ext_exact (filtfor_ext \<tau> G X)"
+proof (rule ext_exactI, simp only: filtfor_ext_simps filtfor_simps)
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
+    and conf: "fconf (map (for_value \<tau>) (evalues X)) data F" and amb: "amb F = gtrue"
+    and r: "reads_within (filtfor_ext \<tau> G X) F K"
+  let ?k = "proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k"
+  have d': "fconf (evalues X) data (ffor \<tau> G F)" using conf by (simp only: fconf_filtfor [of _ _ _ _ G])
+  have amb': "amb (ffor \<tau> G F) = gtrue" using amb by simp
+  have lm: "lower_part S \<sqsubseteq> emind X" if "S \<in> set (esels X)" for S by (rule lower_below_mind [OF ES that])
+  have sel: "sel_at S (flod (ffor \<tau> G F)) = sel_at (trunc_sel \<tau> S) (flod F)" if "S \<in> set (esels X)" for S
+    by (simp only: ffor_key [OF lm [OF that]] trunc_sel_simps)
+  have r': "reads_within X (ffor \<tau> G F) K"
+    unfolding reads_within_def
+  proof (intro conjI ballI)
+    fix S assume S: "S \<in> set (esels X)"
+    have ts: "trunc_sel \<tau> S \<in> set (esels (filtfor_ext \<tau> G X))" using S by (auto simp: comp_def)
+    have "sel_at (trunc_sel \<tau> S) (flod F) \<sqsubseteq> K" using r ts unfolding reads_within_def by blast
+    then show "sel_at S (flod (ffor \<tau> G F)) \<sqsubseteq> K" by (simp only: sel [OF S])
+  next
+    fix e assume e: "e \<in> set (eguards X)"
+    have fe: "for_entry \<tau> G e \<in> set (eguards (filtfor_ext \<tau> G X))" using e by simp
+    have "ekeys (for_entry \<tau> G e) \<sqsubseteq> K" using r fe unfolding reads_within_def by blast
+    then show "ekeys e \<sqsubseteq> K" by simp
+  next
+    fix e assume e: "e \<in> set (eguards X)"
+    have fe: "for_entry \<tau> G e \<in> set (eguards (filtfor_ext \<tau> G X))" using e by simp
+    have "kreads K (gkguard (for_entry \<tau> G e) F)" using r fe unfolding reads_within_def by blast
+    then show "kreads K (gkguard e (ffor \<tau> G F))" by (simp only: gkguard_ffor)
+  next
+    fix e assume e: "e \<in> set (evalues X)"
+    have fe: "for_value \<tau> e \<in> set (evalues (filtfor_ext \<tau> G X))" using e by simp
+    have "ekeys (for_value \<tau> e) \<sqsubseteq> K" using r fe unfolding reads_within_def by blast
+    then show "ekeys e \<sqsubseteq> K" by simp
+  qed
+  show "sem_ext X (split_principal t) (ffor \<tau> G F) ?k = esem X data (ffor \<tau> G F) ?k"
+    by (rule ext_exactD [OF X s d cd d' amb' r' proj_idem])
+qed
+
 end
 
 end
