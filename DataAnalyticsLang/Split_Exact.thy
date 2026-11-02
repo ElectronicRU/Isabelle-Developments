@@ -372,6 +372,187 @@ proof (rule ext_exactI, simp only: filtfor_ext_simps filtfor_simps)
     by (rule ext_exactD [OF X s d cd d' amb' r' proj_idem])
 qed
 
+
+text \<open>An aggregate is exact: at a saturated dataset the possible inner keys are the definite
+  ones, so its stage at the dataset is one fold, over the inner keys of its data, with exact
+  members; and below the rigid aggregate are all its stages.\<close>
+
+lemma reads_within_aggregate:
+  assumes XS: "semilawful X" and r: "reads_within (aggregate_ext f X) F K"
+  shows "reads_within X F K" and "kd X F \<sqsubseteq> K" and "kreads K (sopen (coarsen \<top> (slice F)))"
+proof -
+  let ?h = "mk_guard (sel \<bottom> \<top>) gtrue gtrue (emind X) :: ('k, 'r guard \<times> 'k guard) entry"
+  have h: "?h \<in> set (eguards (aggregate_ext f X))" by simp
+  have mK: "emind X \<sqsubseteq> K" using r h unfolding reads_within_def by fastforce
+  have "sel_at (sel \<bottom> \<top>) (flod F) \<sqsubseteq> K" using r unfolding reads_within_def by simp
+  then have fK: "flod F \<sqsubseteq> K" by (simp add: lattice_meet_top_left lattice_join_bot_left)
+  show "kd X F \<sqsubseteq> K" by (rule lattice_join_least [OF mK fK])
+  have "kreads K (gkguard ?h F)" using r h unfolding reads_within_def by blast
+  then show "kreads K (sopen (coarsen \<top> (slice F)))" by simp
+  have upK: "upper_part S \<sqinter> flod F \<sqsubseteq> K" if "S \<in> set (esels X)" for S
+  proof -
+    have "sel \<bottom> (upper_part S) \<in> set (esels (aggregate_ext f X))" using that by (auto simp: image_iff)
+    then have "sel_at (sel \<bottom> (upper_part S)) (flod F) \<sqsubseteq> K" using r unfolding reads_within_def by blast
+    then show ?thesis by (simp add: lattice_join_bot_left)
+  qed
+  show "reads_within X F K"
+    unfolding reads_within_def
+  proof (intro conjI ballI)
+    fix S assume S: "S \<in> set (esels X)"
+    show "sel_at S (flod F) \<sqsubseteq> K"
+      by (rule lattice_join_least [OF below_trans [OF lower_below_mind [OF XS S] mK] upK [OF S]])
+  next
+    fix e assume e: "e \<in> set (eguards X)"
+    have "release e \<in> set (eguards (aggregate_ext f X))" using e by simp
+    then have "ekeys (release e) \<sqsubseteq> K" using r unfolding reads_within_def by blast
+    then have "ekeys e \<squnion> elower e \<sqsubseteq> K" by simp
+    then show "ekeys e \<sqsubseteq> K" by (rule below_trans [OF lattice_join_ge1])
+  next
+    fix e assume e: "e \<in> set (eguards X)"
+    have "release e \<in> set (eguards (aggregate_ext f X))" using e by simp
+    then have "kreads K (gkguard (release e) F)" using r unfolding reads_within_def by blast
+    then show "kreads K (gkguard e F)" by simp
+  next
+    fix e assume e: "e \<in> set (evalues X)"
+    have "release e \<in> set (evalues (aggregate_ext f X))" using e by simp
+    then have "ekeys (release e) \<sqsubseteq> K" using r unfolding reads_within_def by blast
+    then have "ekeys e \<squnion> elower e \<sqsubseteq> K" by simp
+    then show "ekeys e \<sqsubseteq> K" by (rule below_trans [OF lattice_join_ge1])
+  qed
+qed
+
+lemma glb_singleton_eq: "glb {x :: 'v::bifinite option_pd} = x"
+proof (rule below_antisym)
+  show "glb {x} \<sqsubseteq> x" by (rule glb_below) simp
+  show "x \<sqsubseteq> glb {x}" by (rule glb_greatest) simp_all
+qed
+
+theorem ext_exact_aggregate:
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and XS: "semilawful X" and X: "ext_exact X" and Xs: "ext_sound X"
+  shows "ext_exact (aggregate_ext f X)"
+proof (rule ext_exactI, simp only: aggregate_ext_simps aggregate_simps)
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
+    and conf: "fconf (map release (evalues X)) data F" and amb: "amb F = gtrue"
+    and r: "reads_within (aggregate_ext f X) F K"
+  let ?D = "split_principal t" and ?Kd = "kd X F" and ?Z = "afiber data F (flod F) k"
+  let ?A = "rproj ?Kd ` ?Z"
+  let ?V = "\<lambda>\<kappa>. populated data (emind X) \<top> F \<kappa> \<odot> esem X data F \<kappa>"
+  have cD: "compact ?D" by (rule split_pd.compact_principal)
+  have cf: "fconf (evalues X) data F" using conf by (simp only: fconf_release)
+  have rX: "reads_within X F K" and KdK: "?Kd \<sqsubseteq> K" and hK: "kreads K (sopen (coarsen \<top> (slice F)))"
+    using reads_within_aggregate [OF XS r] by blast+
+  have FK: "flod F \<sqsubseteq> ?Kd" by (rule lattice_join_ge2)
+  have pK: "proj (flod F)\<cdot>(rproj ?Kd y) = rproj (flod F) y" for y by (rule proj_le [OF FK])
+  have pKK: "proj ?Kd\<cdot>(rproj K y) = rproj ?Kd y" for y by (rule proj_le [OF KdK])
+  have rowKd: "maximal_at ?Kd (rproj ?Kd (Rep_compact_basis x))" if "x \<in> srows t" for x
+    using maximal_at_proj [OF KdK saturated_row_part [OF s that]] pKK by simp
+  have fA: "finite ?A" by (rule finite_imageI, rule finite_subset [OF _ split_maximal_finite [OF cD d]]) (auto simp: afiber_def)
+  have defA: "agg_definite X ?D F k = ?A"
+  proof
+    show "agg_definite X ?D F k \<subseteq> ?A"
+    proof
+      fix \<kappa> assume "\<kappa> \<in> agg_definite X ?D F k"
+      then obtain y where mx: "maximal_at ?Kd \<kappa>" and k: "proj (flod F)\<cdot>\<kappa> = k"
+        and y: "split_definite y ?D" "rproj ?Kd y = \<kappa>" by (auto simp: agg_definite_def)
+      have mx': "maximal_at ?Kd (rproj ?Kd y)" using mx y(2) by simp
+      obtain m where m: "m \<in> lower_maximal data" "rproj ?Kd m = rproj ?Kd y"
+        using definite_maximal_point [OF below_refl d y(1) mx'] by blast
+      have "rproj (flod F) m = k" unfolding pK [symmetric] m(2) y(2) by (rule k)
+      then have mZ: "m \<in> ?Z" using m(1) by (simp add: afiber_def)
+      have "\<kappa> = rproj ?Kd m" by (simp only: m(2) y(2))
+      then show "\<kappa> \<in> ?A" by (rule image_eqI [OF _ mZ])
+    qed
+    show "?A \<subseteq> agg_definite X ?D F k"
+    proof
+      fix \<kappa> assume "\<kappa> \<in> ?A"
+      then obtain m where m: "m \<in> ?Z" "\<kappa> = rproj ?Kd m" by blast
+      have mm: "m \<in> lower_maximal data" and mk: "rproj (flod F) m = k" using m(1) by (simp_all add: afiber_def)
+      obtain x where x: "x \<in> srows t" and xm: "m = Rep_compact_basis x" using split_maximal_row_generator [OF d mm] by blast
+      have r: "row_key\<cdot>m \<in> conforming_keyspace" by (simp add: conforming_keyspace_def)
+      show "\<kappa> \<in> agg_definite X ?D F k"
+        unfolding agg_definite_def m(2) using rowKd [OF x] generator_definite [OF x] xm pK mk r by blast
+    qed
+  qed
+  have posdef: "agg_possible X ?D F k \<subseteq> agg_definite X ?D F k"
+  proof
+    fix \<kappa> assume "\<kappa> \<in> agg_possible X ?D F k"
+    then have kk: "proj (flod F)\<cdot>\<kappa> = k" and kKd: "proj ?Kd\<cdot>\<kappa> = \<kappa>" and p: "split_possible_at ?Kd \<kappa> ?D"
+      by (auto simp: agg_possible_def proj_idem)
+    obtain u where u: "u \<in> skeys t" and uk: "proj ?Kd\<cdot>(Rep_compact_basis u) \<sqsubseteq> \<kappa>" using p unfolding possible_at_principal by blast
+    obtain x where x: "x \<in> srows t" and ux: "proj K\<cdot>(Rep_compact_basis u) = rproj K (Rep_compact_basis x)"
+      using saturated_key_part [OF s u] by blast
+    have "rproj ?Kd (Rep_compact_basis x) = proj ?Kd\<cdot>(Rep_compact_basis u)"
+      using pKK [of "Rep_compact_basis x"] ux proj_le [OF KdK, of "Rep_compact_basis u"] by simp
+    then have le: "rproj ?Kd (Rep_compact_basis x) \<sqsubseteq> \<kappa>" using uk by simp
+    have xk: "rproj ?Kd (Rep_compact_basis x) = \<kappa>" using maximal_at_eq [OF rowKd [OF x] kKd le] by simp
+    obtain m where m: "m \<in> lower_maximal data" "Rep_compact_basis x \<sqsubseteq> m" "rproj ?Kd m = rproj ?Kd (Rep_compact_basis x)"
+      by (rule definite_maximal_point [OF below_refl d generator_definite [OF x] rowKd [OF x]])
+    have "rproj (flod F) m = k" using pK [of m] m(3) xk kk by simp
+    then have mZ: "m \<in> ?Z" using m(1) by (simp add: afiber_def)
+    have "\<kappa> = rproj ?Kd m" using m(3) xk by simp
+    then have "\<kappa> \<in> ?A" by (rule image_eqI [OF _ mZ])
+    then show "\<kappa> \<in> agg_definite X ?D F k" unfolding defA .
+  qed
+  have mem: "agg_member X ?D F k \<kappa> = ?V \<kappa>" if \<kappa>: "\<kappa> \<in> ?A" for \<kappa>
+  proof -
+    obtain m where m: "\<kappa> = rproj ?Kd m" using \<kappa> by blast
+    have kk: "proj ?Kd\<cdot>\<kappa> = \<kappa>" by (simp only: m proj_idem)
+    have LK: "emind X \<squnion> (\<top> \<sqinter> flod F) \<sqsubseteq> K" using KdK by (simp add: lattice_meet_top_left)
+    have "populated_ext ?D (emind X) \<top> F \<kappa> = populated data (emind X) \<top> F \<kappa>"
+      by (rule populated_ext_exact [OF s d LK hK amb])
+    moreover have "sem_ext X ?D F \<kappa> = esem X data F \<kappa>" by (rule ext_exactD [OF X s d cd cf amb rX kk])
+    ultimately show ?thesis using \<kappa> unfolding agg_member_def defA by simp
+  qed
+  have glb: "agg_glb f X ?D F k = agg_fold f ?V ?A"
+  proof -
+    have "{agg_fold f (agg_member X ?D F k) (agg_definite X ?D F k \<union> C) | C. finite C \<and> C \<subseteq> agg_possible X ?D F k}
+        = {agg_fold f (agg_member X ?D F k) ?A}"
+    proof (rule set_eqI, rule iffI)
+      fix x assume "x \<in> {agg_fold f (agg_member X ?D F k) (agg_definite X ?D F k \<union> C) | C. finite C \<and> C \<subseteq> agg_possible X ?D F k}"
+      then obtain C where x: "x = agg_fold f (agg_member X ?D F k) (agg_definite X ?D F k \<union> C)" and C: "C \<subseteq> agg_possible X ?D F k"
+        by blast
+      have "agg_definite X ?D F k \<union> C = ?A" using C posdef unfolding defA by blast
+      then show "x \<in> {agg_fold f (agg_member X ?D F k) ?A}" using x by simp
+    next
+      fix x assume "x \<in> {agg_fold f (agg_member X ?D F k) ?A}"
+      then show "x \<in> {agg_fold f (agg_member X ?D F k) (agg_definite X ?D F k \<union> C) | C. finite C \<and> C \<subseteq> agg_possible X ?D F k}"
+        by (intro CollectI exI [of _ "{}"]) (simp add: defA)
+    qed
+    moreover have "agg_fold f (agg_member X ?D F k) ?A = agg_fold f ?V ?A" by (rule agg_fold_cong [OF f refl mem])
+    ultimately show ?thesis unfolding agg_glb_def by (simp add: glb_singleton_eq)
+  qed
+  have rigid: "agg_fold f ?V (inner_keys X data F k) = agg_fold f ?V ?A"
+  proof -
+    interpret agg: comm_monoid_set "\<lambda>x y. combine_option_pd f\<cdot>x\<cdot>y" Absent
+      unfolding comm_monoid_set_def by (rule comm_monoid_combine_option_pd [OF f])
+    have sub: "inner_keys X data F k \<subseteq> ?A" by (auto simp: inner_keys_def)
+    have "agg.F ?V (inner_keys X data F k) = agg.F ?V ?A"
+      by (rule agg.mono_neutral_left [OF fA sub]) (auto simp: inner_keys_def)
+    then show ?thesis by (simp only: agg_fold_finite [OF f fA] agg_fold_finite [OF f finite_subset [OF sub fA]])
+  qed
+  have ex: "agg_glb f X ?D F k = esem (aggregate f X) data F k" by (simp only: glb aggregate_simps rigid)
+  have lubeq: "agg_approx f X ?D F k <<| esem (aggregate f X) data F k"
+  proof (rule is_lubI)
+    show "agg_approx f X ?D F k <| esem (aggregate f X) data F k"
+    proof (rule is_ubI)
+      fix x assume "x \<in> agg_approx f X ?D F k"
+      then obtain D\<^sub>0 where x: "x = agg_glb f X D\<^sub>0 F k" and le: "D\<^sub>0 \<sqsubseteq> ?D" by (auto simp: agg_approx_def)
+      show "x \<sqsubseteq> esem (aggregate f X) data F k" unfolding x by (rule agg_glb_sound [OF f Xs le cD d cd conf])
+    qed
+  next
+    fix u assume "agg_approx f X ?D F k <| u"
+    moreover have "agg_glb f X ?D F k \<in> agg_approx f X ?D F k" using cD by (auto simp: agg_approx_def)
+    ultimately show "esem (aggregate f X) data F k \<sqsubseteq> u" unfolding ex [symmetric] by (rule is_ubD)
+  qed
+  show "agg_ext_sem f X ?D F k = agg_fold f (\<lambda>\<kappa>. populated data (emind X) \<top> F \<kappa> \<odot> esem X data F \<kappa>) (inner_keys X data F k)"
+    unfolding agg_ext_sem_def lub_eqI [OF lubeq] by (simp only: aggregate_simps)
+qed
+
+
+theorem ext_exact_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_exact X) \<Longrightarrow> ext_exact (tuple_ext Xs)"
+  by (induct Xs) (simp_all add: ext_exact_const ext_exact_combine)
+
 end
 
 end

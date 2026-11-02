@@ -1,5 +1,5 @@
 theory Ast_Split_Semantics
-  imports Ast_Semantics Split_Semantics
+  imports Ast_Semantics Split_Exact
 begin
 
 section \<open>The extended semantics of the query language\<close>
@@ -58,6 +58,37 @@ next
   case (8 C e)
   then show ?case by (simp add: ext_lawful_restrict)
 qed (simp_all add: ext_lawful_smap ext_lawful_key_at ext_lawful_column [OF col_fd lod_small_compact [OF dim_compact] col_small] lod_small_compact dim_compact)
+
+text \<open>Without \<open>WHERE\<close>, the extended denotation is exact: row guards are the one construct
+  that only confirms presence.\<close>
+
+fun where_free :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> bool" where
+  "where_free (Call fn es) \<longleftrightarrow> (\<forall>e\<in>set es. where_free e)"
+| "where_free (Aggr g e) \<longleftrightarrow> where_free e"
+| "where_free (GroupBy ds e) \<longleftrightarrow> where_free e"
+| "where_free (For ds C e) \<longleftrightarrow> where_free e"
+| "where_free (Where C e) \<longleftrightarrow> False"
+| "where_free _ \<longleftrightarrow> True"
+
+theorem ext_exact_asem: "wf e \<Longrightarrow> where_free e \<Longrightarrow> ext_exact (asem_ext e)"
+proof (induct e rule: wf.induct)
+  case (4 fn es)
+  then show ?case by (auto intro!: ext_exact_smap ext_exact_tuple)
+next
+  case (5 g e)
+  then have s: "semilawful (asem_ext e)" and so: "ext_sound (asem_ext e)" and ex: "ext_exact (asem_ext e)"
+    using ext_lawful_asem [of e] by (simp_all add: ext_lawful_def)
+  show ?case unfolding asem_ext.simps by (rule ext_exact_aggregate [OF ag_abel s ex so])
+next
+  case (6 ds e)
+  then show ?case using ext_lawful_asem [of e] by (simp add: ext_lawful_def ext_exact_include_dims)
+next
+  case (7 ds C e)
+  then show ?case using ext_lawful_asem [of e] by (simp add: ext_lawful_def ext_exact_filtfor)
+next
+  case (8 C e)
+  then show ?case by simp
+qed (simp_all add: ext_exact_smap ext_exact_key_at ext_exact_column)
 
 corollary ext_lawful_present_asem: "wf e \<Longrightarrow> ext_lawful (present_at_ext \<bottom> \<top> (asem_ext e))"
   by (rule ext_lawful_present_at [OF ext_lawful_asem lod_small_bot])

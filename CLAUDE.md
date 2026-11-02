@@ -53,7 +53,8 @@ Depends on session `HOLCF-extra`. ROOT builds, in dependency order:
 - the extended semantics over partial datasets: `Split_Content` (selection, guards on splits),
   `Split_Semantics` (sound, monotone and continuous combinators), `Key_Mix` (guard contents as key
   mixes in `HOLCF-extra/MixPD`), `Split_Csem` (extended semantics factors through contents, and the
-  content semantics is monotone; all combinators incl. aggregates), `Ast_Split_Semantics` (`asem_ext`).
+  content semantics is monotone; all combinators incl. aggregates), `Split_Exact` (exactness at saturated
+  datasets without row guards), `Ast_Split_Semantics` (`asem_ext`; exact on `WHERE`-free ASTs).
 
 Not in ROOT: `Separated_Principal`, `SlicerToy`. A type system for the AST and the SQL lowering
 are planned, not started. Theme: powerdomains for partial information / approximate queries
