@@ -153,24 +153,28 @@ definition reads_within :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightar
   "reads_within X F K \<longleftrightarrow> (\<forall>S\<in>set (esels X). sel_at S (flod F) \<sqsubseteq> K) \<and>
      (\<forall>e\<in>set (eguards X). ekeys e \<sqsubseteq> K \<and> kreads K (gkguard e F)) \<and> (\<forall>e\<in>set (evalues X). ekeys e \<sqsubseteq> K)"
 
-text \<open>An extended expression is \<^emph>\<open>exact\<close> when, at a saturated compact dataset under a frame
-  without an ambient filter, reading within the saturating LOD, it is the rigid semantics of the
-  data the dataset is definite about.\<close>
+text \<open>An expression's row guards are \<^emph>\<open>trivial\<close> at a frame when every guard entry's row guard,
+  conjoined with the frame's ambient filter, passes every row.  An extended expression is \<^emph>\<open>exact\<close>
+  when, at a saturated compact dataset, with trivial row guards and reading within the saturating
+  LOD, it is the rigid semantics of the data the dataset is definite about.\<close>
+
+definition rowguards_trivial :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> ('k semi_factor, 'f, 'r) frame \<Rightarrow> bool" where
+  "rowguards_trivial X F \<longleftrightarrow> (\<forall>e\<in>set (eguards X). gand (amb F) (eguard e) = gtrue)"
 
 definition ext_exact :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_exact X \<longleftrightarrow> (\<forall>t data F k K. mix_saturated K (KM K t) \<longrightarrow> split_rows\<cdot>(split_principal t) = up\<cdot>data \<longrightarrow>
-     conforms data \<longrightarrow> fconf (evalues X) data F \<longrightarrow> amb F = gtrue \<longrightarrow> reads_within X F K \<longrightarrow> proj (kd X F)\<cdot>k = k \<longrightarrow>
+     conforms data \<longrightarrow> fconf (evalues X) data F \<longrightarrow> rowguards_trivial X F \<longrightarrow> reads_within X F K \<longrightarrow> proj (kd X F)\<cdot>k = k \<longrightarrow>
      sem_ext X (split_principal t) F k = esem X data F k)"
 
 lemma ext_exactI:
   "(\<And>t data F k K. mix_saturated K (KM K t) \<Longrightarrow> split_rows\<cdot>(split_principal t) = up\<cdot>data \<Longrightarrow>
-     conforms data \<Longrightarrow> fconf (evalues X) data F \<Longrightarrow> amb F = gtrue \<Longrightarrow> reads_within X F K \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     conforms data \<Longrightarrow> fconf (evalues X) data F \<Longrightarrow> rowguards_trivial X F \<Longrightarrow> reads_within X F K \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
      sem_ext X (split_principal t) F k = esem X data F k) \<Longrightarrow> ext_exact X"
   unfolding ext_exact_def by blast
 
 lemma ext_exactD:
   "ext_exact X \<Longrightarrow> mix_saturated K (KM K t) \<Longrightarrow> split_rows\<cdot>(split_principal t) = up\<cdot>data \<Longrightarrow>
-     conforms data \<Longrightarrow> fconf (evalues X) data F \<Longrightarrow> amb F = gtrue \<Longrightarrow> reads_within X F K \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
+     conforms data \<Longrightarrow> fconf (evalues X) data F \<Longrightarrow> rowguards_trivial X F \<Longrightarrow> reads_within X F K \<Longrightarrow> proj (kd X F)\<cdot>k = k \<Longrightarrow>
      sem_ext X (split_principal t) F k = esem X data F k"
   unfolding ext_exact_def by blast
 
@@ -250,7 +254,7 @@ theorem ext_exact_const: "ext_exact (const_ext v)"
   by (rule ext_exactI) simp
 
 theorem ext_exact_smap: "ext_exact X \<Longrightarrow> ext_exact (smap_ext g X)"
-  by (rule ext_exactI) (simp add: ext_exactD reads_within_def)
+  by (rule ext_exactI) (simp add: ext_exactD reads_within_def rowguards_trivial_def)
 
 theorem ext_exact_combine:
   assumes X\<^sub>1: "ext_exact X\<^sub>1" and X\<^sub>2: "ext_exact X\<^sub>2"
@@ -258,13 +262,14 @@ theorem ext_exact_combine:
 proof (rule ext_exactI, simp only: combine_ext_simps combine_simps)
   fix t data F k K
   assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
-    and conf: "fconf (evalues X\<^sub>1 @ evalues X\<^sub>2) data F" and amb: "amb F = gtrue"
+    and conf: "fconf (evalues X\<^sub>1 @ evalues X\<^sub>2) data F" and rg: "rowguards_trivial (combine_ext f X\<^sub>1 X\<^sub>2) F"
     and r: "reads_within (combine_ext f X\<^sub>1 X\<^sub>2) F K"
   have c1: "fconf (evalues X\<^sub>1) data F" and c2: "fconf (evalues X\<^sub>2) data F" using conf by (simp_all add: fconf_def)
+  have g1: "rowguards_trivial X\<^sub>1 F" and g2: "rowguards_trivial X\<^sub>2 F" using rg by (simp_all add: rowguards_trivial_def)
   have r1: "reads_within X\<^sub>1 F K" and r2: "reads_within X\<^sub>2 F K" using r by (auto simp: reads_within_def)
   show "lift2_option_pd f\<cdot>(sem_ext X\<^sub>1 (split_principal t) F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(sem_ext X\<^sub>2 (split_principal t) F (proj (kd X\<^sub>2 F)\<cdot>k)) =
       lift2_option_pd f\<cdot>(esem X\<^sub>1 data F (proj (kd X\<^sub>1 F)\<cdot>k))\<cdot>(esem X\<^sub>2 data F (proj (kd X\<^sub>2 F)\<cdot>k))"
-    by (simp only: ext_exactD [OF X\<^sub>1 s d cd c1 amb r1 proj_idem] ext_exactD [OF X\<^sub>2 s d cd c2 amb r2 proj_idem])
+    by (simp only: ext_exactD [OF X\<^sub>1 s d cd c1 g1 r1 proj_idem] ext_exactD [OF X\<^sub>2 s d cd c2 g2 r2 proj_idem])
 qed
 
 theorem ext_exact_present_at:
@@ -273,14 +278,16 @@ theorem ext_exact_present_at:
 proof (rule ext_exactI, simp only: present_at_ext_simps present_at_simps)
   fix t data F k K
   assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
-    and conf: "fconf (evalues X) data F" and amb: "amb F = gtrue" and r: "reads_within (present_at_ext a \<rho> X) F K"
+    and conf: "fconf (evalues X) data F" and rg: "rowguards_trivial (present_at_ext a \<rho> X) F" and r: "reads_within (present_at_ext a \<rho> X) F K"
   let ?e = "mk_guard (sel (emind X \<squnion> a) \<rho>) gtrue gtrue \<bottom> :: ('k, 'r guard \<times> 'k guard) entry"
   have LK: "(emind X \<squnion> a) \<squnion> (\<rho> \<sqinter> flod F) \<sqsubseteq> K" and hK: "kreads K (sopen (coarsen \<rho> (slice F)))"
     using r unfolding reads_within_def by (auto simp: gand_gtrue)
   have rX: "reads_within X F K" using r by (simp add: reads_within_def)
+  have amb: "amb F = gtrue" using rg by (simp add: rowguards_trivial_def)
+  have gX: "rowguards_trivial X F" using rg by (auto simp: rowguards_trivial_def)
   show "populated_ext (split_principal t) (emind X \<squnion> a) \<rho> F k \<odot> sem_ext X (split_principal t) F (proj (kd X F)\<cdot>k) =
       populated data (emind X \<squnion> a) \<rho> F k \<odot> esem X data F (proj (kd X F)\<cdot>k)"
-    by (simp only: populated_ext_exact [OF s d LK hK amb] ext_exactD [OF X s d cd conf amb rX proj_idem])
+    by (simp only: populated_ext_exact [OF s d LK hK amb] ext_exactD [OF X s d cd conf gX rX proj_idem])
 qed
 
 
@@ -299,11 +306,11 @@ theorem ext_exact_include_dims:
 proof (rule ext_exactI, simp only: include_dims_ext_simps include_dims_simps(3,4))
   fix t data F k K
   assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
-    and conf: "fconf (map (include_entry M) (evalues X)) data F" and amb: "amb F = gtrue"
+    and conf: "fconf (map (include_entry M) (evalues X)) data F" and rg: "rowguards_trivial (include_dims_ext M X) F"
     and r: "reads_within (include_dims_ext M X) F K" and k: "proj (kd (include_dims M X) F)\<cdot>k = k"
   have d': "fconf (evalues X) data (finclude M F)" using conf by (simp only: fconf_include)
   have k': "proj (kd X (finclude M F))\<cdot>k = k" by (rule proj_fix_mono [OF include_dims_kd_below [OF ES] k])
-  have amb': "amb (finclude M F) = gtrue" using amb by simp
+  have amb': "rowguards_trivial X (finclude M F)" using rg by (simp add: rowguards_trivial_def)
   have r': "reads_within X (finclude M F) K"
     unfolding reads_within_def
   proof (intro conjI ballI)
@@ -337,11 +344,11 @@ theorem ext_exact_filtfor:
 proof (rule ext_exactI, simp only: filtfor_ext_simps filtfor_simps)
   fix t data F k K
   assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
-    and conf: "fconf (map (for_value \<tau>) (evalues X)) data F" and amb: "amb F = gtrue"
+    and conf: "fconf (map (for_value \<tau>) (evalues X)) data F" and rg: "rowguards_trivial (filtfor_ext \<tau> G X) F"
     and r: "reads_within (filtfor_ext \<tau> G X) F K"
   let ?k = "proj (emind X \<squnion> flod (ffor \<tau> G F))\<cdot>k"
   have d': "fconf (evalues X) data (ffor \<tau> G F)" using conf by (simp only: fconf_filtfor [of _ _ _ _ G])
-  have amb': "amb (ffor \<tau> G F) = gtrue" using amb by simp
+  have amb': "rowguards_trivial X (ffor \<tau> G F)" using rg by (simp add: rowguards_trivial_def)
   have lm: "lower_part S \<sqsubseteq> emind X" if "S \<in> set (esels X)" for S by (rule lower_below_mind [OF ES that])
   have sel: "sel_at S (flod (ffor \<tau> G F)) = sel_at (trunc_sel \<tau> S) (flod F)" if "S \<in> set (esels X)" for S
     by (simp only: ffor_key [OF lm [OF that]] trunc_sel_simps)
@@ -433,13 +440,15 @@ theorem ext_exact_aggregate:
 proof (rule ext_exactI, simp only: aggregate_ext_simps aggregate_simps)
   fix t data F k K
   assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
-    and conf: "fconf (map release (evalues X)) data F" and amb: "amb F = gtrue"
+    and conf: "fconf (map release (evalues X)) data F" and rg: "rowguards_trivial (aggregate_ext f X) F"
     and r: "reads_within (aggregate_ext f X) F K"
   let ?D = "split_principal t" and ?Kd = "kd X F" and ?Z = "afiber data F (flod F) k"
   let ?A = "rproj ?Kd ` ?Z"
   let ?V = "\<lambda>\<kappa>. populated data (emind X) \<top> F \<kappa> \<odot> esem X data F \<kappa>"
   have cD: "compact ?D" by (rule split_pd.compact_principal)
   have cf: "fconf (evalues X) data F" using conf by (simp only: fconf_release)
+  have amb: "amb F = gtrue" using rg by (simp add: rowguards_trivial_def)
+  have gX: "rowguards_trivial X F" using rg by (auto simp: rowguards_trivial_def)
   have rX: "reads_within X F K" and KdK: "?Kd \<sqsubseteq> K" and hK: "kreads K (sopen (coarsen \<top> (slice F)))"
     using reads_within_aggregate [OF XS r] by blast+
   have FK: "flod F \<sqsubseteq> ?Kd" by (rule lattice_join_ge2)
@@ -501,7 +510,7 @@ proof (rule ext_exactI, simp only: aggregate_ext_simps aggregate_simps)
     have LK: "emind X \<squnion> (\<top> \<sqinter> flod F) \<sqsubseteq> K" using KdK by (simp add: lattice_meet_top_left)
     have "populated_ext ?D (emind X) \<top> F \<kappa> = populated data (emind X) \<top> F \<kappa>"
       by (rule populated_ext_exact [OF s d LK hK amb])
-    moreover have "sem_ext X ?D F \<kappa> = esem X data F \<kappa>" by (rule ext_exactD [OF X s d cd cf amb rX kk])
+    moreover have "sem_ext X ?D F \<kappa> = esem X data F \<kappa>" by (rule ext_exactD [OF X s d cd cf gX rX kk])
     ultimately show ?thesis using \<kappa> unfolding agg_member_def defA by simp
   qed
   have glb: "agg_glb f X ?D F k = agg_fold f ?V ?A"
@@ -549,6 +558,25 @@ proof (rule ext_exactI, simp only: aggregate_ext_simps aggregate_simps)
     unfolding agg_ext_sem_def lub_eqI [OF lubeq] by (simp only: aggregate_simps)
 qed
 
+
+text \<open>Restricting is exact: with trivial row guards, the restriction is trivial wherever it is
+  read.\<close>
+
+theorem ext_exact_restrict:
+  assumes X: "ext_exact X"
+  shows "ext_exact (restrict_ext \<gamma> X)"
+proof (rule ext_exactI, simp only: restrict_ext_simps restrict_simps)
+  fix t data F k K
+  assume s: "mix_saturated K (KM K t)" and d: "split_rows\<cdot>(split_principal t) = up\<cdot>data" and cd: "conforms data"
+    and conf: "fconf (evalues X) data F" and rg: "rowguards_trivial (restrict_ext \<gamma> X) F"
+    and r: "reads_within (restrict_ext \<gamma> X) F K" and k: "proj (kd X F)\<cdot>k = k"
+  have conf': "fconf (evalues X) data (frestrict \<gamma> F)" using conf by (simp only: fconf_frestrict)
+  have rg': "rowguards_trivial X (frestrict \<gamma> F)" using rg by (simp add: rowguards_trivial_def gand_assoc)
+  have r': "reads_within X (frestrict \<gamma> F) K" using r by (simp add: reads_within_def comp_def)
+  have k': "proj (kd X (frestrict \<gamma> F))\<cdot>k = k" using k by simp
+  show "sem_ext X (split_principal t) (frestrict \<gamma> F) k = esem X data (frestrict \<gamma> F) k"
+    by (rule ext_exactD [OF X s d cd conf' rg' r' k'])
+qed
 
 theorem ext_exact_tuple: "(\<And>X. X \<in> set Xs \<Longrightarrow> ext_exact X) \<Longrightarrow> ext_exact (tuple_ext Xs)"
   by (induct Xs) (simp_all add: ext_exact_const ext_exact_combine)

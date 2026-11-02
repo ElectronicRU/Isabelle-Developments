@@ -59,18 +59,10 @@ next
   then show ?case by (simp add: ext_lawful_restrict)
 qed (simp_all add: ext_lawful_smap ext_lawful_key_at ext_lawful_column [OF col_fd lod_small_compact [OF dim_compact] col_small] lod_small_compact dim_compact)
 
-text \<open>Without \<open>WHERE\<close>, the extended denotation is exact: row guards are the one construct
-  that only confirms presence.\<close>
+text \<open>The extended denotation is exact, where its row guards are trivial: row guards are the one
+  construct that only confirms presence.\<close>
 
-fun where_free :: "('d, 'c, 'fn, 'ag) ast \<Rightarrow> bool" where
-  "where_free (Call fn es) \<longleftrightarrow> (\<forall>e\<in>set es. where_free e)"
-| "where_free (Aggr g e) \<longleftrightarrow> where_free e"
-| "where_free (GroupBy ds e) \<longleftrightarrow> where_free e"
-| "where_free (For ds C e) \<longleftrightarrow> where_free e"
-| "where_free (Where C e) \<longleftrightarrow> False"
-| "where_free _ \<longleftrightarrow> True"
-
-theorem ext_exact_asem: "wf e \<Longrightarrow> where_free e \<Longrightarrow> ext_exact (asem_ext e)"
+theorem ext_exact_asem: "wf e \<Longrightarrow> ext_exact (asem_ext e)"
 proof (induct e rule: wf.induct)
   case (4 fn es)
   then show ?case by (auto intro!: ext_exact_smap ext_exact_tuple)
@@ -87,7 +79,7 @@ next
   then show ?case using ext_lawful_asem [of e] by (simp add: ext_lawful_def ext_exact_filtfor)
 next
   case (8 C e)
-  then show ?case by simp
+  then show ?case by (simp add: ext_exact_restrict)
 qed (simp_all add: ext_exact_smap ext_exact_key_at ext_exact_column)
 
 corollary ext_lawful_present_asem: "wf e \<Longrightarrow> ext_lawful (present_at_ext \<bottom> \<top> (asem_ext e))"
