@@ -165,7 +165,7 @@ lemma ext_soundD:
   unfolding ext_sound_def by blast
 
 lemma semilawful_with_ext [simp]: "semilawful (with_ext E s) \<longleftrightarrow> semilawful E"
-  by (simp add: semilawful_def cstrict_def)
+  by (simp add: semilawful_def cstrict_def entries_small_def)
 
 definition ext_lawful :: "('k, 'f, 'r, 'v::bifinite) expr_ext \<Rightarrow> bool" where
   "ext_lawful X \<longleftrightarrow> semilawful X \<and> ext_sound X"
@@ -423,7 +423,7 @@ proof (rule ext_soundI, simp only: key_at_ext_simps)
     unfolding esem fib by (intro monofun_cfun_fun monofun_cfun_arg select_test_sound [OF DD cD d])
 qed
 
-theorem ext_lawful_key_at: "ext_lawful (key_at_ext c)"
+theorem ext_lawful_key_at: "lod_small c \<Longrightarrow> ext_lawful (key_at_ext c)"
   unfolding ext_lawful_def by (simp add: semilawful_key_at ext_sound_key_at)
 
 
@@ -513,7 +513,7 @@ proof (rule ext_soundI, simp only: column_ext_simps)
 qed
 
 theorem ext_lawful_column:
-  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> ext_lawful (column_ext c a v)"
+  "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>)) \<Longrightarrow> lod_small a \<Longrightarrow> lod_small c \<Longrightarrow> ext_lawful (column_ext c a v)"
   unfolding ext_lawful_def by (simp add: semilawful_column ext_sound_column)
 
 
@@ -638,7 +638,7 @@ proof (rule ext_soundI, simp only: include_dims_ext_simps include_dims_simps(3,4
     by (rule ext_soundD [OF X DD cD nD cf d' k'])
 qed
 
-theorem ext_lawful_include_dims: "ext_lawful X \<Longrightarrow> ext_lawful (include_dims_ext M X)"
+theorem ext_lawful_include_dims: "ext_lawful X \<Longrightarrow> lod_small M \<Longrightarrow> ext_lawful (include_dims_ext M X)"
   unfolding ext_lawful_def by (simp add: semilawful_include_dims ext_sound_include_dims)
 
 
@@ -725,7 +725,7 @@ proof (rule ext_soundI, simp only: present_at_ext_simps present_at_simps)
     by (rule monofun_cfun [OF monofun_cfun_arg [OF populated_ext_sound [OF DD cD nD]] ext_soundD [OF X DD cD nD cf d proj_idem]])
 qed
 
-theorem ext_lawful_present_at: "ext_lawful X \<Longrightarrow> ext_lawful (present_at_ext a \<rho> X)"
+theorem ext_lawful_present_at: "ext_lawful X \<Longrightarrow> lod_small a \<Longrightarrow> ext_lawful (present_at_ext a \<rho> X)"
   unfolding ext_lawful_def by (simp add: semilawful_present_at ext_sound_present_at)
 
 
@@ -935,7 +935,7 @@ lemma truncate_ext_simps:
       present_at_truncate)
 
 lemma semilawful_truncate [simp]: "semilawful (expr.truncate X) \<longleftrightarrow> semilawful X"
-  by (simp add: semilawful_def cstrict_def)
+  by (simp add: semilawful_def cstrict_def entries_small_def)
 
 lemma truncate_tuple_ext: "expr.truncate (tuple_ext Xs) = tuple (map expr.truncate Xs)"
 proof (induct Xs)

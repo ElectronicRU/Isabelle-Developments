@@ -50,17 +50,17 @@ next
   then show ?case unfolding asem_ext.simps by (rule ext_lawful_aggregate [OF _ _ ag_abel])
 next
   case (6 ds e)
-  then show ?case by (simp add: ext_lawful_include_dims)
+  then show ?case by (simp add: ext_lawful_include_dims lod_small_compact compact_lod)
 next
   case (7 ds C e)
   then show ?case by (simp add: ext_lawful_filtfor)
 next
   case (8 C e)
   then show ?case by (simp add: ext_lawful_restrict)
-qed (simp_all add: ext_lawful_smap ext_lawful_key_at ext_lawful_column [OF col_fd])
+qed (simp_all add: ext_lawful_smap ext_lawful_key_at ext_lawful_column [OF col_fd lod_small_compact [OF dim_compact] col_small] lod_small_compact dim_compact)
 
 corollary ext_lawful_present_asem: "wf e \<Longrightarrow> ext_lawful (present_at_ext \<bottom> \<top> (asem_ext e))"
-  by (rule ext_lawful_present_at [OF ext_lawful_asem])
+  by (rule ext_lawful_present_at [OF ext_lawful_asem lod_small_bot])
 
 text \<open>The minimal LODs of the denotations are small: dimensions and columns have compact LODs,
   and the combinators join, keep, or drop them, or raise them by small dimensions.\<close>

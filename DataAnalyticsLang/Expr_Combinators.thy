@@ -68,9 +68,12 @@ lemma dom_content_key_at:
 lemma cstrict_key_at: "cstrict (key_at c)"
   by (rule cstrictI) simp
 
-theorem semilawful_key_at: "semilawful (key_at c)"
+theorem semilawful_key_at:
+  assumes sc: "lod_small c"
+  shows "semilawful (key_at c)"
 proof (rule semilawfulI, simp_all only: key_at_simps)
   let ?e = "mk_value (sel c c) \<bottom> c"
+  show "entries_small (key_at c)" using sc by (simp add: entries_small_def)
   show "cstrict (key_at c)" by (rule cstrict_key_at)
   show "entry_wf e" if "e \<in> set [?e]" for e using that by (simp add: entry_wf_view keyed_view_key)
   show "c = fold (\<squnion>) (map lower_part (map esel [] @ map esel [?e])) \<bottom>"
@@ -135,10 +138,11 @@ lemma cstrict_column: "cstrict (column c a v)"
   by (rule cstrictI) simp
 
 theorem semilawful_column:
-  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))"
+  assumes fd: "universally (\<lambda>P. vfd P (\<bottom>, a) (c, \<bottom>))" and sa: "lod_small a" and sc: "lod_small c"
   shows "semilawful (column c a v)"
 proof (rule semilawfulI, simp_all only: column_simps)
   let ?e = "mk_value (sel a a) c a"
+  show "entries_small (column c a v)" using sa sc by (simp add: entries_small_def)
   show "cstrict (column c a v)" by (rule cstrict_column)
   show "entry_wf e" if "e \<in> set [?e]" for e
     using that by (simp add: entry_wf_view keyed_view_columns[OF fd])
@@ -193,6 +197,7 @@ proof -
   show ?thesis
   proof (rule semilawfulI, simp_all only: smap_simps)
     show "cstrict (smap g E)" by (rule cstrict_smap[OF semilawful_cstrict[OF ES]])
+    show "entries_small (smap g E)" using semilawful_small[OF ES] by (simp add: entries_small_def)
     show "entry_wf e" if "e \<in> set (evalues E)" for e by (rule semilawful_wf[OF ES that])
     show "emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>" by (rule semilawful_mind_lub[OF ES])
     show "map_option_pd g\<cdot>(esem E data F k) = map_option_pd g\<cdot>(csem_at E data F k)"
@@ -223,7 +228,7 @@ lemma value_at_simps [simp]:
   "csem (value_at c g) Gs\<cdot>Xs = (if dom (hd Xs) = {} then Absent else Present\<cdot>(g\<cdot>(the_elem (dom (hd Xs)))))"
   by (simp_all add: value_at_def)
 
-theorem semilawful_value_at: "semilawful (value_at c g)"
+theorem semilawful_value_at: "lod_small c \<Longrightarrow> semilawful (value_at c g)"
   unfolding value_at_def by (rule semilawful_smap[OF semilawful_key_at])
 
 subsection \<open>\<open>RESTRICT\<close>\<close>
@@ -271,6 +276,7 @@ theorem semilawful_restrict:
   shows "semilawful (restrict \<gamma> E)"
 proof (rule semilawfulI, simp_all only: restrict_simps)
   show "cstrict (restrict \<gamma> E)" by (rule cstrict_restrict[OF semilawful_cstrict[OF ES]])
+  show "entries_small (restrict \<gamma> E)" using semilawful_small[OF ES] by (simp add: entries_small_def)
   show "entry_wf e" if "e \<in> set (evalues E)" for e by (rule semilawful_wf[OF ES that])
   show "emind E = fold (\<squnion>) (map lower_part (map esel (map (restrict_entry \<gamma>) (eguards E)) @ map esel (evalues E))) \<bottom>"
     by (simp add: comp_def semilawful_mind_lub[OF ES])
@@ -388,6 +394,7 @@ proof -
   show ?thesis
   proof (rule semilawfulI, simp_all only: filtfor_simps)
     show "cstrict (filtfor \<tau> G E)" by (rule cstrict_filtfor[OF semilawful_cstrict[OF ES]])
+    show "entries_small (filtfor \<tau> G E)" using semilawful_small[OF ES] by (simp add: entries_small_def)
     show "entry_wf e" if "e \<in> set (map (for_value \<tau>) (evalues E))" for e
       using that semilawful_wf[OF ES] by (auto simp: entry_wf_def)
     show "?m = fold (\<squnion>) (map lower_part (map esel (map (for_entry \<tau> G) (eguards E)) @ map esel (map (for_value \<tau>) (evalues E)))) \<bottom>"
@@ -515,10 +522,12 @@ proof (rule cstrictI)
 qed
 
 theorem semilawful_present_at:
-  assumes ES: "semilawful E"
+  assumes ES: "semilawful E" and sa: "lod_small a"
   shows "semilawful (present_at a \<rho> E)"
 proof (rule semilawfulI, simp_all only: present_at_simps)
   let ?h = "mk_guard (sel (emind E \<squnion> a) \<rho>) gtrue gtrue \<bottom> :: ('k, 'r guard \<times> 'k guard) entry"
+  show "entries_small (present_at a \<rho> E)"
+    using semilawful_small[OF ES] lod_small_sup[OF semilawful_mind_small[OF ES] sa] by (simp add: entries_small_def)
   show "cstrict (present_at a \<rho> E)" by (rule cstrict_present_at[OF semilawful_cstrict[OF ES]])
   show "entry_wf e" if "e \<in> set (evalues E)" for e by (rule semilawful_wf[OF ES that])
   have "fold (\<squnion>) (map lower_part (esels E)) (emind E \<squnion> a) = emind E \<squnion> a"
@@ -560,10 +569,14 @@ lemma proj_fix_mono: "a \<sqsubseteq> b \<Longrightarrow> proj a\<cdot>k = k \<L
   by (metis proj_absorb)
 
 theorem semilawful_include_dims:
-  assumes ES: "semilawful E"
+  assumes ES: "semilawful E" and sM: "lod_small M"
   shows "semilawful (include_dims M E)"
 proof (rule semilawfulI, simp_all only: include_dims_simps)
   let ?n = "fold (\<squnion>) (map (\<lambda>S. lower_part (include_sel M S)) (esels E)) \<bottom>"
+  have inc: "lod_small (lower_part (include_sel M S))" if "lod_small (lower_part S)" for S
+    unfolding include_sel_simps by (rule lod_small_sup [OF that lod_small_below [OF sM lattice_meet_le2]])
+  show "entries_small (include_dims M E)"
+    using semilawful_small[OF ES] inc unfolding include_dims_simps entries_small_def by auto
   show "cstrict (include_dims M E)" using semilawful_cstrict[OF ES] by (simp add: cstrict_def)
   show "entry_wf e" if "e \<in> set (map (include_entry M) (evalues E))" for e
     using that by (auto intro: entry_wf_include_entry semilawful_wf[OF ES])
@@ -709,6 +722,8 @@ theorem semilawful_combine:
   shows "semilawful (combine f E\<^sub>1 E\<^sub>2)"
 proof (rule semilawfulI, simp_all only: combine_simps)
   show "cstrict (combine f E\<^sub>1 E\<^sub>2)" by (rule cstrict_combine[OF semilawful_cstrict[OF E\<^sub>1] semilawful_cstrict[OF E\<^sub>2]])
+  show "entries_small (combine f E\<^sub>1 E\<^sub>2)"
+    using semilawful_small[OF E\<^sub>1] semilawful_small[OF E\<^sub>2] by (auto simp: entries_small_def)
   show "entry_wf e" if "e \<in> set (evalues E\<^sub>1 @ evalues E\<^sub>2)" for e
     using that by (auto intro: semilawful_wf[OF E\<^sub>1] semilawful_wf[OF E\<^sub>2])
   let ?R = "fold (\<squnion>) (map lower_part (map esel (eguards E\<^sub>1 @ eguards E\<^sub>2) @ map esel (evalues E\<^sub>1 @ evalues E\<^sub>2))) \<bottom>"
@@ -753,7 +768,7 @@ lemma const_expr_simps [simp]:
   by (simp_all add: const_expr_def)
 
 theorem semilawful_const_expr: "semilawful (const_expr v)"
-  by (rule semilawfulI) (simp_all add: cstrict_def)
+  by (rule semilawfulI) (simp_all add: cstrict_def entries_small_def)
 
 text \<open>Tuples, as lifted lists: combining with cons from the empty one.\<close>
 
@@ -777,9 +792,9 @@ lemma present_at_keyimg:
   using p keyimg_populated_top[OF k] by (auto dest: tr_mult_not_Absent)
 
 theorem lawful_present_at:
-  assumes ES: "semilawful E"
+  assumes ES: "semilawful E" and sa: "lod_small a"
   shows "lawful (present_at a \<top> E)"
-proof (rule lawful_semiI[OF semilawful_present_at[OF ES]])
+proof (rule lawful_semiI[OF semilawful_present_at[OF ES sa]])
   fix data F k assume k: "proj (emind (present_at a \<top> E) \<squnion> flod F)\<cdot>k = k"
     and p: "esem (present_at a \<top> E) data F k \<noteq> Absent"
   have k': "proj (emind E \<squnion> a \<squnion> flod F)\<cdot>k = k" using k by simp

@@ -78,6 +78,7 @@ locale ast_space = key_language dim_lod dim_val key_dims fn_other + keyed_schema
     and ag_sem :: "'ag \<Rightarrow> scalar datum \<rightarrow> scalar datum \<rightarrow> scalar datum"
   assumes col_reads: "col_val c\<cdot>(x \<downharpoonright> col_sec c) = col_val c\<cdot>x"
     and col_fd: "universally (\<lambda>P. vfd P (\<bottom>, dim_lod (col_dim c)) (col_sec c, \<bottom>))"
+    and col_small: "lod_small (col_sec c)"
     and ag_abel: "abel_semigroup (\<lambda>a b. ag_sem g\<cdot>a\<cdot>b)"
 begin
 
@@ -165,17 +166,17 @@ next
     by (simp add: lawful_semilawful lawful_aggregate[OF _ ag_abel])
 next
   case (6 ds e)
-  then show ?case by (simp add: semilawful_include_dims)
+  then show ?case by (simp add: semilawful_include_dims lod_small_compact compact_lod)
 next
   case (7 ds C e)
   then show ?case by (simp add: semilawful_filtfor)
 next
   case (8 C e)
   then show ?case by (simp add: semilawful_restrict)
-qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd])
+qed (simp_all add: semilawful_value_at semilawful_column[OF col_fd lod_small_compact[OF dim_compact] col_small] lod_small_compact dim_compact)
 
 corollary lawful_present_asem: "wf e \<Longrightarrow> lawful (present (asem e))"
-  by (rule lawful_present_at[OF semilawful_asem])
+  by (rule lawful_present_at[OF semilawful_asem lod_small_bot])
 
 text \<open>References to dimensions and columns and literals are row level, literals and aggregations
   total level; calls of row-level arguments are row level.\<close>

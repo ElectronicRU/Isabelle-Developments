@@ -466,6 +466,14 @@ proof -
   show ?thesis
   proof (rule lawfulI, simp_all only: aggregate_simps)
     show "cstrict (aggregate f E)" by (rule cstrict_aggregate[OF f semilawful_cstrict[OF ES]])
+    show "entries_small (aggregate f E)"
+    proof (rule entries_smallI, simp_all only: aggregate_simps)
+      have m: "lod_small ?m" by (rule semilawful_mind_small[OF ES])
+      show "lod_small (elower e) \<and> lod_small (ekeys e)" if "e \<in> set ?gs" for e
+        using that m entries_small_guard[OF semilawful_small[OF ES]] by (auto intro!: lod_small_sup)
+      show "lod_small (elower v) \<and> lod_small (ekeys v) \<and> lod_small (ecols v)" if "v \<in> set ?vs" for v
+        using that entries_small_value[OF semilawful_small[OF ES]] by (auto intro!: lod_small_sup)
+    qed
     show "entry_wf e" if "e \<in> set ?vs" for e
       using that by (auto intro: entry_wf_release semilawful_wf[OF ES])
     show "(\<bottom>::'k semi_factor) = fold (\<squnion>) (map lower_part (map esel ?gs @ map esel ?vs)) \<bottom>"

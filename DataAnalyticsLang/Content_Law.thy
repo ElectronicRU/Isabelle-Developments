@@ -836,6 +836,9 @@ text \<open>A \<^emph>\<open>semilawful\<close> expression has well-formed value
   \<^emph>\<open>saturated\<close> when each lower part covers the part of the minimal LOD its upper part keeps, so
   that its groups depend on the frame LOD only through the key LOD.\<close>
 
+lemma lod_small_bot [simp]: "lod_small (\<bottom> :: 'a::lod_domain semi_factor)"
+  by (rule lod_small_compact) simp
+
 context dataspace
 begin
 
@@ -862,9 +865,16 @@ lemma cstrictD:
      csem E Gs\<cdot>Xs = Absent"
   unfolding cstrict_def by blast
 
+text \<open>An expression's entries are \<^emph>\<open>small\<close> when their lower parts and keys are finitary, and the
+  value entries' columns too: their contents at compact datasets are then compact.\<close>
+
+definition entries_small :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
+  "entries_small E \<longleftrightarrow> (\<forall>e\<in>set (eguards E). lod_small (elower e) \<and> lod_small (ekeys e)) \<and>
+     (\<forall>e\<in>set (evalues E). lod_small (elower e) \<and> lod_small (ekeys e) \<and> lod_small (ecols e))"
+
 definition semilawful :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
   "semilawful E \<longleftrightarrow> emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom> \<and> (\<forall>e\<in>set (evalues E). entry_wf e) \<and>
-     cstrict E \<and>
+     cstrict E \<and> entries_small E \<and>
      (\<forall>data F k. fconf (evalues E) data F \<longrightarrow> proj (kd E F)\<cdot>k = k \<longrightarrow> esem E data F k = csem_at E data F k)"
 
 definition lawful :: "('k, 'f, 'r, 'v::bifinite, 'z) expr_scheme \<Rightarrow> bool" where
@@ -883,11 +893,43 @@ lemma semilawfulI:
     and "\<And>e. e \<in> set (evalues E) \<Longrightarrow> entry_wf e"
     and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k\<rbrakk> \<Longrightarrow> esem E data F k = csem_at E data F k"
     and "cstrict E"
+    and "entries_small E"
   shows "semilawful E"
   unfolding semilawful_def using assms by blast
 
 lemma semilawful_mind_lub: "semilawful E \<Longrightarrow> emind E = fold (\<squnion>) (map lower_part (esels E)) \<bottom>"
   unfolding semilawful_def by blast
+
+lemma semilawful_small: "semilawful E \<Longrightarrow> entries_small E"
+  unfolding semilawful_def by blast
+
+lemma entries_smallI:
+  "(\<And>e. e \<in> set (eguards E) \<Longrightarrow> lod_small (elower e) \<and> lod_small (ekeys e)) \<Longrightarrow>
+   (\<And>v. v \<in> set (evalues E) \<Longrightarrow> lod_small (elower v) \<and> lod_small (ekeys v) \<and> lod_small (ecols v)) \<Longrightarrow> entries_small E"
+  unfolding entries_small_def by blast
+
+lemma entries_small_guard: "entries_small E \<Longrightarrow> e \<in> set (eguards E) \<Longrightarrow> lod_small (elower e) \<and> lod_small (ekeys e)"
+  unfolding entries_small_def by blast
+
+lemma entries_small_value: "entries_small E \<Longrightarrow> v \<in> set (evalues E) \<Longrightarrow> lod_small (elower v) \<and> lod_small (ekeys v) \<and> lod_small (ecols v)"
+  unfolding entries_small_def by blast
+
+lemma lod_small_fold_sup: "(\<And>a. a \<in> set as \<Longrightarrow> lod_small a) \<Longrightarrow> lod_small b \<Longrightarrow> lod_small (fold (\<squnion>) as b)"
+  for as :: "'k semi_factor list"
+  by (induct as arbitrary: b) (simp_all add: lod_small_sup)
+
+text \<open>The minimal LOD of a semilawful expression is small: it joins its entries' lower parts.\<close>
+
+lemma semilawful_mind_small:
+  assumes E: "semilawful E"
+  shows "lod_small (emind E)"
+proof -
+  have sm: "lod_small a" if "a \<in> set (map lower_part (esels E))" for a
+    using that entries_small_guard [OF semilawful_small [OF E]] entries_small_value [OF semilawful_small [OF E]] by auto
+  have "lod_small (fold (\<squnion>) (map lower_part (esels E)) \<bottom>)"
+    by (rule lod_small_fold_sup [OF sm lod_small_compact [OF compact_bottom]])
+  then show ?thesis by (simp only: semilawful_mind_lub [OF E])
+qed
 
 lemma semilawful_wf: "semilawful E \<Longrightarrow> e \<in> set (evalues E) \<Longrightarrow> entry_wf e"
   unfolding semilawful_def by blast
@@ -940,8 +982,9 @@ lemma lawfulI:
     and "\<And>data F k. \<lbrakk>fconf (evalues E) data F; proj (emind E \<squnion> flod F)\<cdot>k = k; esem E data F k \<noteq> Absent\<rbrakk> \<Longrightarrow>
       keyimg data F (emind E \<squnion> flod F) k"
     and "cstrict E"
+    and "entries_small E"
   shows "lawful E"
-  by (rule lawful_semiI[OF semilawfulI[OF assms(1-3,5)] assms(4)])
+  by (rule lawful_semiI[OF semilawfulI[OF assms(1-3,5,6)] assms(4)])
 
 lemma lawful_semilawful: "lawful E \<Longrightarrow> semilawful E"
   unfolding lawful_def by blast

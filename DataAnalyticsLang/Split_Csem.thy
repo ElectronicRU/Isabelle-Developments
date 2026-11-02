@@ -1350,11 +1350,21 @@ text \<open>The aggregate factors through its contents.  The compact datasets be
   below; conversely compact contents below are below the contents of a compact dataset below, where
   the content aggregate is monotone.  So both sets of stages have the same upper bounds.\<close>
 
+text \<open>The aggregate's guards have small keys: the fold guard's are the inner minimal LOD, a
+  released guard's its keys and lower part.\<close>
+
+lemma agg_guard_keys_small:
+  assumes X: "semilawful X" and e: "e \<in> set (eguards (aggregate_ext f X))"
+  shows "lod_small (ekeys e)"
+  using e semilawful_mind_small [OF X] entries_small_guard [OF semilawful_small [OF X]]
+  by (auto intro!: lod_small_sup)
+
 theorem ext_csem_aggregate:
-  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and c: "ext_csem X c" and cm: "csem_mono X c" and m: "lod_small (emind X)"
-    and gk: "\<forall>e\<in>set (eguards (aggregate_ext f X)). lod_small (ekeys e)"
+  assumes f: "abel_semigroup (\<lambda>a b. f\<cdot>a\<cdot>b)" and c: "ext_csem X c" and cm: "csem_mono X c" and X: "semilawful X"
   shows "ext_csem (aggregate_ext f X) (cagg f X c)"
 proof (rule ext_csemI)
+  have m: "lod_small (emind X)" by (rule semilawful_mind_small [OF X])
+  have gk: "\<forall>e\<in>set (eguards (aggregate_ext f X)). lod_small (ekeys e)" using agg_guard_keys_small [OF X] by blast
   fix D F k
   assume D: "conf_bounded D" and k: "sel_compact (aggregate_ext f X) F k"
   obtain C where DC: "D \<sqsubseteq> C" and cC: "conforming_rows (split_rows\<cdot>C)" using D by blast
