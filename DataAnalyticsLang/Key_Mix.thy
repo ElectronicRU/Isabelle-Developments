@@ -440,7 +440,7 @@ proof -
   show ?thesis unfolding KM_with_def mix_possible_lub [OF chain_kstage] st using N by blast
 qed
 
-lemma KM_with_definite:
+lemma KM_definite:
   assumes c: "compact q"
   shows "mix_definite q (KM K t) \<longleftrightarrow> (\<exists>x\<in>srows t. q \<sqsubseteq> rproj K (Rep_compact_basis x))"
 proof
@@ -518,7 +518,7 @@ proof -
   have ch: "chain (\<lambda>i. split_principal (Z i))" by (rule split_pd.ch2ch_principal [OF Z])
   obtain i where "mix_definite q (KM K (Z i))"
     using d unfolding CZ split_keymix_chain(2) [OF Z] mix_definite_lub [OF split_keymix_chain(1) [OF Z] c] by blast
-  then obtain x where x: "x \<in> srows (Z i)" and qx: "q \<sqsubseteq> rproj K (Rep_compact_basis x)" unfolding KM_with_definite [OF c] by blast
+  then obtain x where x: "x \<in> srows (Z i)" and qx: "q \<sqsubseteq> rproj K (Rep_compact_basis x)" unfolding KM_definite [OF c] by blast
   have "split_definite (Rep_compact_basis x) C"
     by (rule split_definite_mono [OF generator_definite [OF x]]) (simp only: CZ is_ub_thelub [OF ch])
   then show ?thesis using qx by blast
@@ -545,7 +545,7 @@ proof -
     using dy unfolding split_definite_def by (rule monofun_cfun_arg)
   moreover have "mix_definite q (split_keymix K\<cdot>(split_open_unit\<cdot>(r n\<cdot>y)))"
   proof -
-    have d: "mix_definite q (KM K (SOpen ?a))" unfolding KM_with_definite [OF c] using n ya by simp
+    have d: "mix_definite q (KM K (SOpen ?a))" unfolding KM_definite [OF c] using n ya by simp
     have e: "split_open_unit\<cdot>(r n\<cdot>y) = split_principal (SOpen ?a)"
       using split_open_unit_Rep_compact_basis [of ?a] unfolding ya .
     show ?thesis unfolding e split_keymix_principal by (rule d)

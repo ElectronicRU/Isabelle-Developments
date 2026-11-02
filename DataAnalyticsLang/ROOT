@@ -27,6 +27,7 @@ session DataAnalyticsLang = "HOLCF-extra" +
     Split_Semantics
     Key_Mix
     Split_Csem
+    Split_Exact
     Ast_Split_Semantics
   document_files
     "root.tex"
